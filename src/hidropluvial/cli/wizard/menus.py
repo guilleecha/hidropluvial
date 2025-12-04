@@ -617,8 +617,8 @@ def continue_session_menu() -> None:
 
     choices = []
     for s in sessions:
-        n_analyses = len(s.analyses)
-        choices.append(f"{s.id} - {s.name} ({n_analyses} analisis)")
+        n_analyses = s["n_analyses"]
+        choices.append(f"{s['id']} - {s['name']} ({n_analyses} analisis)")
 
     choice = questionary.select(
         "Selecciona una sesion:",

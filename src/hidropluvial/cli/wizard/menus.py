@@ -36,6 +36,7 @@ class PostExecutionMenu:
                     "Comparar hidrogramas",
                     "Filtrar resultados",
                     "Agregar mas analisis",
+                    "Editar datos de la cuenca",
                     "Generar reporte LaTeX",
                     "Salir",
                 ],
@@ -57,6 +58,14 @@ class PostExecutionMenu:
                 self._filter_results()
             elif "reporte" in action.lower():
                 self._generate_report()
+            elif "Editar" in action:
+                result = self._edit_cuenca()
+                if result == "new_session":
+                    # Se creo nueva sesion, salir del loop
+                    break
+                elif result == "modified":
+                    # Sesion modificada, recargar
+                    self.session = self.manager.get_session(self.session.id)
             elif "Agregar" in action:
                 self._add_analysis()
                 # Recargar sesion actualizada
@@ -240,6 +249,177 @@ class PostExecutionMenu:
                 tc=tc_filter,
                 storm=storm_filter,
             )
+
+    def _edit_cuenca(self) -> str:
+        """
+        Permite editar los datos de la cuenca.
+
+        Returns:
+            "new_session" si se creo nueva sesion
+            "modified" si se modifico la sesion actual
+            "cancelled" si se cancelo
+        """
+        typer.echo("\n" + "="*65)
+        typer.echo("  EDITAR DATOS DE LA CUENCA")
+        typer.echo("="*65)
+
+        cuenca = self.session.cuenca
+        n_analyses = len(self.session.analyses)
+        n_tc = len(self.session.tc_results)
+
+        # Mostrar datos actuales
+        typer.echo(f"\n  Datos actuales:")
+        typer.echo(f"  {'-'*40}")
+        typer.echo(f"  Area:         {cuenca.area_ha:>12.2f} ha")
+        typer.echo(f"  Pendiente:    {cuenca.slope_pct:>12.2f} %")
+        typer.echo(f"  P3,10:        {cuenca.p3_10:>12.1f} mm")
+        if cuenca.c:
+            typer.echo(f"  Coef. C:      {cuenca.c:>12.2f}")
+        if cuenca.cn:
+            typer.echo(f"  CN:           {cuenca.cn:>12}")
+        if cuenca.length_m:
+            typer.echo(f"  Longitud:     {cuenca.length_m:>12.0f} m")
+
+        if n_analyses > 0 or n_tc > 0:
+            typer.echo(f"\n  ⚠️  ADVERTENCIA:")
+            typer.echo(f"      Esta sesion tiene {n_tc} calculos de Tc y {n_analyses} analisis.")
+            typer.echo(f"      Los cambios INVALIDARAN estos resultados.")
+
+        # Opciones
+        action = questionary.select(
+            "\nQue deseas hacer?",
+            choices=[
+                "Modificar sesion actual (elimina analisis existentes)",
+                "Crear nueva sesion con datos modificados (preserva original)",
+                "Cancelar",
+            ],
+            style=WIZARD_STYLE,
+        ).ask()
+
+        if action is None or "Cancelar" in action:
+            return "cancelled"
+
+        clone_mode = "nueva" in action.lower()
+
+        # Solicitar nuevos valores
+        typer.echo("\n  Ingresa nuevos valores (Enter para mantener actual):\n")
+
+        def ask_float(prompt: str, current: float, required: bool = True) -> Optional[float]:
+            default_str = f"{current:.2f}" if current else ""
+            val = questionary.text(
+                prompt,
+                default=default_str,
+                style=WIZARD_STYLE,
+            ).ask()
+            if val is None:
+                return None
+            val = val.strip()
+            if val == "" or val == default_str:
+                return None  # Mantener actual
+            try:
+                return float(val)
+            except ValueError:
+                typer.echo(f"  Valor invalido, se mantiene {current}")
+                return None
+
+        new_area = ask_float(f"Area (ha) [{cuenca.area_ha:.2f}]:", cuenca.area_ha)
+        new_slope = ask_float(f"Pendiente (%) [{cuenca.slope_pct:.2f}]:", cuenca.slope_pct)
+        new_p3_10 = ask_float(f"P3,10 (mm) [{cuenca.p3_10:.1f}]:", cuenca.p3_10)
+        new_c = ask_float(f"Coef. C [{cuenca.c if cuenca.c else 'N/A'}]:", cuenca.c or 0)
+        new_cn_str = questionary.text(
+            f"CN [{cuenca.cn if cuenca.cn else 'N/A'}]:",
+            default=str(cuenca.cn) if cuenca.cn else "",
+            style=WIZARD_STYLE,
+        ).ask()
+        new_cn = None
+        if new_cn_str and new_cn_str.strip() and new_cn_str != str(cuenca.cn):
+            try:
+                new_cn = int(new_cn_str)
+            except ValueError:
+                pass
+        new_length = ask_float(f"Longitud (m) [{cuenca.length_m if cuenca.length_m else 'N/A'}]:", cuenca.length_m or 0)
+
+        # Verificar si hay cambios
+        if all(v is None or v == 0 for v in [new_area, new_slope, new_p3_10, new_c, new_cn, new_length]):
+            typer.echo("\n  No se especificaron cambios.")
+            return "cancelled"
+
+        # Confirmar
+        typer.echo(f"\n  Cambios a aplicar:")
+        if new_area:
+            typer.echo(f"    Area: {cuenca.area_ha} → {new_area} ha")
+        if new_slope:
+            typer.echo(f"    Pendiente: {cuenca.slope_pct} → {new_slope}%")
+        if new_p3_10:
+            typer.echo(f"    P3,10: {cuenca.p3_10} → {new_p3_10} mm")
+        if new_c:
+            typer.echo(f"    C: {cuenca.c} → {new_c}")
+        if new_cn:
+            typer.echo(f"    CN: {cuenca.cn} → {new_cn}")
+        if new_length:
+            typer.echo(f"    Longitud: {cuenca.length_m} → {new_length} m")
+
+        if not questionary.confirm("\nAplicar cambios?", default=True, style=WIZARD_STYLE).ask():
+            return "cancelled"
+
+        if clone_mode:
+            # Crear nueva sesion
+            new_name = questionary.text(
+                "Nombre para la nueva sesion:",
+                default=f"{self.session.name} (modificado)",
+                style=WIZARD_STYLE,
+            ).ask()
+
+            new_session, changes = self.manager.clone_with_modified_cuenca(
+                self.session,
+                new_name=new_name,
+                area_ha=new_area,
+                slope_pct=new_slope,
+                p3_10=new_p3_10,
+                c=new_c,
+                cn=new_cn,
+                length_m=new_length,
+            )
+
+            typer.echo(f"\n  ✓ Nueva sesion creada: {new_session.id}")
+            typer.echo(f"    Nombre: {new_session.name}")
+            typer.echo(f"\n  Sesion original '{self.session.id}' sin modificar.")
+            typer.echo(f"\n  Usa 'hp session tc {new_session.id}' para calcular Tc")
+            typer.echo(f"  Usa 'hp wizard' para continuar con la nueva sesion\n")
+            return "new_session"
+
+        else:
+            # Modificar en lugar
+            changes = self.manager.update_cuenca_in_place(
+                self.session,
+                area_ha=new_area,
+                slope_pct=new_slope,
+                p3_10=new_p3_10,
+                c=new_c,
+                cn=new_cn,
+                length_m=new_length,
+                clear_analyses=True,
+            )
+
+            if changes:
+                typer.echo(f"\n  ✓ Sesion actualizada.")
+                typer.echo(f"\n  Cambios aplicados:")
+                for change in changes:
+                    typer.echo(f"    - {change}")
+
+                typer.echo(f"\n  Debes recalcular Tc y ejecutar nuevos analisis.")
+
+                # Ofrecer recalcular Tc inmediatamente
+                if questionary.confirm("Recalcular Tc ahora?", default=True, style=WIZARD_STYLE).ask():
+                    from hidropluvial.cli.session.base import session_tc
+                    methods = "desbordes"
+                    if self.session.cuenca.length_m:
+                        methods = "kirpich,desbordes"
+                    session_tc(self.session.id, methods=methods)
+
+                return "modified"
+
+            return "cancelled"
 
 
 class AddAnalysisMenu:

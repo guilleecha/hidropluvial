@@ -8,6 +8,7 @@ from hidropluvial.cli.session.base import (
     get_session_manager,
     session_create,
     session_delete,
+    session_edit,
     session_list,
     session_show,
     session_summary,
@@ -29,6 +30,7 @@ session_app.command("tc")(session_tc)
 session_app.command("analyze")(session_analyze)
 session_app.command("summary")(session_summary)
 session_app.command("preview")(session_preview)
+session_app.command("edit")(session_edit)
 session_app.command("delete")(session_delete)
 session_app.command("batch")(session_batch)
 session_app.command("report")(session_report)

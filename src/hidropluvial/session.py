@@ -242,6 +242,152 @@ class SessionManager:
             return True
         return False
 
+    def clone_with_modified_cuenca(
+        self,
+        session: Session,
+        new_name: Optional[str] = None,
+        area_ha: Optional[float] = None,
+        slope_pct: Optional[float] = None,
+        p3_10: Optional[float] = None,
+        c: Optional[float] = None,
+        cn: Optional[int] = None,
+        length_m: Optional[float] = None,
+    ) -> Session:
+        """
+        Crea una nueva sesión clonando los datos base pero con parámetros modificados.
+
+        Los análisis NO se copian porque fueron calculados con los datos originales.
+        Los métodos de Tc tampoco se copian porque dependen de los parámetros.
+
+        Args:
+            session: Sesión original a clonar
+            new_name: Nuevo nombre (default: "{nombre} (modificado)")
+            area_ha: Nueva área (None = mantener original)
+            slope_pct: Nueva pendiente (None = mantener original)
+            p3_10: Nuevo P3,10 (None = mantener original)
+            c: Nuevo C (None = mantener original)
+            cn: Nuevo CN (None = mantener original)
+            length_m: Nueva longitud (None = mantener original)
+
+        Returns:
+            Nueva sesión con datos modificados (sin análisis)
+        """
+        # Determinar qué cambió
+        original = session.cuenca
+        changes = []
+
+        final_area = area_ha if area_ha is not None else original.area_ha
+        if area_ha is not None and area_ha != original.area_ha:
+            changes.append(f"area: {original.area_ha} → {area_ha} ha")
+
+        final_slope = slope_pct if slope_pct is not None else original.slope_pct
+        if slope_pct is not None and slope_pct != original.slope_pct:
+            changes.append(f"pendiente: {original.slope_pct} → {slope_pct}%")
+
+        final_p3_10 = p3_10 if p3_10 is not None else original.p3_10
+        if p3_10 is not None and p3_10 != original.p3_10:
+            changes.append(f"P3,10: {original.p3_10} → {p3_10} mm")
+
+        final_c = c if c is not None else original.c
+        if c is not None and c != original.c:
+            changes.append(f"C: {original.c} → {c}")
+
+        final_cn = cn if cn is not None else original.cn
+        if cn is not None and cn != original.cn:
+            changes.append(f"CN: {original.cn} → {cn}")
+
+        final_length = length_m if length_m is not None else original.length_m
+        if length_m is not None and length_m != original.length_m:
+            changes.append(f"longitud: {original.length_m} → {length_m} m")
+
+        # Crear nueva sesión
+        if new_name is None:
+            new_name = f"{session.name} (modificado)"
+
+        new_session = self.create(
+            name=new_name,
+            area_ha=final_area,
+            slope_pct=final_slope,
+            p3_10=final_p3_10,
+            c=final_c,
+            cn=final_cn,
+            length_m=final_length,
+            cuenca_nombre=original.nombre,
+        )
+
+        return new_session, changes
+
+    def update_cuenca_in_place(
+        self,
+        session: Session,
+        area_ha: Optional[float] = None,
+        slope_pct: Optional[float] = None,
+        p3_10: Optional[float] = None,
+        c: Optional[float] = None,
+        cn: Optional[int] = None,
+        length_m: Optional[float] = None,
+        clear_analyses: bool = True,
+    ) -> list[str]:
+        """
+        Actualiza los datos de la cuenca en la sesión existente.
+
+        ADVERTENCIA: Si hay análisis, estos quedan invalidados porque
+        fueron calculados con los datos anteriores.
+
+        Args:
+            session: Sesión a modificar
+            area_ha: Nueva área (None = mantener original)
+            slope_pct: Nueva pendiente (None = mantener original)
+            p3_10: Nuevo P3,10 (None = mantener original)
+            c: Nuevo C (None = mantener original)
+            cn: Nuevo CN (None = mantener original)
+            length_m: Nueva longitud (None = mantener original)
+            clear_analyses: Si True, elimina análisis existentes
+
+        Returns:
+            Lista de cambios realizados
+        """
+        original = session.cuenca
+        changes = []
+
+        if area_ha is not None and area_ha != original.area_ha:
+            changes.append(f"area: {original.area_ha} → {area_ha} ha")
+            session.cuenca.area_ha = area_ha
+
+        if slope_pct is not None and slope_pct != original.slope_pct:
+            changes.append(f"pendiente: {original.slope_pct} → {slope_pct}%")
+            session.cuenca.slope_pct = slope_pct
+
+        if p3_10 is not None and p3_10 != original.p3_10:
+            changes.append(f"P3,10: {original.p3_10} → {p3_10} mm")
+            session.cuenca.p3_10 = p3_10
+
+        if c is not None and c != original.c:
+            changes.append(f"C: {original.c} → {c}")
+            session.cuenca.c = c
+
+        if cn is not None and cn != original.cn:
+            changes.append(f"CN: {original.cn} → {cn}")
+            session.cuenca.cn = cn
+
+        if length_m is not None and length_m != original.length_m:
+            changes.append(f"longitud: {original.length_m} → {length_m} m")
+            session.cuenca.length_m = length_m
+
+        if changes:
+            # Limpiar resultados de Tc (dependen de los parámetros)
+            session.tc_results = []
+
+            if clear_analyses:
+                n_analyses = len(session.analyses)
+                if n_analyses > 0:
+                    changes.append(f"eliminados {n_analyses} análisis (datos obsoletos)")
+                session.analyses = []
+
+            self.save(session)
+
+        return changes
+
     def add_tc_result(
         self,
         session: Session,

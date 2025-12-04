@@ -285,3 +285,142 @@ def session_delete(
     else:
         typer.echo(f"Sesión '{session_id}' no encontrada.", err=True)
         raise typer.Exit(1)
+
+
+def session_edit(
+    session_id: Annotated[str, typer.Argument(help="ID de la sesión a editar")],
+    area_ha: Annotated[Optional[float], typer.Option("--area", "-a", help="Nueva área (ha)")] = None,
+    slope_pct: Annotated[Optional[float], typer.Option("--slope", "-s", help="Nueva pendiente (%)")] = None,
+    p3_10: Annotated[Optional[float], typer.Option("--p3_10", "-p", help="Nuevo P3,10 (mm)")] = None,
+    c: Annotated[Optional[float], typer.Option("--c", help="Nuevo coef. C")] = None,
+    cn: Annotated[Optional[int], typer.Option("--cn", help="Nuevo CN")] = None,
+    length_m: Annotated[Optional[float], typer.Option("--length", "-l", help="Nueva longitud (m)")] = None,
+    clone: Annotated[bool, typer.Option("--clone", help="Crear nueva sesión en vez de modificar")] = False,
+    new_name: Annotated[Optional[str], typer.Option("--name", "-n", help="Nombre para la sesión clonada")] = None,
+):
+    """
+    Edita los parámetros de una cuenca en una sesión existente.
+
+    ADVERTENCIA: Los análisis existentes fueron calculados con los datos
+    originales. Al modificar parámetros:
+    - Los análisis existentes se ELIMINAN (opción por defecto)
+    - O se crea una NUEVA sesión con los cambios (--clone)
+
+    Ejemplos:
+        # Corregir el área (elimina análisis existentes)
+        hp session edit abc123 --area 65
+
+        # Crear nueva sesión con área corregida (preserva original)
+        hp session edit abc123 --area 65 --clone
+
+        # Modificar varios parámetros
+        hp session edit abc123 --area 65 --slope 3.0 --c 0.58
+    """
+    manager = get_session_manager()
+
+    session = manager.get_session(session_id)
+    if session is None:
+        typer.echo(f"Error: Sesión '{session_id}' no encontrada.", err=True)
+        raise typer.Exit(1)
+
+    # Verificar que hay algo que cambiar
+    if all(v is None for v in [area_ha, slope_pct, p3_10, c, cn, length_m]):
+        typer.echo("Error: Debes especificar al menos un parámetro a modificar.")
+        typer.echo("\nUso: hp session edit <id> --area VALOR --slope VALOR ...")
+        raise typer.Exit(1)
+
+    # Mostrar valores actuales y propuestos
+    typer.echo(f"\n{'='*65}")
+    typer.echo(f"  EDITAR SESION: {session.name} [{session.id}]")
+    typer.echo(f"{'='*65}")
+
+    cuenca = session.cuenca
+    typer.echo(f"\n  {'Parámetro':<20} {'Actual':>12} {'Nuevo':>12}")
+    typer.echo(f"  {'-'*44}")
+
+    if area_ha is not None:
+        typer.echo(f"  {'Área (ha)':<20} {cuenca.area_ha:>12.2f} {area_ha:>12.2f}")
+    if slope_pct is not None:
+        typer.echo(f"  {'Pendiente (%)':<20} {cuenca.slope_pct:>12.2f} {slope_pct:>12.2f}")
+    if p3_10 is not None:
+        typer.echo(f"  {'P3,10 (mm)':<20} {cuenca.p3_10:>12.1f} {p3_10:>12.1f}")
+    if c is not None:
+        c_actual = cuenca.c if cuenca.c else 0
+        typer.echo(f"  {'Coef. C':<20} {c_actual:>12.2f} {c:>12.2f}")
+    if cn is not None:
+        cn_actual = cuenca.cn if cuenca.cn else 0
+        typer.echo(f"  {'CN':<20} {cn_actual:>12} {cn:>12}")
+    if length_m is not None:
+        length_actual = cuenca.length_m if cuenca.length_m else 0
+        typer.echo(f"  {'Longitud (m)':<20} {length_actual:>12.0f} {length_m:>12.0f}")
+
+    # Advertencia sobre análisis existentes
+    n_analyses = len(session.analyses)
+    n_tc = len(session.tc_results)
+
+    if n_analyses > 0 or n_tc > 0:
+        typer.echo(f"\n  ⚠️  ADVERTENCIA:")
+        if n_tc > 0:
+            typer.echo(f"      - {n_tc} cálculos de Tc serán ELIMINADOS")
+        if n_analyses > 0:
+            typer.echo(f"      - {n_analyses} análisis serán ELIMINADOS")
+        typer.echo(f"      (fueron calculados con los datos anteriores)")
+
+    if clone:
+        typer.echo(f"\n  Modo: CLONAR (se creará nueva sesión, la original no cambia)")
+    else:
+        typer.echo(f"\n  Modo: MODIFICAR (se actualizará la sesión existente)")
+
+    typer.echo(f"{'='*65}")
+
+    # Confirmar
+    if not typer.confirm("\n¿Continuar con los cambios?"):
+        typer.echo("Cancelado.")
+        raise typer.Exit(0)
+
+    if clone:
+        # Crear nueva sesión clonada
+        new_session, changes = manager.clone_with_modified_cuenca(
+            session,
+            new_name=new_name,
+            area_ha=area_ha,
+            slope_pct=slope_pct,
+            p3_10=p3_10,
+            c=c,
+            cn=cn,
+            length_m=length_m,
+        )
+
+        typer.echo(f"\n  ✓ Nueva sesión creada: {new_session.id}")
+        typer.echo(f"    Nombre: {new_session.name}")
+        if changes:
+            typer.echo(f"\n  Cambios aplicados:")
+            for change in changes:
+                typer.echo(f"    - {change}")
+
+        typer.echo(f"\n  Sesión original '{session.id}' sin modificar.")
+        typer.echo(f"  Usa 'hp session tc {new_session.id}' para calcular Tc\n")
+
+    else:
+        # Modificar en el lugar
+        changes = manager.update_cuenca_in_place(
+            session,
+            area_ha=area_ha,
+            slope_pct=slope_pct,
+            p3_10=p3_10,
+            c=c,
+            cn=cn,
+            length_m=length_m,
+            clear_analyses=True,
+        )
+
+        if changes:
+            typer.echo(f"\n  ✓ Sesión '{session.id}' actualizada.")
+            typer.echo(f"\n  Cambios aplicados:")
+            for change in changes:
+                typer.echo(f"    - {change}")
+
+            typer.echo(f"\n  Usa 'hp session tc {session.id}' para recalcular Tc")
+            typer.echo(f"  Usa 'hp session analyze {session.id}' para nuevos análisis\n")
+        else:
+            typer.echo("\n  No se realizaron cambios (valores iguales).\n")

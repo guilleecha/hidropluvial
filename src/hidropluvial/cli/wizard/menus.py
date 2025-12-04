@@ -652,8 +652,8 @@ def continue_session_menu() -> None:
         # Cargar sesión y abrir menú post-ejecución para agregar análisis
         session = manager.get_session(session_id)
         if session:
-            menu = PostExecutionMenu(session, manager)
-            menu.run()
+            menu = PostExecutionMenu(session)
+            menu.show()
     elif "reporte" in action.lower():
         output = questionary.text(
             "Nombre del archivo (sin extension):",

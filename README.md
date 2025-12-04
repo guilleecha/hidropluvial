@@ -42,13 +42,42 @@ python -m hidropluvial --help
 
 ---
 
+## Inicio Rápido
+
+### Modo Interactivo (Recomendado para principiantes)
+
+```bash
+# Iniciar el wizard interactivo
+hp wizard
+```
+
+El wizard guía paso a paso para:
+1. Definir datos de la cuenca
+2. Calcular C y/o CN ponderados por cobertura
+3. Seleccionar métodos de Tc
+4. Configurar análisis (tormentas, Tr, factor X)
+5. Ver resultados y generar reportes
+
+### Modo CLI Directo
+
+```bash
+# Flujo completo de análisis
+hp session create "Mi Cuenca" --area 50 --slope 2.5 --p3_10 80 --c 0.55
+hp session tc abc123 --methods "kirpich,desbordes"
+hp session analyze abc123 --tc desbordes --storm gz --tr 10 --x 1.0
+hp session summary abc123
+hp session report abc123 -o reporte --author "Ing. García"
+```
+
+---
+
 ## Uso Rápido
 
 ### Calcular intensidad IDF (Uruguay)
 
 ```bash
 # Montevideo (P3,10 = 78mm), duración 3 horas, Tr = 25 años
-python -m hidropluvial idf uruguay 78 3 --tr 25
+hp idf uruguay 78 3 --tr 25
 ```
 
 **Salida:**
@@ -189,18 +218,35 @@ El método GZ integra:
 |---------|-------------|
 | `runoff cn <P> <CN>` | Método SCS Curve Number |
 | `runoff rational <C> <i> <A>` | Método Racional |
+| `runoff weighted-c` | Calcular C ponderado interactivo |
+| `runoff weighted-cn` | Calcular CN ponderado interactivo |
 
 **Ejemplos:**
 ```bash
 # SCS-CN: P=100mm, CN=75, AMC II
-python -m hidropluvial runoff cn 100 75
+hp runoff cn 100 75
 
 # SCS-CN con condición húmeda (AMC III)
-python -m hidropluvial runoff cn 100 75 --amc III
+hp runoff cn 100 75 --amc III
 
 # Racional: C=0.6, i=50mm/hr, A=10ha
-python -m hidropluvial runoff rational 0.6 50 10
+hp runoff rational 0.6 50 10
+
+# Calcular C ponderado con tabla Ven Te Chow para Tr=25
+hp runoff weighted-c --table chow --tr 25 --area 10
+
+# Calcular CN ponderado con tabla urbana, suelo grupo B
+hp runoff weighted-cn --table urban --soil B --area 50
 ```
+
+**Tablas de C disponibles:**
+- `chow`: Ven Te Chow (C varía según Tr)
+- `fhwa`: FHWA HEC-22 (C base con factor de ajuste)
+- `uruguay`: Tabla regional simplificada
+
+**Tablas de CN disponibles:**
+- `urban`: SCS TR-55 Áreas Urbanas
+- `agricultural`: SCS TR-55 Áreas Agrícolas
 
 ### `report` - Generación de Reportes LaTeX
 
@@ -251,6 +297,7 @@ El sistema de sesiones permite definir una cuenca y ejecutar múltiples análisi
 | `session analyze <id>` | Ejecutar análisis completo |
 | `session summary <id>` | Ver tabla comparativa |
 | `session batch <yaml>` | Ejecutar desde archivo YAML |
+| `session preview <id>` | Visualizar gráficos en terminal |
 | `session report <id>` | Generar reporte LaTeX |
 | `session delete <id>` | Eliminar sesión |
 
@@ -270,10 +317,16 @@ python -m hidropluvial session analyze abc123 --tc desbordes --storm gz --tr 10 
 python -m hidropluvial session analyze abc123 --tc kirpich --storm gz --tr 2 --x 1.25
 
 # 4. Ver tabla comparativa
-python -m hidropluvial session summary abc123
+hp session summary abc123
 
-# 5. Generar reporte LaTeX
-python -m hidropluvial session report abc123 -o memoria_calculo.tex --author "Ing. García"
+# 5. Visualizar en terminal
+hp session preview abc123              # Tabla con sparklines
+hp session preview abc123 --compare    # Comparar hidrogramas
+hp session preview abc123 -i 0 --hyeto # Ver hietograma
+hp session preview abc123 --tr 10      # Filtrar por Tr
+
+# 6. Generar reporte LaTeX
+hp session report abc123 -o memoria_calculo.tex --author "Ing. García"
 ```
 
 #### Análisis Batch desde YAML
@@ -495,7 +548,10 @@ Donde:
 
 | Documento | Descripción |
 |-----------|-------------|
-| [Manual de Usuario](docs/manual.pdf) | Guía completa en PDF |
+| [Guía del CLI](docs/CLI.md) | Referencia completa de comandos |
+| [Sistema de Sesiones](docs/SESIONES.md) | Gestión de análisis y filtros |
+| [Wizard Interactivo](docs/WIZARD.md) | Guía del asistente paso a paso |
+| [Tablas de Coeficientes](docs/COEFICIENTES.md) | Tablas C y CN con ponderación |
 | [Especificación Técnica](docs/SPEC.md) | Detalle de métodos y fórmulas |
 | [Guía de Desarrollo](docs/DESARROLLO.md) | Estado del proyecto y roadmap |
 | [Guía de Gráficos](docs/guia_graficos.md) | Generación de figuras TikZ |

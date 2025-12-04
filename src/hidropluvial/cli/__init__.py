@@ -10,6 +10,8 @@ Este módulo organiza los comandos CLI en sub-aplicaciones temáticas:
 - report: Generación de reportes LaTeX
 - export: Exportación de datos
 - session: Gestión de sesiones de análisis
+- wizard: Asistente interactivo
+- commands: Lista de comandos disponibles
 """
 
 import typer
@@ -39,6 +41,20 @@ app.add_typer(hydrograph_app, name="hydrograph")
 app.add_typer(report_app, name="report")
 app.add_typer(export_app, name="export")
 app.add_typer(session_app, name="session")
+
+
+@app.command()
+def commands():
+    """Muestra todos los comandos disponibles con ejemplos."""
+    from hidropluvial.cli.commands import show_commands
+    show_commands()
+
+
+@app.command()
+def wizard():
+    """Asistente interactivo para análisis hidrológicos."""
+    from hidropluvial.cli.wizard import wizard_main
+    wizard_main()
 
 
 @app.callback()

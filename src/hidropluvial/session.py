@@ -196,6 +196,28 @@ class SessionManager:
         # Luego por nombre
         return self.load_by_name(name_or_id)
 
+    def get_session(self, session_id: str) -> Optional[Session]:
+        """
+        Obtiene una sesión por ID (parcial o completo).
+
+        Args:
+            session_id: ID de sesión (mínimo 8 caracteres)
+
+        Returns:
+            Session o None si no existe
+        """
+        # Buscar por ID exacto primero
+        path = self._session_path(session_id)
+        if path.exists():
+            return self.load(session_id)
+
+        # Buscar por ID parcial
+        for p in self.sessions_dir.glob("*.json"):
+            if p.stem.startswith(session_id):
+                return self.load(p.stem)
+
+        return None
+
     def list_sessions(self) -> list[dict]:
         """Lista todas las sesiones disponibles."""
         sessions = []

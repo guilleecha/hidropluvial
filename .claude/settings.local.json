@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(dir /b:*)",
+      "Bash(pip install:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(python:*)",
+      "Bash(C:myprojectshidropluvial.venvScriptspython.exe -m pip install --upgrade pip)",
+      "Bash(.venvScriptspython.exe -m pip install --upgrade pip)",
+      "Bash(\".venv/Scripts/python.exe\" -m pip install --upgrade pip)",
+      "Bash(\".venv/Scripts/python.exe\" -m pip install:*)",
+      "Bash(\".venv/Scripts/python.exe\" -m pip install -e .)",
+      "Bash(\".venv/Scripts/python.exe\" -m pytest tests/ -v --tb=short)",
+      "Bash(\".venv/Scripts/python.exe\" -m pytest tests/ --tb=short)",
+      "Bash(\".venv/Scripts/python.exe\" -m hidropluvial idf uruguay 78 3 --tr 25)",
+      "Bash(\".venv/Scripts/python.exe\" -m pytest tests/test_charts.py -v --tb=short)",
+      "Bash(\".venv/Scripts/python.exe\":*)",
+      "Bash(dir \"%APPDATA%\\Claude Code\" /b)",
+      "Bash(dir \"%USERPROFILE%\\.claude\" /b)",
+      "Bash(where /r \"%USERPROFILE%\" *claude*.json)",
+      "Bash(dir \"%APPDATA%\" /b)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(git init:*)",
+      "Bash(claude mcp add:*)",
+      "Bash(claude mcp list)",
+      "Bash(claude mcp remove:*)",
+      "Bash(git remote add:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

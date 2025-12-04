@@ -1,0 +1,163 @@
+{
+  "description": "SCS Curve Number Tables (TR-55 Table 2-2)",
+  "cover_types": {
+    "open_space_good": {
+      "description": "Open space (lawns, parks, golf courses) - Good condition (>75% grass cover)",
+      "A": 39, "B": 61, "C": 74, "D": 80
+    },
+    "open_space_fair": {
+      "description": "Open space - Fair condition (50-75% grass cover)",
+      "A": 49, "B": 69, "C": 79, "D": 84
+    },
+    "open_space_poor": {
+      "description": "Open space - Poor condition (<50% grass cover)",
+      "A": 68, "B": 79, "C": 86, "D": 89
+    },
+    "impervious": {
+      "description": "Impervious areas (paved parking, roofs, driveways)",
+      "A": 98, "B": 98, "C": 98, "D": 98
+    },
+    "gravel": {
+      "description": "Gravel surfaces",
+      "A": 76, "B": 85, "C": 89, "D": 91
+    },
+    "dirt": {
+      "description": "Dirt roads",
+      "A": 72, "B": 82, "C": 87, "D": 89
+    },
+    "residential_1_8_acre": {
+      "description": "Residential - 1/8 acre lot (65% impervious)",
+      "A": 77, "B": 85, "C": 90, "D": 92
+    },
+    "residential_1_4_acre": {
+      "description": "Residential - 1/4 acre lot (38% impervious)",
+      "A": 61, "B": 75, "C": 83, "D": 87
+    },
+    "residential_1_3_acre": {
+      "description": "Residential - 1/3 acre lot (30% impervious)",
+      "A": 57, "B": 72, "C": 81, "D": 86
+    },
+    "residential_1_2_acre": {
+      "description": "Residential - 1/2 acre lot (25% impervious)",
+      "A": 54, "B": 70, "C": 80, "D": 85
+    },
+    "residential_1_acre": {
+      "description": "Residential - 1 acre lot (20% impervious)",
+      "A": 51, "B": 68, "C": 79, "D": 84
+    },
+    "residential_2_acre": {
+      "description": "Residential - 2 acre lot (12% impervious)",
+      "A": 46, "B": 65, "C": 77, "D": 82
+    },
+    "commercial_85": {
+      "description": "Commercial and business (85% impervious)",
+      "A": 89, "B": 92, "C": 94, "D": 95
+    },
+    "industrial_72": {
+      "description": "Industrial (72% impervious)",
+      "A": 81, "B": 88, "C": 91, "D": 93
+    },
+    "pasture_good": {
+      "description": "Pasture, grassland - Good condition (>75% ground cover)",
+      "A": 39, "B": 61, "C": 74, "D": 80
+    },
+    "pasture_fair": {
+      "description": "Pasture, grassland - Fair condition (50-75% ground cover)",
+      "A": 49, "B": 69, "C": 79, "D": 84
+    },
+    "pasture_poor": {
+      "description": "Pasture, grassland - Poor condition (<50% ground cover)",
+      "A": 68, "B": 79, "C": 86, "D": 89
+    },
+    "meadow": {
+      "description": "Meadow (continuous grass, protected from grazing)",
+      "A": 30, "B": 58, "C": 71, "D": 78
+    },
+    "brush_good": {
+      "description": "Brush - Good condition (>75% ground cover)",
+      "A": 30, "B": 48, "C": 65, "D": 73
+    },
+    "brush_fair": {
+      "description": "Brush - Fair condition (50-75% ground cover)",
+      "A": 35, "B": 56, "C": 70, "D": 77
+    },
+    "brush_poor": {
+      "description": "Brush - Poor condition (<50% ground cover)",
+      "A": 48, "B": 67, "C": 77, "D": 83
+    },
+    "woods_good": {
+      "description": "Woods - Good condition (protected from grazing, litter covers soil)",
+      "A": 30, "B": 55, "C": 70, "D": 77
+    },
+    "woods_fair": {
+      "description": "Woods - Fair condition (grazed but not burned)",
+      "A": 36, "B": 60, "C": 73, "D": 79
+    },
+    "woods_poor": {
+      "description": "Woods - Poor condition (heavily grazed or burned)",
+      "A": 45, "B": 66, "C": 77, "D": 83
+    },
+    "woods_grass_good": {
+      "description": "Woods-grass combination - Good condition",
+      "A": 32, "B": 58, "C": 72, "D": 79
+    },
+    "farmsteads": {
+      "description": "Farmsteads (buildings, lanes, driveways)",
+      "A": 59, "B": 74, "C": 82, "D": 86
+    },
+    "row_crops_sr_good": {
+      "description": "Row crops, straight row - Good condition",
+      "A": 67, "B": 78, "C": 85, "D": 89
+    },
+    "row_crops_sr_poor": {
+      "description": "Row crops, straight row - Poor condition",
+      "A": 72, "B": 81, "C": 88, "D": 91
+    },
+    "row_crops_contoured_good": {
+      "description": "Row crops, contoured - Good condition",
+      "A": 65, "B": 75, "C": 82, "D": 86
+    },
+    "row_crops_contoured_poor": {
+      "description": "Row crops, contoured - Poor condition",
+      "A": 70, "B": 79, "C": 84, "D": 88
+    },
+    "small_grain_sr_good": {
+      "description": "Small grain, straight row - Good condition",
+      "A": 63, "B": 75, "C": 83, "D": 87
+    },
+    "small_grain_sr_poor": {
+      "description": "Small grain, straight row - Poor condition",
+      "A": 65, "B": 76, "C": 84, "D": 88
+    },
+    "fallow_bare": {
+      "description": "Fallow, bare soil",
+      "A": 77, "B": 86, "C": 91, "D": 94
+    },
+    "fallow_crop_residue_good": {
+      "description": "Fallow with crop residue cover - Good condition",
+      "A": 74, "B": 83, "C": 88, "D": 90
+    }
+  },
+  "hydrologic_soil_groups": {
+    "A": {
+      "description": "Low runoff potential, high infiltration",
+      "infiltration_rate": "> 0.76 cm/hr (0.30 in/hr)",
+      "soil_types": ["Deep sand", "Deep loess", "Aggregated silts"]
+    },
+    "B": {
+      "description": "Moderately low runoff potential",
+      "infiltration_rate": "0.38-0.76 cm/hr (0.15-0.30 in/hr)",
+      "soil_types": ["Shallow loess", "Sandy loam"]
+    },
+    "C": {
+      "description": "Moderately high runoff potential",
+      "infiltration_rate": "0.13-0.38 cm/hr (0.05-0.15 in/hr)",
+      "soil_types": ["Clay loams", "Shallow sandy loam", "Low organic soils"]
+    },
+    "D": {
+      "description": "High runoff potential, low infiltration",
+      "infiltration_rate": "0-0.13 cm/hr (0-0.05 in/hr)",
+      "soil_types": ["Clay", "High water table", "Shallow to impervious layer"]
+    }
+  }
+}

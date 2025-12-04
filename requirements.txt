@@ -1,0 +1,21 @@
+# HidroPluvial - Dependencias
+# Instalar con: pip install -r requirements.txt
+
+# Core
+numpy>=1.24.0
+scipy>=1.11.0
+pandas>=2.0.0
+
+# Validación
+pydantic>=2.0.0
+
+# CLI
+typer>=0.9.0
+
+# Templates y reportes
+jinja2>=3.1.0
+matplotlib>=3.7.0
+
+# Desarrollo y testing
+pytest>=7.0.0
+pytest-cov>=4.0.0

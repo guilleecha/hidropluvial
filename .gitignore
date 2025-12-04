@@ -1,0 +1,75 @@
+# Entorno virtual Python
+.venv/
+venv/
+ENV/
+env/
+
+# Cache de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribución / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# Configuración MCP (contiene tokens/API keys)
+.mcp.json
+
+# Variables de entorno
+.env
+.env.local
+.env.*.local
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Archivos temporales
+tmp/
+temp/
+*.tmp
+
+# Salidas LaTeX compiladas (mantener .tex fuentes)
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg

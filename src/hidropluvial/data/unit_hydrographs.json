@@ -1,0 +1,56 @@
+{
+  "description": "Standard Dimensionless Unit Hydrograph Data",
+  "scs_curvilinear": {
+    "description": "NRCS Curvilinear Dimensionless Unit Hydrograph (PRF=484)",
+    "t_Tp": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0, 4.5, 5.0],
+    "q_qp": [0.000, 0.030, 0.100, 0.190, 0.310, 0.470, 0.660, 0.820, 0.930, 0.990, 1.000, 0.990, 0.930, 0.860, 0.780, 0.680, 0.560, 0.460, 0.390, 0.330, 0.280, 0.207, 0.147, 0.107, 0.077, 0.055, 0.040, 0.029, 0.021, 0.015, 0.011, 0.005, 0.000]
+  },
+  "gamma_m_values": {
+    "description": "Shape parameter m for Gamma equation: q/qp = e^m × (t/Tp)^m × e^(-m × t/Tp)",
+    "prf_to_m": {
+      "238": 1.0,
+      "323": 2.0,
+      "433": 3.0,
+      "484": 3.7,
+      "566": 5.0,
+      "600": 5.5
+    }
+  },
+  "snyder_coefficients": {
+    "description": "Regional coefficients for Snyder synthetic unit hydrograph",
+    "regions": {
+      "mountainous": {
+        "Ct_range": [0.4, 1.0],
+        "Cp_range": [0.6, 0.8],
+        "description": "Steep, mountainous terrain"
+      },
+      "appalachian": {
+        "Ct_range": [1.8, 2.2],
+        "Cp_range": [0.4, 0.8],
+        "description": "Standard Appalachian region (Snyder's original)"
+      },
+      "flat_gulf": {
+        "Ct_range": [3.0, 8.0],
+        "Cp_range": [0.3, 0.4],
+        "description": "Flat terrain, Gulf coast regions"
+      }
+    }
+  },
+  "clark_kc_ratios": {
+    "description": "R/Tc ratio guidelines for Clark unit hydrograph",
+    "watershed_types": {
+      "developed_urban": {
+        "range": [1.1, 2.1],
+        "description": "Developed urban areas"
+      },
+      "rural": {
+        "range": [1.5, 2.8],
+        "description": "Rural watersheds"
+      },
+      "forested": {
+        "range": [8.0, 12.0],
+        "description": "Heavily forested watersheds"
+      }
+    }
+  }
+}

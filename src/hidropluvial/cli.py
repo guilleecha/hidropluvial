@@ -348,6 +348,57 @@ def storm_bimodal(
         typer.echo(f"Intensidad pico: {result.peak_intensity_mmhr:.2f} mm/hr")
 
 
+@storm_app.command("gz")
+def storm_gz(
+    p3_10: Annotated[float, typer.Argument(help="P3,10 en mm")],
+    return_period: Annotated[int, typer.Option("--tr", "-t", help="Periodo de retorno")] = 2,
+    duration: Annotated[float, typer.Option("--duration", "-d", help="Duracion en horas")] = 6.0,
+    dt: Annotated[float, typer.Option("--dt", help="Intervalo en minutos")] = 5.0,
+    area: Annotated[Optional[float], typer.Option("--area", "-a", help="Area cuenca km2")] = None,
+    output: Annotated[Optional[str], typer.Option("--output", "-o", help="Archivo JSON salida")] = None,
+):
+    """
+    Genera hietograma metodo GZ (6 horas, pico en primera hora).
+
+    Metodologia adaptada para drenaje urbano Uruguay:
+    - Duracion fija de 6 horas
+    - Bloques alternantes con pico adelantado (1ra hora)
+    - Curvas IDF DINAGUA
+
+    Ejemplo:
+        hidropluvial storm gz 83 --tr 2
+        hidropluvial storm gz 83 --tr 20
+        hidropluvial storm gz 83 --tr 100
+    """
+    # Pico en la primera hora: 1/6 = 0.167
+    peak_position = 1.0 / 6.0
+
+    result = alternating_blocks_dinagua(
+        p3_10, return_period, duration, dt, area, peak_position
+    )
+
+    if output:
+        with open(output, "w") as f:
+            json.dump(result.model_dump(), f, indent=2)
+        typer.echo(f"Hietograma guardado en {output}")
+    else:
+        typer.echo(f"\n{'='*55}")
+        typer.echo(f"  HIETOGRAMA GZ - TORMENTA 6 HORAS (PICO ADELANTADO)")
+        typer.echo(f"{'='*55}")
+        typer.echo(f"  P3,10 base:        {p3_10:>10.1f} mm")
+        typer.echo(f"  Periodo retorno:   {return_period:>10} anos")
+        typer.echo(f"  Duracion:          {duration:>10.1f} hr")
+        typer.echo(f"  Intervalo dt:      {dt:>10.1f} min")
+        typer.echo(f"  Pico en:           {'1ra hora':>10}")
+        if area:
+            typer.echo(f"  Area cuenca:       {area:>10.1f} km2")
+        typer.echo(f"{'='*55}")
+        typer.echo(f"  Precipitacion:     {result.total_depth_mm:>10.2f} mm")
+        typer.echo(f"  Intensidad pico:   {result.peak_intensity_mmhr:>10.2f} mm/hr")
+        typer.echo(f"  Intervalos:        {len(result.time_min):>10}")
+        typer.echo(f"{'='*55}\n")
+
+
 # ============================================================================
 # Comandos de Tormenta - Internacionales
 # ============================================================================
@@ -651,6 +702,116 @@ def hydrograph_scs(
     typer.echo(f"  Abstraccion Ia:        {runoff_result.initial_abstraction_mm:>12.2f} mm")
     typer.echo(f"  Escorrentia Q:         {runoff_mm:>12.2f} mm")
     typer.echo(f"  Coef. escorrentia:     {runoff_mm/precip_mm*100:>12.1f} %")
+
+    typer.echo(f"\n  RESULTADOS FINALES:")
+    typer.echo(f"  {'-'*40}")
+    typer.echo(f"  CAUDAL PICO:           {peak_flow:>12.3f} m3/s")
+    typer.echo(f"  TIEMPO AL PICO:        {time_to_peak:>12.2f} hr ({time_to_peak*60:.1f} min)")
+    typer.echo(f"  VOLUMEN:               {volume_m3:>12.0f} m3")
+    typer.echo(f"{'='*60}\n")
+
+    # Exportar si se solicita
+    if output:
+        with open(output, 'w') as f:
+            f.write("Tiempo_hr,Caudal_m3s\n")
+            for t, q in zip(hydrograph_time, hydrograph_flow):
+                f.write(f"{t:.4f},{q:.4f}\n")
+        typer.echo(f"Hidrograma exportado a: {output}")
+
+
+@hydrograph_app.command("gz")
+def hydrograph_gz(
+    area_ha: Annotated[float, typer.Option("--area", "-a", help="Area de la cuenca en hectareas")],
+    slope_pct: Annotated[float, typer.Option("--slope", "-s", help="Pendiente media en porcentaje (%)")],
+    c: Annotated[float, typer.Option("--c", help="Coeficiente de escorrentia (0-1)")],
+    p3_10: Annotated[float, typer.Option("--p3_10", "-p", help="P3,10 en mm")],
+    return_period: Annotated[int, typer.Option("--tr", "-t", help="Periodo de retorno en anos")] = 2,
+    x_factor: Annotated[float, typer.Option("--x", help="Factor X morfologico (1.0-5.5)")] = 1.0,
+    dt: Annotated[float, typer.Option("--dt", help="Intervalo en minutos")] = 5.0,
+    t0: Annotated[float, typer.Option("--t0", help="Tiempo entrada Tc en minutos")] = 5.0,
+    output: Annotated[Optional[str], typer.Option("--output", "-o", help="Archivo CSV de salida")] = None,
+):
+    """
+    Genera hidrograma completo usando metodo GZ.
+
+    Metodologia adaptada para drenaje urbano Uruguay:
+    - Tc: Metodo de los Desbordes (DINAGUA)
+    - IDF: Curvas DINAGUA Uruguay
+    - Hietograma: 6 horas, bloques alternantes, pico en 1ra hora
+    - Escorrentia: Coeficiente C (metodo racional)
+    - Hidrograma: Triangular con factor X ajustable
+
+    Valores tipicos de X:
+        1.00 - Areas urbanas internas
+        1.25 - Areas urbanas (gran pendiente)
+        1.67 - Metodo NRCS/SCS estandar
+        2.25 - Uso mixto rural/urbano
+
+    Ejemplo:
+        hidropluvial hydrograph gz --area 100 --slope 2.23 --c 0.62 --p3_10 83 --tr 2 --x 1.0
+    """
+    from hidropluvial.core import desbordes, triangular_uh_x, convolve_uh
+
+    # PASO 1: Tiempo de concentracion (Metodo Desbordes)
+    tc_hr = desbordes(area_ha, slope_pct, c, t0)
+    tc_min = tc_hr * 60
+
+    # PASO 2: Hietograma de 6 horas con pico adelantado
+    duration_hr = 6.0
+    peak_position = 1.0 / 6.0  # Pico en la primera hora
+
+    hyetograph = alternating_blocks_dinagua(
+        p3_10, return_period, duration_hr, dt, None, peak_position
+    )
+
+    precip_mm = hyetograph.total_depth_mm
+
+    # PASO 3: Escorrentia con coeficiente C
+    # Pe = C × P (para cada intervalo)
+    depths = np.array(hyetograph.depth_mm)
+    excess_mm = c * depths
+    total_runoff_mm = float(np.sum(excess_mm))
+
+    # PASO 4: Hidrograma unitario triangular con factor X
+    dt_hr = dt / 60
+    uh_time, uh_flow = triangular_uh_x(area_ha, tc_hr, dt_hr, x_factor)
+
+    # PASO 5: Convolucion
+    hydrograph_flow = convolve_uh(excess_mm, uh_flow)
+    n_total = len(hydrograph_flow)
+    hydrograph_time = np.arange(n_total) * dt_hr
+
+    # Calcular resultados
+    peak_idx = np.argmax(hydrograph_flow)
+    peak_flow = float(hydrograph_flow[peak_idx])
+    time_to_peak = float(hydrograph_time[peak_idx])
+    volume_m3 = float(np.trapz(hydrograph_flow, hydrograph_time * 3600))
+
+    # Calcular Tp y Tb teoricos
+    tp_teorico = 0.5 * dt_hr + 0.6 * tc_hr
+    tb_teorico = (1 + x_factor) * tp_teorico
+
+    # Mostrar resultados
+    typer.echo(f"\n{'='*60}")
+    typer.echo(f"  HIDROGRAMA GZ - ANALISIS COMPLETO")
+    typer.echo(f"{'='*60}")
+    typer.echo(f"\n  DATOS DE ENTRADA:")
+    typer.echo(f"  {'-'*40}")
+    typer.echo(f"  Area de cuenca:        {area_ha:>12.2f} ha")
+    typer.echo(f"  Pendiente:             {slope_pct:>12.2f} %")
+    typer.echo(f"  Coef. escorrentia C:   {c:>12.2f}")
+    typer.echo(f"  P3,10:                 {p3_10:>12.1f} mm")
+    typer.echo(f"  Periodo retorno:       {return_period:>12} anos")
+    typer.echo(f"  Factor X:              {x_factor:>12.2f}")
+
+    typer.echo(f"\n  RESULTADOS INTERMEDIOS:")
+    typer.echo(f"  {'-'*40}")
+    typer.echo(f"  Tc (Desbordes):        {tc_hr:>12.2f} hr ({tc_min:.1f} min)")
+    typer.echo(f"  Tp teorico:            {tp_teorico:>12.2f} hr ({tp_teorico*60:.1f} min)")
+    typer.echo(f"  Tb teorico:            {tb_teorico:>12.2f} hr ({tb_teorico*60:.1f} min)")
+    typer.echo(f"  Duracion tormenta:     {duration_hr:>12.1f} hr")
+    typer.echo(f"  Precipitacion total:   {precip_mm:>12.2f} mm")
+    typer.echo(f"  Escorrentia (C*P):     {total_runoff_mm:>12.2f} mm")
 
     typer.echo(f"\n  RESULTADOS FINALES:")
     typer.echo(f"  {'-'*40}")

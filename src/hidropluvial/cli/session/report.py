@@ -1,0 +1,531 @@
+"""
+Comando de generación de reportes LaTeX desde sesión.
+"""
+
+import shutil
+from pathlib import Path
+from typing import Annotated, Optional
+
+import typer
+
+from hidropluvial.reports import ReportGenerator
+from hidropluvial.cli.session.base import get_session_manager
+
+
+def session_report(
+    session_id: Annotated[str, typer.Argument(help="ID o nombre de la sesión")],
+    output: Annotated[str, typer.Option("--output", "-o", help="Directorio de salida")] = "report",
+    author: Annotated[str, typer.Option("--author", help="Autor del reporte")] = "",
+    template_dir: Annotated[Optional[str], typer.Option("--template", "-t", help="Directorio con template Pablo Pizarro")] = None,
+):
+    """
+    Genera reporte LaTeX con gráficos TikZ para cada análisis.
+
+    Crea un directorio con:
+    - Archivo principal (.tex)
+    - Gráficos de hietogramas (hietograma_*.tex)
+    - Gráficos de hidrogramas (hidrograma_*.tex)
+
+    Con --template: Genera documento compatible con template Pablo Pizarro
+    y copia los archivos del template al directorio de salida.
+
+    Ejemplo:
+        hidropluvial session report abc123 -o reporte_cuenca --author "Ing. Pérez"
+        hidropluvial session report abc123 -o reporte --template examples/
+    """
+    from hidropluvial.reports.charts import (
+        HydrographSeries,
+        generate_hydrograph_tikz,
+        generate_hyetograph_tikz,
+    )
+
+    manager = get_session_manager()
+
+    try:
+        session = manager.find(session_id)
+    except FileNotFoundError:
+        typer.echo(f"Error: Sesión '{session_id}' no encontrada.", err=True)
+        raise typer.Exit(1)
+
+    if not session.analyses:
+        typer.echo(f"Error: No hay análisis en la sesión.", err=True)
+        raise typer.Exit(1)
+
+    # Crear directorio de salida
+    output_dir = Path(output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    generator = ReportGenerator()
+    rows = manager.get_summary_table(session)
+
+    typer.echo(f"\n{'='*60}")
+    typer.echo(f"  GENERANDO REPORTE - {session.name}")
+    typer.echo(f"{'='*60}")
+    typer.echo(f"  Directorio: {output_dir.absolute()}")
+
+    # =========================================================================
+    # GENERAR GRÁFICOS TIKZ
+    # =========================================================================
+    generated_files = {"hyetographs": [], "hydrographs": []}
+
+    typer.echo(f"\n  Generando gráficos TikZ...")
+
+    for i, analysis in enumerate(session.analyses):
+        # Verificar si hay datos de series temporales
+        has_storm_data = len(analysis.storm.time_min) > 0 and len(analysis.storm.intensity_mmhr) > 0
+        has_hydro_data = len(analysis.hydrograph.time_hr) > 0 and len(analysis.hydrograph.flow_m3s) > 0
+
+        # Identificador único para el análisis
+        x_str = f"_X{analysis.hydrograph.x_factor:.2f}".replace(".", "") if analysis.hydrograph.x_factor else ""
+        file_id = f"{analysis.tc.method}_{analysis.storm.type}_Tr{analysis.storm.return_period}{x_str}"
+
+        # -----------------------------------------------------------------
+        # Generar hietograma
+        # -----------------------------------------------------------------
+        if has_storm_data:
+            hyeto_filename = f"hietograma_{file_id}.tex"
+            hyeto_path = output_dir / hyeto_filename
+
+            hyeto_caption = (
+                f"Hietograma - {analysis.storm.type.upper()} "
+                f"$T_r$={analysis.storm.return_period} años "
+                f"(P={analysis.storm.total_depth_mm:.1f} mm)"
+            )
+
+            hyeto_tikz = generate_hyetograph_tikz(
+                time_min=analysis.storm.time_min,
+                intensity_mmhr=analysis.storm.intensity_mmhr,
+                caption=hyeto_caption,
+                label=f"fig:hyeto_{file_id}",
+                width=r"0.9\textwidth",
+                height="6cm",
+            )
+
+            hyeto_path.write_text(hyeto_tikz, encoding="utf-8")
+            generated_files["hyetographs"].append(hyeto_filename)
+            typer.echo(f"    + {hyeto_filename}")
+
+        # -----------------------------------------------------------------
+        # Generar hidrograma
+        # -----------------------------------------------------------------
+        if has_hydro_data:
+            hydro_filename = f"hidrograma_{file_id}.tex"
+            hydro_path = output_dir / hydro_filename
+
+            # Convertir tiempo de horas a minutos para el gráfico
+            time_min_hydro = [t * 60 for t in analysis.hydrograph.time_hr]
+
+            hydro_caption = (
+                f"Hidrograma - {analysis.tc.method.title()} + {analysis.storm.type.upper()} "
+                f"$T_r$={analysis.storm.return_period} años "
+                r"($Q_p$=" + f"{analysis.hydrograph.peak_flow_m3s:.3f}" + r" m$^3$/s)"
+            )
+
+            x_label = f" X={analysis.hydrograph.x_factor:.2f}" if analysis.hydrograph.x_factor else ""
+            series_label = f"{analysis.tc.method.title()}{x_label}"
+
+            series = [
+                HydrographSeries(
+                    time_min=time_min_hydro,
+                    flow_m3s=analysis.hydrograph.flow_m3s,
+                    label=series_label,
+                    color="blue",
+                    style="solid",
+                )
+            ]
+
+            hydro_tikz = generate_hydrograph_tikz(
+                series=series,
+                caption=hydro_caption,
+                label=f"fig:hydro_{file_id}",
+                width=r"0.9\textwidth",
+                height="6cm",
+            )
+
+            hydro_path.write_text(hydro_tikz, encoding="utf-8")
+            generated_files["hydrographs"].append(hydro_filename)
+            typer.echo(f"    + {hydro_filename}")
+
+    # =========================================================================
+    # GENERAR ARCHIVOS DE SECCIONES SEPARADOS
+    # =========================================================================
+    sections = _generate_sections(session, rows, generated_files)
+
+    # =========================================================================
+    # GENERAR DOCUMENTO PRINCIPAL
+    # =========================================================================
+    main_filename = f"{session.name.replace(' ', '_').lower()}_memoria.tex"
+    main_path = output_dir / main_filename
+
+    if template_dir:
+        doc = _generate_template_document(
+            session, author, template_dir, output_dir, sections, typer
+        )
+    else:
+        # Generar documento standalone completo
+        content = "\n".join(sections.values())
+        doc = generator.generate_standalone_document(
+            content=content,
+            title=f"Memoria de Cálculo: {session.name}",
+            author=author,
+            include_tikz=True,
+        )
+
+    main_path.write_text(doc, encoding="utf-8")
+
+    # =========================================================================
+    # RESUMEN
+    # =========================================================================
+    typer.echo(f"\n  {'='*50}")
+    typer.echo(f"  ARCHIVOS GENERADOS:")
+    typer.echo(f"  {'='*50}")
+    typer.echo(f"  Documento principal: {main_filename}")
+    if template_dir:
+        typer.echo(f"  Template:            template.tex + template_config.tex")
+        typer.echo(f"  Contenido:           document.tex")
+        typer.echo(f"  Secciones:           {len(sections)} archivos (sec_*.tex)")
+    typer.echo(f"  Hietogramas:         {len(generated_files['hyetographs'])} archivos")
+    typer.echo(f"  Hidrogramas:         {len(generated_files['hydrographs'])} archivos")
+    typer.echo(f"  {'='*50}")
+    typer.echo(f"\n  Para compilar:")
+    typer.echo(f"    cd {output_dir.absolute()}")
+    typer.echo(f"    pdflatex {main_filename}")
+    typer.echo(f"{'='*60}\n")
+
+
+def _generate_sections(session, rows, generated_files):
+    """Genera el contenido de las secciones del reporte."""
+    # --- sec_cuenca.tex: Datos de la cuenca ---
+    cuenca_content = f"""% Sección: Datos de la Cuenca
+% Generado automáticamente por HidroPluvial
+
+\\section{{Datos de la Cuenca}}
+
+\\begin{{table}}[H]
+\\centering
+\\begin{{tabular}}{{lr}}
+\\toprule
+Parámetro & Valor \\\\
+\\midrule
+Nombre & {session.cuenca.nombre or session.name} \\\\
+Área & {session.cuenca.area_ha:.2f} ha \\\\
+Pendiente & {session.cuenca.slope_pct:.2f} \\% \\\\
+$P_{{3,10}}$ & {session.cuenca.p3_10:.1f} mm \\\\
+"""
+    if session.cuenca.c:
+        cuenca_content += f"Coef. escorrentía C & {session.cuenca.c:.2f} \\\\\n"
+    if session.cuenca.cn:
+        cuenca_content += f"Curve Number CN & {session.cuenca.cn} \\\\\n"
+    if session.cuenca.length_m:
+        cuenca_content += f"Longitud cauce & {session.cuenca.length_m:.0f} m \\\\\n"
+
+    cuenca_content += """\\bottomrule
+\\end{tabular}
+\\caption{Características de la cuenca}
+\\label{tab:cuenca}
+\\end{table}
+"""
+
+    # --- sec_tc.tex: Tiempos de concentración ---
+    tc_content = """% Sección: Tiempos de Concentración
+% Generado automáticamente por HidroPluvial
+
+\\section{Tiempos de Concentración}
+
+\\begin{table}[H]
+\\centering
+\\begin{tabular}{lrr}
+\\toprule
+Método & $T_c$ (hr) & $T_c$ (min) \\\\
+\\midrule
+"""
+    for tc in session.tc_results:
+        tc_content += f"{tc.method.title()} & {tc.tc_hr:.3f} & {tc.tc_min:.1f} \\\\\n"
+
+    tc_content += """\\bottomrule
+\\end{tabular}
+\\caption{Tiempos de concentración calculados}
+\\label{tab:tc}
+\\end{table}
+"""
+
+    # --- sec_resultados.tex: Tabla de resultados ---
+    results_content = f"""% Sección: Resultados de Análisis
+% Generado automáticamente por HidroPluvial
+
+\\section{{Resultados de Análisis}}
+
+Se realizaron {len(rows)} combinaciones de análisis variando:
+\\begin{{itemize}}
+    \\item Métodos de tiempo de concentración
+    \\item Tipos de tormenta de diseño
+    \\item Períodos de retorno
+    \\item Factor morfológico X (para tormentas GZ)
+\\end{{itemize}}
+
+\\begin{{table}}[H]
+\\centering
+\\footnotesize
+\\begin{{tabular}}{{lccccccc}}
+\\toprule
+Método $T_c$ & Tormenta & $T_r$ & X & P (mm) & Q (mm) & $Q_p$ (m$^3$/s) & Vol (m$^3$) \\\\
+\\midrule
+"""
+    for r in rows:
+        x_str = f"{r['x']:.2f}" if r['x'] else "-"
+        results_content += (
+            f"{r['tc_method']} & {r['storm']} & {r['tr']} & {x_str} & "
+            f"{r['depth_mm']:.1f} & {r['runoff_mm']:.1f} & {r['qpeak_m3s']:.3f} & {r['vol_m3']:.0f} \\\\\n"
+        )
+
+    results_content += """\\bottomrule
+\\end{tabular}
+\\caption{Tabla comparativa de análisis}
+\\label{tab:results}
+\\end{table}
+"""
+
+    # --- sec_estadisticas.tex: Resumen estadístico ---
+    stats_content = ""
+    if len(rows) > 1:
+        max_q = max(rows, key=lambda x: x['qpeak_m3s'])
+        min_q = min(rows, key=lambda x: x['qpeak_m3s'])
+        avg_q = sum(r['qpeak_m3s'] for r in rows) / len(rows)
+        variation = (max_q['qpeak_m3s'] - min_q['qpeak_m3s']) / min_q['qpeak_m3s'] * 100
+
+        stats_content = f"""% Sección: Resumen Estadístico
+% Generado automáticamente por HidroPluvial
+
+\\section{{Resumen Estadístico}}
+
+\\begin{{table}}[H]
+\\centering
+\\begin{{tabular}}{{lr}}
+\\toprule
+Estadístico & Valor \\\\
+\\midrule
+Número de análisis & {len(rows)} \\\\
+Caudal pico máximo & {max_q['qpeak_m3s']:.3f} m$^3$/s ({max_q['tc_method']} + {max_q['storm']} $T_r$={max_q['tr']}) \\\\
+Caudal pico mínimo & {min_q['qpeak_m3s']:.3f} m$^3$/s ({min_q['tc_method']} + {min_q['storm']} $T_r$={min_q['tr']}) \\\\
+Caudal pico promedio & {avg_q:.3f} m$^3$/s \\\\
+Variación máx/mín & {variation:.1f}\\% \\\\
+\\bottomrule
+\\end{{tabular}}
+\\caption{{Resumen estadístico de caudales pico}}
+\\label{{tab:summary}}
+\\end{{table}}
+"""
+
+    # --- Generar fichas técnicas por análisis ---
+    # Cada análisis tiene su propia ficha con: datos, hietograma, hidrograma
+    fichas_content = ""
+    if generated_files["hyetographs"] or generated_files["hydrographs"]:
+        fichas_content = """% Sección: Fichas Técnicas por Análisis
+% Generado automáticamente por HidroPluvial
+
+\\section{Fichas Técnicas por Análisis}
+
+"""
+        # Crear ficha para cada análisis
+        for i, analysis in enumerate(session.analyses):
+            x_str = f"_X{analysis.hydrograph.x_factor:.2f}".replace(".", "") if analysis.hydrograph.x_factor else ""
+            file_id = f"{analysis.tc.method}_{analysis.storm.type}_Tr{analysis.storm.return_period}{x_str}"
+
+            # Título de la ficha
+            x_display = f"X={analysis.hydrograph.x_factor:.2f}" if analysis.hydrograph.x_factor else ""
+            ficha_titulo = f"{analysis.tc.method.title()} + {analysis.storm.type.upper()} $T_r$={analysis.storm.return_period} años {x_display}"
+
+            fichas_content += f"""\\subsection{{{ficha_titulo}}}
+
+% Tabla de parámetros del análisis
+\\begin{{table}}[H]
+\\centering
+\\small
+\\begin{{tabular}}{{lr|lr}}
+\\toprule
+\\multicolumn{{2}}{{c|}}{{\\textbf{{Entrada}}}} & \\multicolumn{{2}}{{c}}{{\\textbf{{Resultados}}}} \\\\
+\\midrule
+Método $T_c$ & {analysis.tc.method.title()} & Precipitación & {analysis.storm.total_depth_mm:.1f} mm \\\\
+$T_c$ & {analysis.tc.tc_min:.1f} min & Escorrentía & {analysis.hydrograph.runoff_mm:.1f} mm \\\\
+Tormenta & {analysis.storm.type.upper()} & $Q_p$ & \\textbf{{{analysis.hydrograph.peak_flow_m3s:.3f} m$^3$/s}} \\\\
+$T_r$ & {analysis.storm.return_period} años & $T_p$ & {analysis.hydrograph.time_to_peak_min:.1f} min \\\\
+"""
+            if analysis.hydrograph.x_factor:
+                fichas_content += f"Factor X & {analysis.hydrograph.x_factor:.2f} & Volumen & {analysis.hydrograph.volume_m3:.0f} m$^3$ \\\\\n"
+            else:
+                fichas_content += f" &  & Volumen & {analysis.hydrograph.volume_m3:.0f} m$^3$ \\\\\n"
+
+            fichas_content += f"""\\bottomrule
+\\end{{tabular}}
+\\caption{{Ficha técnica: {ficha_titulo}}}
+\\end{{table}}
+
+% Hietograma e Hidrograma
+\\begin{{figure}}[H]
+\\centering
+"""
+            # Incluir hietograma si existe
+            hyeto_file = f"hietograma_{file_id}.tex"
+            if hyeto_file in generated_files["hyetographs"]:
+                fichas_content += f"""\\begin{{minipage}}{{0.48\\textwidth}}
+\\centering
+\\resizebox{{\\textwidth}}{{!}}{{\\input{{{hyeto_file}}}}}
+\\end{{minipage}}
+\\hfill
+"""
+
+            # Incluir hidrograma si existe
+            hydro_file = f"hidrograma_{file_id}.tex"
+            if hydro_file in generated_files["hydrographs"]:
+                fichas_content += f"""\\begin{{minipage}}{{0.48\\textwidth}}
+\\centering
+\\resizebox{{\\textwidth}}{{!}}{{\\input{{{hydro_file}}}}}
+\\end{{minipage}}
+"""
+
+            fichas_content += f"""\\caption{{Hietograma e Hidrograma - {ficha_titulo}}}
+\\end{{figure}}
+
+"""
+
+    # Diccionario de secciones
+    sections = {
+        "sec_cuenca.tex": cuenca_content,
+        "sec_tc.tex": tc_content,
+        "sec_resultados.tex": results_content,
+    }
+    if stats_content:
+        sections["sec_estadisticas.tex"] = stats_content
+    if fichas_content:
+        sections["sec_fichas.tex"] = fichas_content
+
+    return sections
+
+
+def _generate_template_document(session, author, template_dir, output_dir, sections, typer):
+    """Genera documento con template Pablo Pizarro."""
+    template_path = Path(template_dir)
+    template_file = template_path / "template.tex"
+    config_file = template_path / "template_config.tex"
+
+    if template_file.exists():
+        shutil.copy(template_file, output_dir / "template.tex")
+        typer.echo(f"    + template.tex")
+    else:
+        typer.echo(f"  Advertencia: No se encontró template.tex en {template_dir}", err=True)
+
+    if config_file.exists():
+        shutil.copy(config_file, output_dir / "template_config.tex")
+        typer.echo(f"    + template_config.tex")
+
+    # Copiar carpeta departamentos si existe
+    dept_dir = template_path / "departamentos"
+    if dept_dir.exists() and dept_dir.is_dir():
+        dest_dept = output_dir / "departamentos"
+        if dest_dept.exists():
+            shutil.rmtree(dest_dept)
+        shutil.copytree(dept_dir, dest_dept)
+        typer.echo(f"    + departamentos/")
+
+    # Guardar archivos de secciones
+    typer.echo(f"\n  Generando secciones LaTeX...")
+    for sec_filename, sec_content in sections.items():
+        sec_path = output_dir / sec_filename
+        sec_path.write_text(sec_content, encoding="utf-8")
+        typer.echo(f"    + {sec_filename}")
+
+    # Generar document.tex
+    document_content = """% Documento de contenido
+% Generado automáticamente por HidroPluvial
+
+"""
+    section_order = [
+        "sec_cuenca.tex",
+        "sec_tc.tex",
+        "sec_resultados.tex",
+        "sec_estadisticas.tex",
+        "sec_fichas.tex",  # Fichas técnicas por análisis
+    ]
+    for sec in section_order:
+        if sec in sections:
+            document_content += f"\\input{{{sec.replace('.tex', '')}}}\n"
+
+    doc_content_file = output_dir / "document.tex"
+    doc_content_file.write_text(document_content, encoding="utf-8")
+    typer.echo(f"    + document.tex")
+
+    # Generar main.tex
+    safe_title = session.name.replace("_", " ")
+
+    doc = f"""% Memoria de Cálculo Hidrológico
+% Generado automáticamente por HidroPluvial
+% Template: Informe LaTeX - Pablo Pizarro R.
+
+% CREACIÓN DEL DOCUMENTO
+\\documentclass[
+    spanish,
+    letterpaper, oneside
+]{{article}}
+
+% INFORMACIÓN DEL DOCUMENTO
+\\def\\documenttitle {{{safe_title}}}
+\\def\\documentsubtitle {{Memoria de Cálculo Hidrológico}}
+\\def\\documentsubject {{Análisis de escorrentía y caudales de diseño}}
+
+\\def\\documentauthor {{{author or "HidroPluvial"}}}
+\\def\\coursename {{}}
+\\def\\coursecode {{}}
+
+\\def\\universityname {{}}
+\\def\\universityfaculty {{}}
+\\def\\universitydepartment {{}}
+\\def\\universitydepartmentimage {{}}
+\\def\\universitydepartmentimagecfg {{height=3.5cm}}
+\\def\\universitylocation {{Uruguay}}
+
+% INTEGRANTES Y FECHAS
+\\def\\authortable {{
+    \\begin{{tabular}}{{ll}}
+        Autor: & {author or "HidroPluvial"} \\\\
+        \\\\
+        \\multicolumn{{2}}{{l}}{{Fecha: \\today}} \\\\
+        \\multicolumn{{2}}{{l}}{{\\universitylocation}}
+    \\end{{tabular}}
+}}
+
+% IMPORTACIÓN DEL TEMPLATE
+\\input{{template}}
+
+% Paquetes adicionales (no incluidos en template)
+\\usepackage{{tabularx}}
+\\usepackage{{pgfplots}}
+\\pgfplotsset{{compat=1.18}}
+\\usepackage{{makecell}}
+
+% INICIO DE PÁGINAS
+\\begin{{document}}
+
+% Compresión PDF
+\\pdfcompresslevel=9
+\\pdfobjcompresslevel=3
+
+% PORTADA
+\\templatePortrait
+
+% CONFIGURACIÓN DE PÁGINA
+\\templatePagecfg
+
+% TABLA DE CONTENIDOS
+\\templateIndex
+
+% CONFIGURACIONES FINALES
+\\templateFinalcfg
+
+% CONTENIDO
+\\input{{document}}
+
+% FIN DEL DOCUMENTO
+\\end{{document}}
+"""
+
+    return doc

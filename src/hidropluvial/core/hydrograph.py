@@ -215,8 +215,11 @@ def triangular_uh_x(
     tp = 0.5 * dt_hr + 0.6 * tc_hr
 
     # Caudal pico para 1 mm de escorrentía
-    # qp = 0.278 × A / Tp × 2 / (1 + X)
-    qp = 0.278 * area_ha / tp * 2 / (1 + x_factor)
+    # Fórmula original usa km², para ha dividir por 100
+    # qp = 0.278 × A[km²] / Tp × 2 / (1 + X)
+    # qp = 0.00278 × A[ha] / Tp × 2 / (1 + X)
+    area_km2 = area_ha / 100
+    qp = 0.278 * area_km2 / tp * 2 / (1 + x_factor)
 
     # Tiempo base
     tb = (1 + x_factor) * tp

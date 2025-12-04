@@ -1,0 +1,35 @@
+\begin{figure}[H]
+	\centering
+	\begin{tikzpicture}
+		\begin{axis}[
+			width=0.9\textwidth,
+			height=6cm,
+			xlabel={Tiempo},
+			ylabel={Precipitación (mm/h)},
+			y dir=reverse,
+			ymin=0,
+			ymax=249,
+			xmin=0,
+			xmax=60,
+			ybar,
+			bar width=4,
+			xtick={0, 60},
+			xticklabels={0:00, 1:00},
+			xticklabel style={rotate=45, anchor=east},
+			grid=major,
+			grid style={dashed, gray!30},
+			]
+			\addplot [
+			draw=black,
+			fill=none
+			]
+			coordinates {
+				(2, 27.36) (8, 28.80) (12, 32.64) (18, 38.04) (22, 47.16)
+				(28, 67.20) (32, 226.08) (38, 92.76) (42, 54.84) (48, 42.00)
+				(52, 35.04) (58, 30.60)
+			};
+		\end{axis}
+	\end{tikzpicture}
+	\caption{Hietograma - BLOCKS $T_r$=25 años (P=60.2 mm)}
+	\label{fig:hyeto_kirpich_blocks_Tr25}
+\end{figure}

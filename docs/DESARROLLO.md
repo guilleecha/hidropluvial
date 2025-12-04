@@ -16,17 +16,20 @@ HidroPluvial es una herramienta Python para cálculos hidrológicos orientada a 
 |--------|---------|--------|-------------|
 | IDF Uruguay | `core/idf.py` | ✅ Completo | Método DINAGUA con CT, CA, P3,10 por departamento |
 | IDF Internacional | `core/idf.py` | ✅ Completo | Sherman, Bernard, Koutsoyiannis |
-| Temporal | `core/temporal.py` | ✅ Completo | Bloques Alternantes, Chicago, SCS, Huff, Bimodal |
-| Tiempo Concentración | `core/tc.py` | ✅ Completo | Kirpich, NRCS, Témez, California, FAA, Kinematic |
+| Temporal | `core/temporal.py` | ✅ Completo | Bloques Alternantes, Chicago, SCS, Huff, Bimodal, GZ |
+| Tiempo Concentración | `core/tc.py` | ✅ Completo | Kirpich, NRCS, Témez, California, FAA, Kinematic, Desbordes |
 | Escorrentía | `core/runoff.py` | ✅ Completo | SCS-CN, Método Racional con Cf |
-| Hidrogramas | `core/hydrograph.py` | ✅ Completo | SCS triangular/curvilinear, Snyder, Clark |
+| Hidrogramas | `core/hydrograph.py` | ✅ Completo | SCS triangular/curvilinear, Triangular con X, Snyder, Clark |
 
 #### Fase 2: Integración DINAGUA + Distribuciones Temporales ✅
 
 - `alternating_blocks_dinagua()` - Bloques alternantes usando IDF DINAGUA
 - `bimodal_storm()` - Tormenta bimodal triangular
+- `bimodal_dinagua()` - Bimodal con IDF DINAGUA automático
 - `bimodal_chicago()` - Tormenta bimodal con método Chicago
 - `generate_hyetograph_dinagua()` - Función principal para hietogramas Uruguay
+- `desbordes()` - Tc por Método de los Desbordes (DINAGUA)
+- `triangular_uh_x()` - Hidrograma triangular con factor X ajustable
 
 #### Fase 2.5: Generación de Gráficos TikZ/PGFPlots ✅
 
@@ -43,14 +46,40 @@ Ver guía completa: `docs/guia_graficos.md`
 #### CLI Implementado ✅
 
 ```bash
-# Comandos disponibles
+# Comandos IDF
 hidropluvial idf uruguay <P3_10> <duracion> --tr <periodo>
 hidropluvial idf tabla-uy <P3_10> --area <km2>
 hidropluvial idf departamentos
+
+# Comandos Tormenta
 hidropluvial storm uruguay <P3_10> <duracion> --tr <periodo>
 hidropluvial storm bimodal <profundidad> <duracion>
-hidropluvial tc kirpich <longitud> <desnivel>
-hidropluvial runoff scs <precipitacion> <cn>
+hidropluvial storm bimodal-uy <P3_10> --tr <periodo>
+hidropluvial storm gz <P3_10> --tr <periodo>
+
+# Comandos Tc
+hidropluvial tc kirpich <longitud> <pendiente>
+hidropluvial tc temez <longitud> <pendiente>
+hidropluvial tc desbordes <area> <pendiente> <c>
+
+# Comandos Escorrentía
+hidropluvial runoff cn <precipitacion> <cn>
+hidropluvial runoff rational <c> <i> <area>
+
+# Comandos Hidrograma
+hidropluvial hydrograph scs --area <km2> --length <m> --slope <m/m> --p3_10 <mm> --cn <val> --tr <periodo>
+hidropluvial hydrograph gz --area <ha> --slope <pct> --c <val> --p3_10 <mm> --tr <periodo> --x <factor>
+
+# Comandos Sesión (nuevo)
+hidropluvial session create <nombre> --area <ha> --slope <pct> --p3_10 <mm> --c <val>
+hidropluvial session list
+hidropluvial session show <id>
+hidropluvial session tc <id> --methods "kirpich,desbordes"
+hidropluvial session analyze <id> --tc <metodo> --storm <tipo> --tr <periodo> --x <factor>
+hidropluvial session summary <id>
+hidropluvial session batch <archivo.yaml>
+hidropluvial session report <id> -o <archivo.tex>
+hidropluvial session delete <id>
 ```
 
 ---
@@ -247,23 +276,56 @@ hidropluvial export storm-tikz 78 3 --tr 25 -o hyetograph.tex
 
 ---
 
-## Próximos Pasos (Fase 4)
+## Fase 4: Sistema de Sesiones ✅ (NUEVO)
 
-### 4.1 Mejoras CLI Pendientes
+### 4.1 Flujo de Trabajo Integrado ✅
+
+| Funcionalidad | Estado | Descripción |
+|---------------|--------|-------------|
+| `session.py` | ✅ | Modelos de datos (Cuenca, Tc, Storm, Hydrograph, Analysis, Session) |
+| SessionManager | ✅ | Persistencia JSON en `~/.hidropluvial/sessions/` |
+| CLI session | ✅ | Comandos create, list, show, tc, analyze, summary, batch, report, delete |
+| Batch YAML | ✅ | Ejecución masiva desde archivo de configuración |
+| Report LaTeX | ✅ | Generación de memoria de cálculo comparativa |
+
+### 4.2 Nuevas Funciones Core
+
+| Función | Archivo | Descripción |
+|---------|---------|-------------|
+| `desbordes()` | `tc.py` | Tc por Método de los Desbordes (DINAGUA) |
+| `triangular_uh_x()` | `hydrograph.py` | Hidrograma triangular con factor X ajustable |
+| `bimodal_dinagua()` | `temporal.py` | Tormenta bimodal con IDF DINAGUA |
+
+### 4.3 Factor X - Hidrograma Triangular
+
+| Factor X | Uso típico |
+|----------|------------|
+| 1.00 | Áreas urbanas internas |
+| 1.25 | Áreas urbanas (gran pendiente) |
+| 1.67 | Método SCS/NRCS estándar |
+| 2.25 | Uso mixto rural/urbano |
+| 3.33 | Área rural sinuosa |
+| 5.50 | Área rural (pendiente baja) |
+
+---
+
+## Próximos Pasos (Fase 5)
+
+### 5.1 Mejoras CLI Pendientes
 
 - [ ] Gráficos ASCII en terminal
 - [ ] Modo interactivo
-- [ ] Comando `report hydrograph` para hidrogramas
 - [ ] Compilación PDF automática (pdflatex)
+- [ ] Comando `session export` para exportar hidrogramas CSV
 
-### 4.2 Validación y Documentación
+### 5.2 Validación y Documentación
 
 - [ ] Agregar más tests de integración
 - [ ] Documentación de API (Sphinx/MkDocs)
 - [ ] Ejemplos de uso en Jupyter notebooks
 - [ ] Validación contra casos de estudio reales
 
-### 4.3 Funcionalidades Adicionales (Opcional)
+### 5.3 Funcionalidades Adicionales (Opcional)
 
 - [ ] GUI simple (Streamlit o Gradio)
 - [ ] Soporte para otros países/métodos regionales
@@ -296,6 +358,7 @@ pydantic>=2.0.0
 typer>=0.9.0
 jinja2>=3.1.0
 matplotlib>=3.7.0
+pyyaml>=6.0
 pytest>=7.0.0
 ```
 

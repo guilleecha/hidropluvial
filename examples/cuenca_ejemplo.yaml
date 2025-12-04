@@ -1,0 +1,31 @@
+# Ejemplo de configuración para análisis batch
+# Uso: hidropluvial session batch cuenca_ejemplo.yaml
+
+session:
+  name: "Cuenca Las Piedras"
+  cuenca:
+    nombre: "Arroyo Las Piedras - Tramo Sur"
+    area_ha: 62
+    slope_pct: 3.41
+    p3_10: 83
+    c: 0.62
+    cn: 81
+    length_m: 800
+
+tc_methods:
+  - kirpich
+  - desbordes
+
+analyses:
+  # Análisis con tormenta GZ (6h, pico adelantado)
+  - storm: gz
+    tr: [2, 10, 25]
+    x: [1.0, 1.25]
+
+  # Análisis con bloques alternantes (duración = Tc)
+  - storm: blocks
+    tr: [10, 25]
+
+  # Análisis con bloques alternantes 24h
+  - storm: blocks24
+    tr: [10, 25]

@@ -11,10 +11,11 @@
 ## Características
 
 - **Curvas IDF** - Método DINAGUA Uruguay con factores CT y CA
-- **Hietogramas** - Bloques alternantes, Chicago, SCS Tipo I/II/III, Huff
-- **Tiempo de concentración** - Kirpich, NRCS, Témez, California, FAA
+- **Hietogramas** - Bloques alternantes, Chicago, SCS Tipo I/II/III, Huff, Bimodal
+- **Tiempo de concentración** - Kirpich, Témez, Desbordes (DINAGUA)
 - **Escorrentía** - SCS Curve Number, Método Racional
-- **Hidrogramas** - SCS triangular/curvilíneo, Snyder, Clark
+- **Hidrogramas** - SCS triangular/curvilíneo, Triangular con factor X, Snyder, Clark
+- **Sistema de Sesiones** - Flujo de trabajo integrado para múltiples análisis comparativos
 - **Reportes LaTeX** - Memorias de cálculo con gráficos TikZ/PGFPlots
 - **Exportación** - CSV, JSON, figuras TikZ standalone
 
@@ -137,6 +138,7 @@ python -m hidropluvial storm scs 150 --duration 24 --storm-type II
 |---------|-------------|
 | `tc kirpich <L> <S>` | Fórmula Kirpich |
 | `tc temez <L> <S>` | Fórmula Témez |
+| `tc desbordes <A> <S> <C>` | Método Desbordes (DINAGUA) |
 
 **Ejemplos:**
 ```bash
@@ -145,7 +147,41 @@ python -m hidropluvial tc kirpich 2000 0.02
 
 # Témez: L=5km, S=0.015
 python -m hidropluvial tc temez 5 0.015
+
+# Desbordes (DINAGUA): A=62ha, S=3.41%, C=0.62
+python -m hidropluvial tc desbordes 62 3.41 0.62
 ```
+
+### `hydrograph` - Generación de Hidrogramas
+
+| Comando | Descripción |
+|---------|-------------|
+| `hydrograph scs` | Hidrograma completo método SCS |
+| `hydrograph gz` | Hidrograma completo método GZ (Uruguay) |
+
+**Ejemplos:**
+```bash
+# Hidrograma SCS completo
+python -m hidropluvial hydrograph scs --area 1 --length 1000 --slope 0.02 \
+    --p3_10 83 --cn 81 --tr 25
+
+# Hidrograma GZ (metodología drenaje urbano Uruguay)
+python -m hidropluvial hydrograph gz --area 62 --slope 3.41 --c 0.62 \
+    --p3_10 83 --tr 2 --x 1.0
+```
+
+El método GZ integra:
+- Tc por Método de los Desbordes
+- Tormenta de 6 horas con pico adelantado (1ra hora)
+- Hidrograma triangular con factor X ajustable
+
+**Valores típicos de X:**
+| Factor X | Uso típico |
+|----------|------------|
+| 1.00 | Áreas urbanas internas |
+| 1.25 | Áreas urbanas (gran pendiente) |
+| 1.67 | Método SCS/NRCS estándar |
+| 2.25 | Uso mixto rural/urbano |
 
 ### `runoff` - Escorrentía
 
@@ -200,6 +236,101 @@ python -m hidropluvial export storm-csv 78 3 --tr 25 -o storm.csv
 
 # Exportar figura para incluir en documento LaTeX
 python -m hidropluvial export storm-tikz 78 3 --tr 25 -o figura.tex
+```
+
+### `session` - Sistema de Sesiones (Análisis Comparativo)
+
+El sistema de sesiones permite definir una cuenca y ejecutar múltiples análisis con diferentes combinaciones de métodos, comparando resultados y generando reportes automáticos.
+
+| Comando | Descripción |
+|---------|-------------|
+| `session create <nombre>` | Crear nueva sesión con datos de cuenca |
+| `session list` | Listar todas las sesiones |
+| `session show <id>` | Ver detalles de una sesión |
+| `session tc <id>` | Calcular Tc con múltiples métodos |
+| `session analyze <id>` | Ejecutar análisis completo |
+| `session summary <id>` | Ver tabla comparativa |
+| `session batch <yaml>` | Ejecutar desde archivo YAML |
+| `session report <id>` | Generar reporte LaTeX |
+| `session delete <id>` | Eliminar sesión |
+
+#### Flujo de Trabajo Típico
+
+```bash
+# 1. Crear sesión con datos de la cuenca
+python -m hidropluvial session create "Cuenca Norte" \
+    --area 62 --slope 3.41 --p3_10 83 --c 0.62 --length 800
+
+# 2. Calcular Tc con múltiples métodos
+python -m hidropluvial session tc abc123 --methods "kirpich,desbordes"
+
+# 3. Ejecutar análisis con diferentes combinaciones
+python -m hidropluvial session analyze abc123 --tc desbordes --storm gz --tr 2 --x 1.0
+python -m hidropluvial session analyze abc123 --tc desbordes --storm gz --tr 10 --x 1.0
+python -m hidropluvial session analyze abc123 --tc kirpich --storm gz --tr 2 --x 1.25
+
+# 4. Ver tabla comparativa
+python -m hidropluvial session summary abc123
+
+# 5. Generar reporte LaTeX
+python -m hidropluvial session report abc123 -o memoria_calculo.tex --author "Ing. García"
+```
+
+#### Análisis Batch desde YAML
+
+Para proyectos con muchas combinaciones, usar un archivo de configuración:
+
+```yaml
+# cuenca.yaml
+session:
+  name: "Proyecto Drenaje Sur"
+  cuenca:
+    nombre: "Arroyo Las Piedras"
+    area_ha: 62
+    slope_pct: 3.41
+    p3_10: 83
+    c: 0.62
+    cn: 81
+    length_m: 800
+
+tc_methods:
+  - kirpich
+  - desbordes
+
+analyses:
+  - storm: gz
+    tr: [2, 10, 25]
+    x: [1.0, 1.25]
+  - storm: blocks
+    tr: [10, 25]
+```
+
+```bash
+# Ejecutar todas las combinaciones
+python -m hidropluvial session batch cuenca.yaml
+```
+
+Esto ejecutará automáticamente:
+- 2 métodos de Tc × 3 períodos de retorno × 2 factores X = 12 análisis GZ
+- 2 métodos de Tc × 2 períodos de retorno = 4 análisis blocks
+- **Total: 16 análisis comparativos**
+
+#### Ejemplo de Salida (Summary)
+
+```
+====================================================================================================
+  RESUMEN COMPARATIVO - Cuenca Norte
+====================================================================================================
+  ID       | Tc           |  Tc(min) | Tormenta   |   Tr |     X |   P(mm) |   Q(mm) |  Qp(m³/s) |  Tp(min)
+  ------------------------------------------------------------------------------------------------
+  d36d2306 | desbordes    |     22.6 | gz         |    2 |  1.00 |    68.6 |    42.5 |     6.748 |     80.0
+  7de6650b | desbordes    |     22.6 | gz         |   10 |  1.00 |   105.9 |    65.7 |    10.426 |     80.0
+  bc416b51 | kirpich      |     12.3 | gz         |    2 |  1.00 |    68.6 |    42.5 |     9.092 |     70.0
+====================================================================================================
+
+  Caudal máximo: 10.426 m³/s (desbordes + gz Tr10)
+  Caudal mínimo: 6.748 m³/s (desbordes + gz Tr2)
+  Variación: 54.5%
 ```
 
 ---
@@ -324,6 +455,32 @@ $$I(d) = \frac{P_{3,10} \times C_T \times C_A \times 0.6208}{(d + 0.0137)^{0.563
 Para d ≥ 3 horas:
 $$I(d) = \frac{P_{3,10} \times C_T \times C_A \times 1.0287}{(d + 1.0293)^{0.8083}}$$
 
+### Tiempo de Concentración - Método Desbordes (DINAGUA)
+
+$$T_c = T_0 + 6.625 \times A^{0.3} \times P^{-0.39} \times C^{-0.45}$$
+
+Donde:
+- $T_c$: tiempo de concentración (min)
+- $T_0$: tiempo de entrada (típicamente 5 min)
+- $A$: área de la cuenca (ha)
+- $P$: pendiente media (%)
+- $C$: coeficiente de escorrentía
+
+### Hidrograma Unitario Triangular con Factor X
+
+$$T_p = 0.5 \times \Delta t + 0.6 \times T_c$$
+
+$$q_p = 0.278 \times \frac{A}{T_p} \times \frac{2}{1 + X}$$
+
+$$T_b = (1 + X) \times T_p$$
+
+Donde:
+- $T_p$: tiempo al pico (hr)
+- $q_p$: caudal pico unitario (m³/s por mm de escorrentía)
+- $T_b$: tiempo base (hr)
+- $A$: área de cuenca (km²)
+- $X$: factor morfológico (1.0 para urbano, 1.67 para SCS estándar)
+
 ### Escorrentía SCS-CN
 
 $$Q = \frac{(P - I_a)^2}{P - I_a + S} \quad \text{para } P > I_a$$
@@ -365,19 +522,21 @@ pytest tests/ --cov=hidropluvial --cov-report=html
 hidropluvial/
 ├── src/hidropluvial/
 │   ├── core/
-│   │   ├── idf.py          # Curvas IDF
-│   │   ├── temporal.py     # Distribuciones temporales
-│   │   ├── tc.py           # Tiempo de concentración
-│   │   ├── runoff.py       # Escorrentía
-│   │   └── hydrograph.py   # Hidrogramas
+│   │   ├── idf.py          # Curvas IDF (DINAGUA + internacionales)
+│   │   ├── temporal.py     # Distribuciones temporales (bloques, SCS, bimodal)
+│   │   ├── tc.py           # Tiempo de concentración (Kirpich, Desbordes, etc.)
+│   │   ├── runoff.py       # Escorrentía (SCS-CN, Racional)
+│   │   └── hydrograph.py   # Hidrogramas (SCS, triangular con X)
 │   ├── reports/
-│   │   ├── charts.py       # Gráficos TikZ
-│   │   ├── generator.py    # Generador reportes
+│   │   ├── charts.py       # Gráficos TikZ/PGFPlots
+│   │   ├── generator.py    # Generador de reportes LaTeX
 │   │   └── templates/      # Templates Jinja2
-│   └── cli.py              # Interfaz de comandos
-├── tests/                  # Tests unitarios
-├── docs/                   # Documentación
-└── examples/               # Ejemplos LaTeX
+│   ├── session.py          # Sistema de sesiones y análisis comparativo
+│   ├── cli.py              # Interfaz de comandos
+│   └── config.py           # Configuraciones y modelos Pydantic
+├── tests/                  # Tests unitarios (98 tests)
+├── docs/                   # Documentación técnica
+└── examples/               # Ejemplos (YAML, LaTeX)
 ```
 
 ---

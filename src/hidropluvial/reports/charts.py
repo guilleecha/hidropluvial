@@ -297,15 +297,14 @@ def generate_hyetograph_tikz(
     coords = _format_coordinates(time_min, intensity_mmhr)
 
     # Título opcional
-    title_line = f"\t\t\ttitle={{{title}}}," if title else ""
+    title_line = f"title={{{title}}},\n\t\t\t" if title else ""
 
     # Construir figura
     tex = f"""\\begin{{figure}}[H]
 	\\centering
 	\\begin{{tikzpicture}}
 		\\begin{{axis}}[
-{title_line}
-			width={width},
+			{title_line}width={width},
 			height={height},
 			xlabel={{{xlabel}}},
 			ylabel={{{ylabel}}},

@@ -51,9 +51,14 @@ def session_report(
         typer.echo(f"Error: No hay análisis en la sesión.", err=True)
         raise typer.Exit(1)
 
-    # Crear directorio de salida
+    # Crear directorio de salida y subdirectorios para gráficos
     output_dir = Path(output)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    hidrogramas_dir = output_dir / "hidrogramas"
+    hietogramas_dir = output_dir / "hietogramas"
+    hidrogramas_dir.mkdir(exist_ok=True)
+    hietogramas_dir.mkdir(exist_ok=True)
 
     generator = ReportGenerator()
     rows = manager.get_summary_table(session)
@@ -84,7 +89,7 @@ def session_report(
         # -----------------------------------------------------------------
         if has_storm_data:
             hyeto_filename = f"hietograma_{file_id}.tex"
-            hyeto_path = output_dir / hyeto_filename
+            hyeto_path = hietogramas_dir / hyeto_filename
 
             hyeto_caption = (
                 f"Hietograma - {analysis.storm.type.upper()} "
@@ -103,14 +108,14 @@ def session_report(
 
             hyeto_path.write_text(hyeto_tikz, encoding="utf-8")
             generated_files["hyetographs"].append(hyeto_filename)
-            typer.echo(f"    + {hyeto_filename}")
+            typer.echo(f"    + hietogramas/{hyeto_filename}")
 
         # -----------------------------------------------------------------
         # Generar hidrograma
         # -----------------------------------------------------------------
         if has_hydro_data:
             hydro_filename = f"hidrograma_{file_id}.tex"
-            hydro_path = output_dir / hydro_filename
+            hydro_path = hidrogramas_dir / hydro_filename
 
             # Convertir tiempo de horas a minutos para el gráfico
             time_min_hydro = [t * 60 for t in analysis.hydrograph.time_hr]
@@ -144,7 +149,7 @@ def session_report(
 
             hydro_path.write_text(hydro_tikz, encoding="utf-8")
             generated_files["hydrographs"].append(hydro_filename)
-            typer.echo(f"    + {hydro_filename}")
+            typer.echo(f"    + hidrogramas/{hydro_filename}")
 
     # =========================================================================
     # GENERAR ARCHIVOS DE SECCIONES SEPARADOS
@@ -184,8 +189,8 @@ def session_report(
         typer.echo(f"  Template:            template.tex + template_config.tex")
         typer.echo(f"  Contenido:           document.tex")
         typer.echo(f"  Secciones:           {len(sections)} archivos (sec_*.tex)")
-    typer.echo(f"  Hietogramas:         {len(generated_files['hyetographs'])} archivos")
-    typer.echo(f"  Hidrogramas:         {len(generated_files['hydrographs'])} archivos")
+    typer.echo(f"  hietogramas/         {len(generated_files['hyetographs'])} archivos")
+    typer.echo(f"  hidrogramas/         {len(generated_files['hydrographs'])} archivos")
     typer.echo(f"  {'='*50}")
     typer.echo(f"\n  Para compilar:")
     typer.echo(f"    cd {output_dir.absolute()}")
@@ -369,7 +374,7 @@ $T_r$ & {analysis.storm.return_period} años & $T_p$ & {analysis.hydrograph.time
             if hyeto_file in generated_files["hyetographs"]:
                 fichas_content += f"""\\begin{{minipage}}{{0.48\\textwidth}}
 \\centering
-\\resizebox{{\\textwidth}}{{!}}{{\\input{{{hyeto_file}}}}}
+\\resizebox{{\\textwidth}}{{!}}{{\\input{{hietogramas/{hyeto_file}}}}}
 \\end{{minipage}}
 \\hfill
 """
@@ -379,7 +384,7 @@ $T_r$ & {analysis.storm.return_period} años & $T_p$ & {analysis.hydrograph.time
             if hydro_file in generated_files["hydrographs"]:
                 fichas_content += f"""\\begin{{minipage}}{{0.48\\textwidth}}
 \\centering
-\\resizebox{{\\textwidth}}{{!}}{{\\input{{{hydro_file}}}}}
+\\resizebox{{\\textwidth}}{{!}}{{\\input{{hidrogramas/{hydro_file}}}}}
 \\end{{minipage}}
 """
 

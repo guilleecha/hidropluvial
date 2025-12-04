@@ -600,6 +600,63 @@ def bimodal_storm(
     )
 
 
+def bimodal_dinagua(
+    p3_10: float,
+    return_period_yr: float,
+    duration_hr: float = 6.0,
+    dt_min: float = 5.0,
+    area_km2: float | None = None,
+    peak1_position: float = 0.25,
+    peak2_position: float = 0.75,
+    volume_split: float = 0.5,
+    peak_width_fraction: float = 0.15,
+) -> HyetographResult:
+    """
+    Genera hietograma bimodal usando IDF DINAGUA Uruguay.
+
+    Calcula automáticamente la precipitación total a partir de P3,10
+    y el período de retorno usando las curvas IDF DINAGUA.
+
+    Args:
+        p3_10: Precipitación P3,10 base (mm)
+        return_period_yr: Período de retorno en años
+        duration_hr: Duración total en horas (default 6)
+        dt_min: Intervalo de tiempo en minutos (default 5)
+        area_km2: Área de cuenca para corrección (opcional)
+        peak1_position: Posición del primer pico (0-1), default 0.25
+        peak2_position: Posición del segundo pico (0-1), default 0.75
+        volume_split: Fracción del volumen en el primer pico (0-1)
+        peak_width_fraction: Ancho de cada pico como fracción de duración
+
+    Returns:
+        HyetographResult con el hietograma generado
+    """
+    # Calcular precipitación total usando DINAGUA
+    total_depth_mm = dinagua_depth(p3_10, return_period_yr, duration_hr, area_km2)
+
+    # Generar hietograma bimodal
+    result = bimodal_storm(
+        total_depth_mm=total_depth_mm,
+        duration_hr=duration_hr,
+        dt_min=dt_min,
+        peak1_position=peak1_position,
+        peak2_position=peak2_position,
+        volume_split=volume_split,
+        peak_width_fraction=peak_width_fraction,
+    )
+
+    # Actualizar método
+    return HyetographResult(
+        time_min=result.time_min,
+        intensity_mmhr=result.intensity_mmhr,
+        depth_mm=result.depth_mm,
+        cumulative_mm=result.cumulative_mm,
+        method="bimodal_dinagua",
+        total_depth_mm=result.total_depth_mm,
+        peak_intensity_mmhr=result.peak_intensity_mmhr,
+    )
+
+
 def bimodal_chicago(
     total_depth_mm: float,
     duration_hr: float,

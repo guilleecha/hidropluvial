@@ -348,6 +348,59 @@ def storm_bimodal(
         typer.echo(f"Intensidad pico: {result.peak_intensity_mmhr:.2f} mm/hr")
 
 
+@storm_app.command("bimodal-uy")
+def storm_bimodal_uy(
+    p3_10: Annotated[float, typer.Argument(help="P3,10 en mm")],
+    return_period: Annotated[int, typer.Option("--tr", "-t", help="Periodo de retorno")] = 2,
+    duration: Annotated[float, typer.Option("--duration", "-d", help="Duracion en horas")] = 6.0,
+    dt: Annotated[float, typer.Option("--dt", help="Intervalo en minutos")] = 5.0,
+    peak1: Annotated[float, typer.Option("--peak1", help="Posicion primer pico (0-1)")] = 0.25,
+    peak2: Annotated[float, typer.Option("--peak2", help="Posicion segundo pico (0-1)")] = 0.75,
+    split: Annotated[float, typer.Option("--split", help="Fraccion volumen primer pico")] = 0.5,
+    area: Annotated[Optional[float], typer.Option("--area", "-a", help="Area cuenca km2")] = None,
+    output: Annotated[Optional[str], typer.Option("--output", "-o", help="Archivo JSON salida")] = None,
+):
+    """
+    Genera hietograma bimodal (doble pico) usando IDF DINAGUA Uruguay.
+
+    Calcula automaticamente la precipitacion total a partir de P3,10
+    y el periodo de retorno.
+
+    Ejemplo:
+        hidropluvial storm bimodal-uy 83 --tr 2
+        hidropluvial storm bimodal-uy 83 --tr 20 --peak1 0.3 --peak2 0.7
+    """
+    from hidropluvial.core import bimodal_dinagua
+
+    result = bimodal_dinagua(
+        p3_10, return_period, duration, dt, area,
+        peak1, peak2, split
+    )
+
+    if output:
+        with open(output, "w") as f:
+            json.dump(result.model_dump(), f, indent=2)
+        typer.echo(f"Hietograma guardado en {output}")
+    else:
+        typer.echo(f"\n{'='*55}")
+        typer.echo(f"  HIETOGRAMA BIMODAL DINAGUA")
+        typer.echo(f"{'='*55}")
+        typer.echo(f"  P3,10 base:        {p3_10:>10.1f} mm")
+        typer.echo(f"  Periodo retorno:   {return_period:>10} anos")
+        typer.echo(f"  Duracion:          {duration:>10.1f} hr")
+        typer.echo(f"  Intervalo dt:      {dt:>10.1f} min")
+        typer.echo(f"  Pico 1:            {peak1*100:>10.0f} %")
+        typer.echo(f"  Pico 2:            {peak2*100:>10.0f} %")
+        typer.echo(f"  Split volumen:     {split*100:.0f}% / {(1-split)*100:.0f}%")
+        if area:
+            typer.echo(f"  Area cuenca:       {area:>10.1f} km2")
+        typer.echo(f"{'='*55}")
+        typer.echo(f"  Precipitacion:     {result.total_depth_mm:>10.2f} mm")
+        typer.echo(f"  Intensidad pico:   {result.peak_intensity_mmhr:>10.2f} mm/hr")
+        typer.echo(f"  Intervalos:        {len(result.time_min):>10}")
+        typer.echo(f"{'='*55}\n")
+
+
 @storm_app.command("gz")
 def storm_gz(
     p3_10: Annotated[float, typer.Argument(help="P3,10 en mm")],

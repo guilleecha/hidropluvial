@@ -273,32 +273,23 @@ def runoff_weighted_c(
 @runoff_app.command("weighted-cn")
 def runoff_weighted_cn(
     area_total: Annotated[Optional[float], typer.Option("--area", "-a", help="Area total de la cuenca (ha)")] = None,
-    table: Annotated[str, typer.Option("--table", "-t", help="Tabla: urban, agricultural")] = "urban",
     soil_group: Annotated[str, typer.Option("--soil", "-s", help="Grupo hidrologico: A, B, C, D")] = "B",
 ):
     """
     Calcula Curva Numero CN ponderada por area de forma interactiva.
 
-    Muestra la tabla de CN seleccionada y permite asignar
-    areas a diferentes coberturas. Calcula el CN ponderado final.
+    Permite mezclar coberturas de tablas urbanas y agricolas en la misma
+    cuenca. En cada iteracion se puede elegir de que tabla agregar cobertura.
 
     Ejemplos:
         hp runoff weighted-cn --area 50
-        hp runoff weighted-cn --table agricultural --soil C
-        hp runoff weighted-cn -a 100 -t urban -s B
+        hp runoff weighted-cn --soil C --area 100
     """
-    if table.lower() not in CN_TABLES:
-        typer.echo(f"Error: Tabla '{table}' no disponible. Opciones: {list(CN_TABLES.keys())}")
-        raise typer.Exit(1)
-
     if soil_group.upper() not in ['A', 'B', 'C', 'D']:
         typer.echo("Error: Grupo hidrologico debe ser A, B, C o D")
         raise typer.Exit(1)
 
-    table_name, table_data = CN_TABLES[table.lower()]
     soil = soil_group.upper()
-
-    typer.echo(format_cn_table(table_data, table_name))
 
     # Solicitar area total si no se proporciono
     if area_total is None:
@@ -313,36 +304,48 @@ def runoff_weighted_cn(
 
     typer.echo(f"\n  Area total: {area_total:.2f} ha")
     typer.echo(f"  Grupo hidrologico de suelo: {soil}")
-    typer.echo("  Asigna coberturas al area. Presiona Enter sin valor para terminar.\n")
+    typer.echo("  Puedes mezclar coberturas urbanas y agricolas.\n")
 
     areas = []
     cn_values = []
     descriptions = []
     area_remaining = area_total
 
+    # Mantener track de la tabla actual para mostrarla
+    current_table = None
+
     while area_remaining > 0.001:
-        typer.echo(f"  Area restante: {area_remaining:.3f} ha ({area_remaining/area_total*100:.1f}%)")
+        typer.echo(f"\n  Area restante: {area_remaining:.3f} ha ({area_remaining/area_total*100:.1f}%)")
 
-        # Seleccionar cobertura
-        choices = []
-        for i, e in enumerate(table_data):
-            cn = e.get_cn(soil)
-            cond = f" ({e.condition})" if e.condition != "N/A" else ""
-            choices.append(f"{i+1}. {e.category} - {e.description}{cond} (CN={cn})")
-
-        choices.append("Asignar todo el area restante a una cobertura")
-        choices.append("Terminar (area restante queda sin asignar)")
-
-        selection = questionary.select(
-            "Selecciona cobertura:",
-            choices=choices,
+        # Elegir tabla o accion
+        table_choice = questionary.select(
+            "Agregar cobertura de:",
+            choices=[
+                "Tabla Urbana (residencial, comercial, industrial)",
+                "Tabla Agricola (cultivos, pasturas, bosque)",
+                "Asignar todo el area restante",
+                "Terminar",
+            ],
             style=RUNOFF_STYLE,
         ).ask()
 
-        if selection is None or "Terminar" in selection:
+        if table_choice is None or "Terminar" in table_choice:
             break
 
-        if "Asignar todo" in selection:
+        if "Asignar todo" in table_choice:
+            # Elegir tabla para area restante
+            final_table = questionary.select(
+                "De que tabla?",
+                choices=["Urbana", "Agricola"],
+                style=RUNOFF_STYLE,
+            ).ask()
+
+            if final_table is None:
+                break
+
+            table_key = "urban" if "Urbana" in final_table else "agricultural"
+            _, table_data = CN_TABLES[table_key]
+
             cov_choices = []
             for i, e in enumerate(table_data):
                 cn = e.get_cn(soil)
@@ -354,6 +357,7 @@ def runoff_weighted_cn(
                 choices=cov_choices,
                 style=RUNOFF_STYLE,
             ).ask()
+
             if cov_selection:
                 idx = int(cov_selection.split(".")[0]) - 1
                 entry = table_data[idx]
@@ -361,9 +365,41 @@ def runoff_weighted_cn(
                 areas.append(area_remaining)
                 cn_values.append(cn)
                 cond = f" ({entry.condition})" if entry.condition != "N/A" else ""
-                descriptions.append(f"{entry.category}: {entry.description}{cond}")
+                prefix = "[U]" if table_key == "urban" else "[A]"
+                descriptions.append(f"{prefix} {entry.category}: {entry.description}{cond}")
                 area_remaining = 0
             break
+
+        # Determinar tabla seleccionada
+        if "Urbana" in table_choice:
+            table_key = "urban"
+            table_name, table_data = CN_TABLES["urban"]
+        else:
+            table_key = "agricultural"
+            table_name, table_data = CN_TABLES["agricultural"]
+
+        # Mostrar tabla si cambio
+        if current_table != table_key:
+            typer.echo(format_cn_table(table_data, table_name))
+            current_table = table_key
+
+        # Seleccionar cobertura de la tabla elegida
+        choices = []
+        for i, e in enumerate(table_data):
+            cn = e.get_cn(soil)
+            cond = f" ({e.condition})" if e.condition != "N/A" else ""
+            choices.append(f"{i+1}. {e.category} - {e.description}{cond} (CN={cn})")
+
+        choices.append("Volver (elegir otra tabla)")
+
+        selection = questionary.select(
+            "Selecciona cobertura:",
+            choices=choices,
+            style=RUNOFF_STYLE,
+        ).ask()
+
+        if selection is None or "Volver" in selection:
+            continue
 
         # Obtener indice
         idx = int(selection.split(".")[0]) - 1
@@ -378,14 +414,15 @@ def runoff_weighted_cn(
         ).ask()
 
         if area_str is None or area_str.strip() == "":
-            break
+            continue
 
         area_val = float(area_str)
         if area_val > 0:
             areas.append(area_val)
             cn_values.append(cn)
             cond = f" ({entry.condition})" if entry.condition != "N/A" else ""
-            descriptions.append(f"{entry.category}: {entry.description}{cond}")
+            prefix = "[U]" if table_key == "urban" else "[A]"
+            descriptions.append(f"{prefix} {entry.category}: {entry.description}{cond}")
             area_remaining -= area_val
 
             typer.echo(f"  + {area_val:.3f} ha con CN={cn}")
@@ -398,25 +435,26 @@ def runoff_weighted_cn(
     cn_weighted = weighted_cn(areas, cn_values)
 
     # Mostrar resumen
-    typer.echo("\n" + "=" * 65)
-    typer.echo(f"  RESUMEN DE COBERTURAS (Grupo {soil})")
-    typer.echo("=" * 65)
-    typer.echo(f"  {'Cobertura':<40} {'Area (ha)':<12} {'CN':<6}")
-    typer.echo("  " + "-" * 60)
+    typer.echo("\n" + "=" * 70)
+    typer.echo(f"  RESUMEN DE COBERTURAS (Grupo hidrologico {soil})")
+    typer.echo("=" * 70)
+    typer.echo(f"  {'Cobertura':<45} {'Area (ha)':<12} {'CN':<6}")
+    typer.echo("  " + "-" * 65)
 
     for desc, area, cn in zip(descriptions, areas, cn_values):
         pct = area / area_total * 100
-        typer.echo(f"  {desc:<40} {area:>8.3f} ({pct:>4.1f}%) {cn:>4}")
+        typer.echo(f"  {desc:<45} {area:>8.3f} ({pct:>4.1f}%) {cn:>4}")
 
     if area_remaining > 0.001:
         pct = area_remaining / area_total * 100
-        typer.echo(f"  {'(Sin asignar)':<40} {area_remaining:>8.3f} ({pct:>4.1f}%)")
+        typer.echo(f"  {'(Sin asignar)':<45} {area_remaining:>8.3f} ({pct:>4.1f}%)")
 
-    typer.echo("  " + "-" * 60)
-    typer.echo(f"  {'TOTAL':<40} {sum(areas):>8.3f} ha")
-    typer.echo("=" * 65)
+    typer.echo("  " + "-" * 65)
+    typer.echo(f"  {'TOTAL':<45} {sum(areas):>8.3f} ha")
+    typer.echo("=" * 70)
     typer.echo(f"  CURVA NUMERO CN PONDERADA: {cn_weighted:.1f}")
-    typer.echo("=" * 65)
+    typer.echo("  [U] = Urbana, [A] = Agricola")
+    typer.echo("=" * 70)
 
     return cn_weighted
 
@@ -441,7 +479,7 @@ def show_tables(
         typer.echo("\n  Tablas de Curva Numero CN disponibles:")
         for key, (name, _) in CN_TABLES.items():
             typer.echo(f"    {key}: {name}")
-        typer.echo("\n  Usa: hp runoff weighted-cn --table <nombre>")
+        typer.echo("\n  Usa: hp runoff weighted-cn (permite mezclar tablas)")
     else:
         typer.echo("Error: Tipo debe ser 'c' o 'cn'")
 

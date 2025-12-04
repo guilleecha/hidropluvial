@@ -1,0 +1,80 @@
+\documentclass[11pt, a4paper]{article}
+
+% Paquetes básicos
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+% Metadatos
+\title{Memoria de Cálculo: Curvas IDF}
+\author{\VAR{author | escape_latex}}
+\date{\VAR{date}}
+
+\begin{document}
+
+\maketitle
+
+\section{Datos de Entrada}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lr}
+\toprule
+Parámetro & Valor \\
+\midrule
+Método & \VAR{method} \\
+$P_{3,10}$ base & \VAR{p3_10} mm \\
+\BLOCK{if area}
+Área de cuenca & \VAR{area} km² \\
+\BLOCK{endif}
+\bottomrule
+\end{tabular}
+\caption{Parámetros de entrada}
+\label{tab:input}
+\end{table}
+
+\section{Tabla de Intensidades}
+
+\VAR{idf_table}
+
+\section{Fórmulas Utilizadas}
+
+\subsection{Factor por Período de Retorno (CT)}
+
+\begin{equation}
+C_T(T_r) = 0.5786 - 0.4312 \times \log_{10}\left[\ln\left(\frac{T_r}{T_r - 1}\right)\right]
+\end{equation}
+
+\subsection{Factor por Área de Cuenca (CA)}
+
+\begin{equation}
+C_A(A_c, d) = 1.0 - 0.3549 \times d^{-0.4272} \times \left(1.0 - e^{-0.005792 \times A_c}\right)
+\end{equation}
+
+\subsection{Intensidad}
+
+Para $d < 3$ horas:
+\begin{equation}
+I(d) = \frac{P_{3,10} \times C_T(T_r) \times C_A \times 0.6208}{(d + 0.0137)^{0.5639}}
+\end{equation}
+
+Para $d \geq 3$ horas:
+\begin{equation}
+I(d) = \frac{P_{3,10} \times C_T(T_r) \times C_A \times 1.0287}{(d + 1.0293)^{0.8083}}
+\end{equation}
+
+\vfill
+\noindent\rule{\textwidth}{0.4pt}
+\footnotesize
+Generado por HidroPluvial v\VAR{version} el \VAR{date}.
+
+\end{document}

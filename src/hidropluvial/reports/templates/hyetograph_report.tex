@@ -1,0 +1,78 @@
+\documentclass[11pt, a4paper]{article}
+
+% Paquetes básicos
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+% Metadatos
+\title{Memoria de Cálculo: Hietograma de Diseño}
+\author{\VAR{author | escape_latex}}
+\date{\VAR{date}}
+
+\begin{document}
+
+\maketitle
+
+\section{Datos de Entrada}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lr}
+\toprule
+Parámetro & Valor \\
+\midrule
+Método & \VAR{method} \\
+$P_{3,10}$ base & \VAR{p3_10} mm \\
+Período de retorno & \VAR{return_period} años \\
+Duración de tormenta & \VAR{duration} horas \\
+Intervalo $\Delta t$ & \VAR{dt} minutos \\
+\BLOCK{if area}
+Área de cuenca & \VAR{area} km² \\
+\BLOCK{endif}
+\bottomrule
+\end{tabular}
+\caption{Parámetros de entrada}
+\label{tab:input}
+\end{table}
+
+\section{Resultados}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lr}
+\toprule
+Resultado & Valor \\
+\midrule
+Precipitación total & \VAR{total_depth} mm \\
+Intensidad pico & \VAR{peak_intensity} mm/hr \\
+Número de intervalos & \VAR{n_intervals} \\
+\bottomrule
+\end{tabular}
+\caption{Resumen de resultados}
+\label{tab:results}
+\end{table}
+
+\section{Hietograma}
+
+\VAR{hyetograph_figure}
+
+\section{Datos Tabulados}
+
+\VAR{hyetograph_table}
+
+\vfill
+\noindent\rule{\textwidth}{0.4pt}
+\footnotesize
+Generado por HidroPluvial v\VAR{version} el \VAR{date}.
+
+\end{document}

@@ -203,34 +203,67 @@ I(d) = [P₃,₁₀ × CT(Tr)] × 1.0287 / (d + 1.0293)^0.8083
 
 ---
 
-## Próximos Pasos (Fase 3)
+## Fase 3: CLI Report y Export ✅
 
-### 3.1 Generación de Reportes LaTeX
+### 3.1 Generación de Reportes LaTeX ✅
 
-- [ ] Crear templates Jinja2 para reportes
-- [ ] Integrar Matplotlib PGF para gráficos
-- [ ] Implementar compilación PDF automática
-- [ ] Templates para:
-  - Memoria de cálculo IDF
-  - Hietograma de diseño
-  - Hidrograma de crecida
-  - Reporte completo de cuenca
+| Funcionalidad | Estado | Descripción |
+|---------------|--------|-------------|
+| `report idf` | ✅ | Memoria de cálculo curvas IDF |
+| `report storm` | ✅ | Memoria de cálculo hietograma |
+| Templates Jinja2 | ✅ | Base para reportes personalizados |
+| Gráficos TikZ | ✅ | Integración con charts.py |
 
-### 3.2 Mejoras CLI
+### 3.2 Exportación de Datos ✅
 
-- [ ] Comando `report` para generar reportes
-- [ ] Exportación a CSV/Excel
+| Comando | Estado | Descripción |
+|---------|--------|-------------|
+| `export idf-csv` | ✅ | Tabla IDF a CSV |
+| `export storm-csv` | ✅ | Hietograma a CSV |
+| `export storm-tikz` | ✅ | Figura TikZ standalone |
+
+### Uso de Comandos Report
+
+```bash
+# Generar memoria de cálculo IDF
+hidropluvial report idf 78 -o montevideo_idf.tex --author "Ing. Pérez"
+
+# Generar memoria de hietograma
+hidropluvial report storm 78 3 --tr 25 -o storm.tex --author "Ing. Pérez"
+```
+
+### Uso de Comandos Export
+
+```bash
+# Exportar tabla IDF a CSV
+hidropluvial export idf-csv 78 -o idf_table.csv
+
+# Exportar hietograma a CSV
+hidropluvial export storm-csv 78 3 --tr 25 -o storm.csv
+
+# Exportar figura TikZ para incluir en LaTeX
+hidropluvial export storm-tikz 78 3 --tr 25 -o hyetograph.tex
+```
+
+---
+
+## Próximos Pasos (Fase 4)
+
+### 4.1 Mejoras CLI Pendientes
+
 - [ ] Gráficos ASCII en terminal
 - [ ] Modo interactivo
+- [ ] Comando `report hydrograph` para hidrogramas
+- [ ] Compilación PDF automática (pdflatex)
 
-### 3.3 Validación y Documentación
+### 4.2 Validación y Documentación
 
 - [ ] Agregar más tests de integración
 - [ ] Documentación de API (Sphinx/MkDocs)
 - [ ] Ejemplos de uso en Jupyter notebooks
 - [ ] Validación contra casos de estudio reales
 
-### 3.4 Funcionalidades Adicionales (Opcional)
+### 4.3 Funcionalidades Adicionales (Opcional)
 
 - [ ] GUI simple (Streamlit o Gradio)
 - [ ] Soporte para otros países/métodos regionales

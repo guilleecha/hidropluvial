@@ -1,0 +1,938 @@
+% ============================================================================
+% HIDROPLUVIAL - Manual de Usuario
+% Herramienta de Cálculos Hidrológicos
+% ============================================================================
+
+\documentclass[11pt, a4paper, twoside]{report}
+
+% ============================================================================
+% PAQUETES
+% ============================================================================
+
+% Codificación y lenguaje
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+
+% Geometría
+\usepackage[
+    top=2.5cm,
+    bottom=2.5cm,
+    left=3cm,
+    right=2.5cm,
+    headheight=14pt
+]{geometry}
+
+% Tipografía
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% Matemáticas
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{siunitx}
+\sisetup{
+    output-decimal-marker = {,},
+    group-separator = {.},
+    group-minimum-digits = 4
+}
+
+% Tablas
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+
+% Gráficos
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+% Código
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Configuración de listings para Python
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.97,0.97,0.97}
+
+\lstdefinestyle{pythonstyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{blue},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\small,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=4,
+    frame=single,
+    rulecolor=\color{gray!30}
+}
+
+\lstdefinestyle{bashstyle}{
+    backgroundcolor=\color{black!5},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{gray!30}
+}
+
+\lstset{style=pythonstyle}
+
+% Enlaces
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    urlcolor=blue!70!black,
+    citecolor=green!50!black
+}
+
+% Encabezados y pies
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE,RO]{\thepage}
+\fancyhead[LO]{\nouppercase{\rightmark}}
+\fancyhead[RE]{\nouppercase{\leftmark}}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% Otros
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{caption}
+
+% ============================================================================
+% COMANDOS PERSONALIZADOS
+% ============================================================================
+
+\newcommand{\hidropluvial}{\texttt{hidropluvial}}
+\newcommand{\comando}[1]{\texttt{#1}}
+\newcommand{\archivo}[1]{\texttt{#1}}
+
+% ============================================================================
+% INFORMACIÓN DEL DOCUMENTO
+% ============================================================================
+
+\title{
+    \vspace{-2cm}
+    \Huge\textbf{HidroPluvial} \\[0.5cm]
+    \Large Manual de Usuario \\[1cm]
+    \large Herramienta de Cálculos Hidrológicos \\
+    con Generación de Reportes \LaTeX
+}
+
+\author{
+    \large Versión 0.1.0 \\[0.5cm]
+    \normalsize Diciembre 2024
+}
+
+\date{}
+
+% ============================================================================
+% DOCUMENTO
+% ============================================================================
+
+\begin{document}
+
+% Portada
+\maketitle
+\thispagestyle{empty}
+
+\vfill
+
+\begin{center}
+\begin{tabular}{ll}
+\textbf{Repositorio:} & \url{https://github.com/guilleecha/hidropluvial} \\
+\textbf{Licencia:} & MIT \\
+\textbf{Python:} & 3.11+ \\
+\end{tabular}
+\end{center}
+
+\newpage
+
+% Índice
+\tableofcontents
+\newpage
+
+% ============================================================================
+% CAPÍTULO 1: INTRODUCCIÓN
+% ============================================================================
+
+\chapter{Introducción}
+
+\section{Descripción General}
+
+\hidropluvial{} es una herramienta Python para cálculos hidrológicos orientada principalmente a Uruguay, con soporte completo para la metodología DINAGUA. Permite realizar análisis de curvas IDF, generar hietogramas de diseño, calcular escorrentía y generar reportes técnicos en formato \LaTeX.
+
+\section{Características Principales}
+
+\begin{itemize}
+    \item \textbf{Curvas IDF:} Método DINAGUA Uruguay con factores $C_T$ y $C_A$, además de métodos internacionales (Sherman, Bernard, Koutsoyiannis).
+
+    \item \textbf{Distribuciones Temporales:} Bloques alternantes, método Chicago, SCS Tipo I/IA/II/III, curvas de Huff, tormentas bimodales.
+
+    \item \textbf{Tiempo de Concentración:} Fórmulas de Kirpich, NRCS, Témez, California Culverts, FAA.
+
+    \item \textbf{Escorrentía:} Método SCS Curve Number con ajuste por AMC, método Racional con factor $C_f$.
+
+    \item \textbf{Hidrogramas:} SCS triangular y curvilíneo, Snyder, Clark, convolución.
+
+    \item \textbf{Reportes:} Generación automática de memorias de cálculo en \LaTeX{} con gráficos TikZ/PGFPlots.
+
+    \item \textbf{Exportación:} CSV, JSON, figuras TikZ standalone.
+\end{itemize}
+
+\section{Instalación}
+
+\subsection{Requisitos}
+
+\begin{itemize}
+    \item Python 3.11 o superior
+    \item pip (gestor de paquetes Python)
+    \item Git (opcional, para clonar el repositorio)
+\end{itemize}
+
+\subsection{Instalación desde Repositorio}
+
+\begin{lstlisting}[style=bashstyle, language=bash]
+# Clonar repositorio
+git clone https://github.com/guilleecha/hidropluvial.git
+cd hidropluvial
+
+# Crear entorno virtual
+python -m venv .venv
+
+# Activar entorno virtual
+# Windows:
+.venv\Scripts\activate
+# Linux/Mac:
+source .venv/bin/activate
+
+# Instalar en modo desarrollo
+pip install -e .
+
+# Verificar instalacion
+python -m hidropluvial --help
+\end{lstlisting}
+
+% ============================================================================
+% CAPÍTULO 2: CURVAS IDF
+% ============================================================================
+
+\chapter{Curvas Intensidad-Duración-Frecuencia}
+
+\section{Método DINAGUA Uruguay}
+
+El método DINAGUA es el estándar para el diseño hidrológico en Uruguay. Se basa en el trabajo de Rodríguez Fontal (1980) y utiliza el parámetro $P_{3,10}$ (precipitación de 3 horas para un período de retorno de 10 años) como base para la regionalización.
+
+\subsection{Factor por Período de Retorno ($C_T$)}
+
+El factor $C_T$ ajusta la intensidad según el período de retorno deseado:
+
+\begin{equation}
+C_T(T_r) = 0{,}5786 - 0{,}4312 \times \log_{10}\left[\ln\left(\frac{T_r}{T_r - 1}\right)\right]
+\label{eq:ct}
+\end{equation}
+
+\begin{table}[H]
+\centering
+\caption{Valores de $C_T$ para distintos períodos de retorno}
+\label{tab:ct}
+\begin{tabular}{ccccccc}
+\toprule
+$T_r$ (años) & 2 & 5 & 10 & 25 & 50 & 100 \\
+\midrule
+$C_T$ & 0,647 & 0,860 & 1,000 & 1,178 & 1,309 & 1,440 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Factor por Área de Cuenca ($C_A$)}
+
+Para cuencas con área mayor a 1 km², se aplica una reducción de la intensidad:
+
+\begin{equation}
+C_A(A_c, d) = 1{,}0 - 0{,}3549 \times d^{-0{,}4272} \times \left(1{,}0 - e^{-0{,}005792 \times A_c}\right)
+\label{eq:ca}
+\end{equation}
+
+donde:
+\begin{itemize}
+    \item $A_c$: área de la cuenca en km²
+    \item $d$: duración de la tormenta en horas
+\end{itemize}
+
+\textbf{Nota:} Para $A_c \leq 1$ km², $C_A = 1{,}0$.
+
+\subsection{Ecuaciones de Intensidad}
+
+\textbf{Para duraciones menores a 3 horas:}
+\begin{equation}
+I(d) = \frac{P_{3,10} \times C_T(T_r) \times C_A \times 0{,}6208}{(d + 0{,}0137)^{0{,}5639}}
+\label{eq:i_short}
+\end{equation}
+
+\textbf{Para duraciones de 3 horas o mayores:}
+\begin{equation}
+I(d) = \frac{P_{3,10} \times C_T(T_r) \times C_A \times 1{,}0287}{(d + 1{,}0293)^{0{,}8083}}
+\label{eq:i_long}
+\end{equation}
+
+donde $I$ está en mm/hr y $d$ en horas.
+
+\subsection{Valores de $P_{3,10}$ por Departamento}
+
+\begin{table}[H]
+\centering
+\caption{Valores de $P_{3,10}$ por departamento de Uruguay}
+\label{tab:p310}
+\begin{tabular}{lclc}
+\toprule
+Departamento & $P_{3,10}$ (mm) & Departamento & $P_{3,10}$ (mm) \\
+\midrule
+Artigas & 95 & Maldonado & 83 \\
+Canelones & 80 & Montevideo & 78 \\
+Cerro Largo & 95 & Paysandú & 90 \\
+Colonia & 78 & Río Negro & 88 \\
+Durazno & 88 & Rivera & 95 \\
+Flores & 85 & Rocha & 85 \\
+Florida & 85 & Salto & 92 \\
+Lavalleja & 85 & San José & 80 \\
+& & Soriano & 85 \\
+& & Tacuarembó & 92 \\
+& & Treinta y Tres & 90 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Uso desde CLI}
+
+\begin{lstlisting}[style=bashstyle, language=bash]
+# Intensidad puntual: Montevideo, 3 horas, Tr=25 anos
+python -m hidropluvial idf uruguay 78 3 --tr 25
+
+# Con correccion por area (50 km2)
+python -m hidropluvial idf uruguay 78 3 --tr 25 --area 50
+
+# Tabla IDF completa
+python -m hidropluvial idf tabla-uy 78
+
+# Ver valores P3,10 por departamento
+python -m hidropluvial idf departamentos
+\end{lstlisting}
+
+\section{Uso desde Python}
+
+\begin{lstlisting}[language=Python]
+from hidropluvial.core import dinagua_intensity, generate_dinagua_idf_table
+
+# Calcular intensidad puntual
+result = dinagua_intensity(
+    p3_10=78,           # mm
+    return_period_yr=25,
+    duration_hr=3,
+    area_km2=None       # sin correccion por area
+)
+
+print(f"CT: {result.ct:.4f}")
+print(f"CA: {result.ca:.4f}")
+print(f"Intensidad: {result.intensity_mmhr:.2f} mm/hr")
+print(f"Precipitacion: {result.depth_mm:.2f} mm")
+
+# Generar tabla completa
+tabla = generate_dinagua_idf_table(p3_10=78, area_km2=50)
+\end{lstlisting}
+
+% ============================================================================
+% CAPÍTULO 3: DISTRIBUCIONES TEMPORALES
+% ============================================================================
+
+\chapter{Distribuciones Temporales de Lluvia}
+
+\section{Método de Bloques Alternantes}
+
+El método de bloques alternantes genera un hietograma sintético a partir de una curva IDF. Los pasos son:
+
+\begin{enumerate}
+    \item Calcular profundidades acumuladas desde la curva IDF: $P(d) = I(d) \times d$
+    \item Computar incrementos: $\Delta P_n = P(n \cdot \Delta t) - P((n-1) \cdot \Delta t)$
+    \item Ordenar incrementos de mayor a menor
+    \item Distribuir alternadamente alrededor del pico (centro por defecto)
+\end{enumerate}
+
+\subsection{Uso desde CLI}
+
+\begin{lstlisting}[style=bashstyle, language=bash]
+# Hietograma DINAGUA: P3,10=78mm, 3 horas, Tr=25, dt=5min
+python -m hidropluvial storm uruguay 78 3 --tr 25 --dt 5
+
+# Exportar a CSV
+python -m hidropluvial export storm-csv 78 3 --tr 25 -o storm.csv
+\end{lstlisting}
+
+\subsection{Uso desde Python}
+
+\begin{lstlisting}[language=Python]
+from hidropluvial.core import alternating_blocks_dinagua
+
+hietograma = alternating_blocks_dinagua(
+    p3_10=78,
+    return_period_yr=25,
+    duration_hr=3,
+    dt_min=5,
+    area_km2=None,
+    peak_position=0.5  # pico en el centro
+)
+
+print(f"Precipitacion total: {hietograma.total_depth_mm:.2f} mm")
+print(f"Intensidad pico: {hietograma.peak_intensity_mmhr:.2f} mm/hr")
+\end{lstlisting}
+
+\section{Distribuciones SCS}
+
+Las distribuciones SCS (Tipo I, IA, II, III) son curvas de masa adimensionales desarrolladas por el Soil Conservation Service para distintas regiones de Estados Unidos.
+
+\begin{table}[H]
+\centering
+\caption{Distribuciones SCS y su aplicación}
+\label{tab:scs_types}
+\begin{tabular}{lll}
+\toprule
+Tipo & Región & Posición del Pico \\
+\midrule
+I & Costa del Pacífico & $\sim$10 hr \\
+IA & Noroeste del Pacífico & $\sim$8 hr \\
+II & Continental (mayoría de EEUU) & 12 hr (50\%) \\
+III & Costa del Golfo/Atlántico & $\sim$12 hr \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{lstlisting}[style=bashstyle, language=bash]
+# Distribucion SCS Tipo II, 24 horas, 150mm
+python -m hidropluvial storm scs 150 --duration 24 --storm-type II
+\end{lstlisting}
+
+\section{Tormentas Bimodales}
+
+Para cuencas urbanas mixtas o tormentas frontales de larga duración, se puede usar una distribución bimodal con dos picos:
+
+\begin{lstlisting}[style=bashstyle, language=bash]
+# Tormenta bimodal: 100mm, 6 horas, picos en 25% y 75%
+python -m hidropluvial storm bimodal 100 --duration 6 --peak1 0.25 --peak2 0.75
+\end{lstlisting}
+
+% ============================================================================
+% CAPÍTULO 4: ESCORRENTÍA
+% ============================================================================
+
+\chapter{Cálculo de Escorrentía}
+
+\section{Método SCS Curve Number}
+
+\subsection{Ecuación de Escorrentía}
+
+\begin{equation}
+Q = \frac{(P - I_a)^2}{P - I_a + S} \quad \text{para } P > I_a
+\label{eq:scs_runoff}
+\end{equation}
+
+donde:
+\begin{itemize}
+    \item $Q$: escorrentía directa (mm)
+    \item $P$: precipitación total (mm)
+    \item $I_a$: abstracción inicial (mm)
+    \item $S$: retención potencial máxima (mm)
+\end{itemize}
+
+\subsection{Retención Potencial}
+
+\begin{equation}
+S = \frac{25400}{CN} - 254 \quad \text{(mm)}
+\label{eq:retention}
+\end{equation}
+
+\subsection{Abstracción Inicial}
+
+\begin{equation}
+I_a = \lambda \times S
+\label{eq:ia}
+\end{equation}
+
+Tradicionalmente $\lambda = 0{,}20$, aunque estudios recientes sugieren $\lambda = 0{,}05$.
+
+\subsection{Ajuste por Condición de Humedad Antecedente}
+
+\begin{align}
+CN_I &= \frac{CN_{II}}{2{,}281 - 0{,}01281 \times CN_{II}} \quad \text{(seco)} \label{eq:cn_i} \\
+CN_{III} &= \frac{CN_{II}}{0{,}427 + 0{,}00573 \times CN_{II}} \quad \text{(húmedo)} \label{eq:cn_iii}
+\end{align}
+
+\subsection{Uso desde CLI}
+
+\begin{lstlisting}[style=bashstyle, language=bash]
+# SCS-CN basico: P=100mm, CN=75
+python -m hidropluvial runoff cn 100 75
+
+# Con condicion humeda (AMC III)
+python -m hidropluvial runoff cn 100 75 --amc III
+
+# Con lambda=0.05
+python -m hidropluvial runoff cn 100 75 --lambda 0.05
+\end{lstlisting}
+
+\subsection{Uso desde Python}
+
+\begin{lstlisting}[language=Python]
+from hidropluvial.core import calculate_scs_runoff
+from hidropluvial.config import AntecedentMoistureCondition
+
+result = calculate_scs_runoff(
+    rainfall_mm=100,
+    cn=75,
+    lambda_coef=0.2,
+    amc=AntecedentMoistureCondition.WET  # AMC III
+)
+
+print(f"CN ajustado: {result.cn_used}")
+print(f"Retencion S: {result.retention_mm:.2f} mm")
+print(f"Abstraccion Ia: {result.initial_abstraction_mm:.2f} mm")
+print(f"Escorrentia Q: {result.runoff_mm:.2f} mm")
+\end{lstlisting}
+
+\section{Método Racional}
+
+\begin{equation}
+Q = C_f \times C \times i \times A
+\label{eq:rational}
+\end{equation}
+
+donde:
+\begin{itemize}
+    \item $Q$: caudal pico (m³/s)
+    \item $C_f$: factor de ajuste por período de retorno
+    \item $C$: coeficiente de escorrentía (0-1)
+    \item $i$: intensidad de lluvia (mm/hr)
+    \item $A$: área de la cuenca (ha)
+\end{itemize}
+
+\begin{lstlisting}[style=bashstyle, language=bash]
+# Metodo Racional: C=0.6, i=50mm/hr, A=10ha, Tr=25 anos
+python -m hidropluvial runoff rational 0.6 50 10 --return-period 25
+\end{lstlisting}
+
+% ============================================================================
+% CAPÍTULO 5: TIEMPO DE CONCENTRACIÓN
+% ============================================================================
+
+\chapter{Tiempo de Concentración}
+
+\section{Fórmula de Kirpich (1940)}
+
+\begin{equation}
+t_c = 0{,}0195 \times L^{0{,}77} \times S^{-0{,}385}
+\label{eq:kirpich}
+\end{equation}
+
+donde:
+\begin{itemize}
+    \item $t_c$: tiempo de concentración (min)
+    \item $L$: longitud del cauce (m)
+    \item $S$: pendiente (m/m)
+\end{itemize}
+
+\textbf{Factores de ajuste:}
+\begin{itemize}
+    \item Canales con pasto: $\times 2{,}0$
+    \item Concreto/asfalto: $\times 0{,}4$
+    \item Canales de concreto: $\times 0{,}2$
+\end{itemize}
+
+\begin{lstlisting}[style=bashstyle, language=bash]
+# Kirpich: L=2000m, S=0.02
+python -m hidropluvial tc kirpich 2000 0.02
+
+# Con superficie de pasto
+python -m hidropluvial tc kirpich 2000 0.02 --surface grassy
+\end{lstlisting}
+
+\section{Fórmula de Témez}
+
+\begin{equation}
+t_c = 0{,}3 \times \left(\frac{L}{S^{0{,}25}}\right)^{0{,}76}
+\label{eq:temez}
+\end{equation}
+
+donde:
+\begin{itemize}
+    \item $t_c$: tiempo de concentración (hr)
+    \item $L$: longitud del cauce (km)
+    \item $S$: pendiente (m/m)
+\end{itemize}
+
+Válida para cuencas de 1 a 3000 km².
+
+\begin{lstlisting}[style=bashstyle, language=bash]
+# Temez: L=5km, S=0.015
+python -m hidropluvial tc temez 5 0.015
+\end{lstlisting}
+
+% ============================================================================
+% CAPÍTULO 6: HIDROGRAMAS
+% ============================================================================
+
+\chapter{Hidrogramas Unitarios}
+
+\section{Hidrograma Triangular SCS}
+
+\subsection{Caudal Pico}
+
+\begin{equation}
+q_p = \frac{2{,}08 \times A \times Q}{T_p}
+\label{eq:scs_peak}
+\end{equation}
+
+donde:
+\begin{itemize}
+    \item $q_p$: caudal pico (m³/s)
+    \item $A$: área de la cuenca (km²)
+    \item $Q$: escorrentía (mm)
+    \item $T_p$: tiempo al pico (hr)
+\end{itemize}
+
+\subsection{Parámetros Temporales}
+
+\begin{align}
+t_{lag} &= 0{,}6 \times T_c \label{eq:tlag} \\
+T_p &= \frac{\Delta D}{2} + t_{lag} \label{eq:tp} \\
+T_r &= 1{,}67 \times T_p \label{eq:tr} \\
+T_b &= 2{,}67 \times T_p \label{eq:tb}
+\end{align}
+
+\subsection{Uso desde Python}
+
+\begin{lstlisting}[language=Python]
+from hidropluvial.core.hydrograph import (
+    scs_triangular_uh,
+    scs_curvilinear_uh,
+    generate_hydrograph
+)
+from hidropluvial.config import HydrographMethod
+import numpy as np
+
+# Hidrograma unitario triangular
+time, flow = scs_triangular_uh(
+    area_km2=25,
+    tc_hr=1.5,
+    dt_hr=0.1
+)
+
+# Hidrograma unitario curvilinear (PRF=484)
+time, flow = scs_curvilinear_uh(
+    area_km2=25,
+    tc_hr=1.5,
+    dt_hr=0.1,
+    prf=484
+)
+
+# Hidrograma completo con exceso de lluvia
+rainfall_excess = np.array([5, 15, 25, 20, 10, 5])  # mm
+result = generate_hydrograph(
+    rainfall_excess_mm=rainfall_excess,
+    method=HydrographMethod.SCS_CURVILINEAR,
+    area_km2=25,
+    tc_hr=1.5,
+    dt_hr=0.1
+)
+
+print(f"Caudal pico: {result.peak_flow_m3s:.2f} m3/s")
+print(f"Tiempo al pico: {result.time_to_peak_hr:.2f} hr")
+\end{lstlisting}
+
+% ============================================================================
+% CAPÍTULO 7: GENERACIÓN DE REPORTES
+% ============================================================================
+
+\chapter{Generación de Reportes}
+
+\section{Reportes LaTeX}
+
+\hidropluvial{} puede generar memorias de cálculo completas en formato \LaTeX, listas para compilar a PDF.
+
+\subsection{Reporte de Curvas IDF}
+
+\begin{lstlisting}[style=bashstyle, language=bash]
+python -m hidropluvial report idf 78 -o informe_idf.tex --author "Ing. Garcia"
+\end{lstlisting}
+
+El reporte incluye:
+\begin{itemize}
+    \item Datos de entrada
+    \item Tabla de intensidades para todos los períodos de retorno
+    \item Fórmulas utilizadas
+    \item Metadatos del documento
+\end{itemize}
+
+\subsection{Reporte de Hietograma}
+
+\begin{lstlisting}[style=bashstyle, language=bash]
+python -m hidropluvial report storm 78 3 --tr 25 -o informe_storm.tex
+\end{lstlisting}
+
+El reporte incluye:
+\begin{itemize}
+    \item Datos de entrada
+    \item Resumen de resultados
+    \item Gráfico TikZ del hietograma
+    \item Tabla de datos tabulados
+\end{itemize}
+
+\section{Exportación de Datos}
+
+\subsection{CSV}
+
+\begin{lstlisting}[style=bashstyle, language=bash]
+# Tabla IDF
+python -m hidropluvial export idf-csv 78 -o tabla_idf.csv
+
+# Hietograma
+python -m hidropluvial export storm-csv 78 3 --tr 25 -o hietograma.csv
+\end{lstlisting}
+
+\subsection{Figuras TikZ}
+
+Para incluir figuras en un documento \LaTeX{} existente:
+
+\begin{lstlisting}[style=bashstyle, language=bash]
+python -m hidropluvial export storm-tikz 78 3 --tr 25 -o figura.tex
+\end{lstlisting}
+
+Luego en el documento principal:
+
+\begin{lstlisting}[language=TeX]
+\input{figura.tex}
+\end{lstlisting}
+
+\section{Generación desde Python}
+
+\begin{lstlisting}[language=Python]
+from hidropluvial.core import alternating_blocks_dinagua
+from hidropluvial.reports import (
+    ReportGenerator,
+    hyetograph_result_to_tikz
+)
+
+# Generar hietograma
+hietograma = alternating_blocks_dinagua(78, 25, 3, 5)
+
+# Convertir a TikZ
+tikz = hyetograph_result_to_tikz(
+    hietograma,
+    caption="Hietograma Tr=25 anos",
+    label="fig:hietograma"
+)
+
+# Guardar
+with open("hietograma.tex", "w") as f:
+    f.write(tikz)
+
+# Generar documento completo
+generator = ReportGenerator()
+doc = generator.generate_standalone_document(
+    content=tikz,
+    title="Memoria de Calculo",
+    author="Ing. Garcia"
+)
+
+with open("memoria.tex", "w") as f:
+    f.write(doc)
+\end{lstlisting}
+
+% ============================================================================
+% CAPÍTULO 8: REFERENCIA DE COMANDOS
+% ============================================================================
+
+\chapter{Referencia de Comandos CLI}
+
+\section{Comando Principal}
+
+\begin{lstlisting}[style=bashstyle, language=bash]
+python -m hidropluvial [OPTIONS] COMMAND [ARGS]
+
+Options:
+  --version, -v    Mostrar version
+  --help           Mostrar ayuda
+\end{lstlisting}
+
+\section{Subcomandos}
+
+\subsection{idf}
+
+\begin{tabular}{ll}
+\toprule
+Comando & Descripción \\
+\midrule
+\comando{idf uruguay <P3\_10> <dur> --tr <T>} & Intensidad DINAGUA \\
+\comando{idf tabla-uy <P3\_10>} & Tabla IDF completa \\
+\comando{idf departamentos} & Valores $P_{3,10}$ \\
+\comando{idf sherman <dur> <T>} & Intensidad Sherman \\
+\bottomrule
+\end{tabular}
+
+\subsection{storm}
+
+\begin{tabular}{ll}
+\toprule
+Comando & Descripción \\
+\midrule
+\comando{storm uruguay <P3\_10> <dur>} & Hietograma DINAGUA \\
+\comando{storm bimodal <depth>} & Tormenta bimodal \\
+\comando{storm scs <depth>} & Distribución SCS \\
+\comando{storm chicago <depth>} & Método Chicago \\
+\bottomrule
+\end{tabular}
+
+\subsection{tc}
+
+\begin{tabular}{ll}
+\toprule
+Comando & Descripción \\
+\midrule
+\comando{tc kirpich <L> <S>} & Fórmula Kirpich \\
+\comando{tc temez <L> <S>} & Fórmula Témez \\
+\bottomrule
+\end{tabular}
+
+\subsection{runoff}
+
+\begin{tabular}{ll}
+\toprule
+Comando & Descripción \\
+\midrule
+\comando{runoff cn <P> <CN>} & Método SCS-CN \\
+\comando{runoff rational <C> <i> <A>} & Método Racional \\
+\bottomrule
+\end{tabular}
+
+\subsection{report}
+
+\begin{tabular}{ll}
+\toprule
+Comando & Descripción \\
+\midrule
+\comando{report idf <P3\_10>} & Memoria IDF \\
+\comando{report storm <P3\_10> <dur>} & Memoria hietograma \\
+\bottomrule
+\end{tabular}
+
+\subsection{export}
+
+\begin{tabular}{ll}
+\toprule
+Comando & Descripción \\
+\midrule
+\comando{export idf-csv <P3\_10>} & Tabla IDF a CSV \\
+\comando{export storm-csv <P3\_10> <dur>} & Hietograma a CSV \\
+\comando{export storm-tikz <P3\_10> <dur>} & Figura TikZ \\
+\bottomrule
+\end{tabular}
+
+% ============================================================================
+% APÉNDICES
+% ============================================================================
+
+\appendix
+
+\chapter{Tablas de Referencia}
+
+\section{Números de Curva (CN)}
+
+\begin{table}[H]
+\centering
+\caption{Números de curva para áreas urbanas (TR-55)}
+\label{tab:cn_urban}
+\begin{tabular}{lcccc}
+\toprule
+Descripción & HSG A & HSG B & HSG C & HSG D \\
+\midrule
+Espacio abierto (buena condición) & 39 & 61 & 74 & 80 \\
+Áreas impermeables & 98 & 98 & 98 & 98 \\
+Residencial 1/4 acre & 61 & 75 & 83 & 87 \\
+Comercial (85\% impermeable) & 89 & 92 & 94 & 95 \\
+Industrial & 81 & 88 & 91 & 93 \\
+Calles pavimentadas & 98 & 98 & 98 & 98 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Números de curva para áreas agrícolas (TR-55)}
+\label{tab:cn_agri}
+\begin{tabular}{lcccc}
+\toprule
+Descripción & HSG A & HSG B & HSG C & HSG D \\
+\midrule
+Barbecho & 77 & 86 & 91 & 94 \\
+Cultivos en hilera (buena condición) & 67 & 78 & 85 & 89 \\
+Pasturas (buena condición) & 39 & 61 & 74 & 80 \\
+Praderas & 30 & 58 & 71 & 78 \\
+Bosques (buena condición) & 30 & 55 & 70 & 77 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Coeficientes de Escorrentía (C)}
+
+\begin{table}[H]
+\centering
+\caption{Coeficientes de escorrentía para método racional}
+\label{tab:c_rational}
+\begin{tabular}{lc}
+\toprule
+Uso del suelo & C \\
+\midrule
+Centro comercial & 0,70 -- 0,95 \\
+Residencial unifamiliar & 0,30 -- 0,50 \\
+Industrial ligero & 0,50 -- 0,80 \\
+Asfalto/concreto & 0,70 -- 0,95 \\
+Parques/espacios abiertos & 0,10 -- 0,25 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\chapter{Referencias Bibliográficas}
+
+\begin{enumerate}
+    \item Rodríguez Fontal, A. (1980). \textit{Regionalización de lluvias máximas en Uruguay}.
+
+    \item DINAGUA/MTOP. \textit{Manual de Drenaje Pluvial Urbano}.
+
+    \item USDA-NRCS (1986). \textit{Urban Hydrology for Small Watersheds}. Technical Release 55 (TR-55).
+
+    \item FHWA (2023). \textit{Highway Hydrology}. Hydraulic Design Series No. 2 (HDS-2), 3rd Edition.
+
+    \item Chow, V.T., Maidment, D.R., Mays, L.W. (1988). \textit{Applied Hydrology}. McGraw-Hill.
+
+    \item Huff, F.A. (1967). Time Distribution of Rainfall in Heavy Storms. \textit{Water Resources Research}, 3(4):1007-1019.
+
+    \item Keifer, C.J., Chu, H.H. (1957). Synthetic Storm Pattern for Drainage Design. \textit{Journal of the Hydraulics Division, ASCE}, 83(HY4):1-25.
+\end{enumerate}
+
+% ============================================================================
+% FIN DEL DOCUMENTO
+% ============================================================================
+
+\end{document}

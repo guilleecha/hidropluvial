@@ -301,6 +301,42 @@ def faa_formula(length_m: float, slope_pct: float, c: float) -> float:
     return tc_min / 60.0
 
 
+def desbordes(
+    area_ha: float,
+    slope_pct: float,
+    c: float,
+    t0_min: float = 5.0,
+) -> float:
+    """
+    Calcula Tc usando Método de los Desbordes (DINAGUA Uruguay).
+
+    Tc = T0 + 6.625 × A^0.3 × P^(-0.39) × C^(-0.45)  [Tc: min]
+
+    Recomendado en el "Manual de Diseño para Sistemas de Drenaje de
+    Aguas Pluviales Urbanas" de DINAGUA.
+
+    Args:
+        area_ha: Área de la cuenca en hectáreas
+        slope_pct: Pendiente media de la cuenca en porcentaje (%)
+        c: Coeficiente de escorrentía (método racional, 0-1)
+        t0_min: Tiempo de entrada inicial en minutos (default: 5 min)
+
+    Returns:
+        Tiempo de concentración en horas
+    """
+    if area_ha <= 0:
+        raise ValueError("Área debe ser > 0")
+    if slope_pct <= 0:
+        raise ValueError("Pendiente debe ser > 0")
+    if not 0 < c <= 1:
+        raise ValueError("Coeficiente C debe estar entre 0 y 1")
+    if t0_min < 0:
+        raise ValueError("Tiempo de entrada T0 debe ser >= 0")
+
+    tc_min = t0_min + 6.625 * (area_ha ** 0.3) * (slope_pct ** -0.39) * (c ** -0.45)
+    return tc_min / 60.0  # Convertir a horas
+
+
 def kinematic_wave(
     length_m: float,
     n: float,
@@ -365,12 +401,14 @@ def calculate_tc(
     c: float | None = None,
     n: float | None = None,
     intensity_mmhr: float | None = None,
+    area_ha: float | None = None,
+    t0_min: float | None = None,
 ) -> float:
     """
     Función principal para calcular tiempo de concentración.
 
     Args:
-        method: Método de cálculo ('kirpich', 'nrcs', 'temez', 'california', 'faa', 'kinematic')
+        method: Método de cálculo ('kirpich', 'nrcs', 'temez', 'california', 'faa', 'kinematic', 'desbordes')
         length_m: Longitud en metros
         length_km: Longitud en kilómetros
         slope: Pendiente (m/m)
@@ -379,9 +417,11 @@ def calculate_tc(
         surface_type: Tipo de superficie para Kirpich
         segments: Segmentos para NRCS
         p2_mm: P2 para NRCS sheet flow
-        c: Coeficiente C para FAA
+        c: Coeficiente C para FAA y Desbordes
         n: Coeficiente Manning para kinematic
         intensity_mmhr: Intensidad para kinematic
+        area_ha: Área en hectáreas para Desbordes
+        t0_min: Tiempo de entrada inicial para Desbordes (default: 5 min)
 
     Returns:
         Tiempo de concentración en horas
@@ -433,6 +473,11 @@ def calculate_tc(
         if length_m is None or n is None or slope is None or intensity_mmhr is None:
             raise ValueError("Kinematic requiere length_m, n, slope e intensity_mmhr")
         return kinematic_wave(length_m, n, slope, intensity_mmhr)
+
+    elif method == "desbordes":
+        if area_ha is None or slope_pct is None or c is None:
+            raise ValueError("Desbordes requiere area_ha, slope_pct y c")
+        return desbordes(area_ha, slope_pct, c, t0_min if t0_min is not None else 5.0)
 
     else:
         raise ValueError(f"Método desconocido: {method}")

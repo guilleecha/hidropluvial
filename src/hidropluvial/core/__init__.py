@@ -41,6 +41,7 @@ from hidropluvial.core.tc import (
     california_culverts,
     faa_formula,
     kinematic_wave,
+    desbordes,
     calculate_tc,
 )
 
@@ -57,6 +58,8 @@ from hidropluvial.core.runoff import (
 )
 
 from hidropluvial.core.hydrograph import (
+    scs_lag_time,
+    scs_time_to_peak,
     scs_triangular_uh,
     scs_curvilinear_uh,
     snyder_uh,
@@ -103,6 +106,7 @@ __all__ = [
     "california_culverts",
     "faa_formula",
     "kinematic_wave",
+    "desbordes",
     "calculate_tc",
     # Runoff
     "scs_runoff",
@@ -115,6 +119,8 @@ __all__ = [
     "rational_peak_flow",
     "composite_c",
     # Hydrograph
+    "scs_lag_time",
+    "scs_time_to_peak",
     "scs_triangular_uh",
     "scs_curvilinear_uh",
     "snyder_uh",

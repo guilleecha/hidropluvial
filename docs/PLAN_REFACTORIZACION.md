@@ -20,19 +20,25 @@ src/hidropluvial/cli/
 ├── idf.py               (181 líneas)  ✅
 ├── storm.py             (284 líneas)  ✅
 ├── tc.py                (60 líneas)   ✅
-├── runoff.py            (63 líneas)   ✅
+├── runoff.py            (521 líneas)  ⚠️ (creció por weighted-cn)
 ├── hydrograph.py        (265 líneas)  ✅
 ├── report.py            (203 líneas)  ✅
 ├── export.py            (93 líneas)   ✅
-└── session/
-    ├── __init__.py      (34 líneas)   ✅
-    ├── base.py          (287 líneas)  ✅
-    ├── analyze.py       (168 líneas)  ✅
-    ├── batch.py         (232 líneas)  ✅
-    └── report.py        (485 líneas)  ✅
+├── session/
+│   ├── __init__.py      (39 líneas)   ✅
+│   ├── base.py          (430 líneas)  ✅
+│   ├── analyze.py       (168 líneas)  ✅
+│   ├── batch.py         (232 líneas)  ✅
+│   ├── preview.py       (165 líneas)  ✅
+│   └── report.py        (485 líneas)  ✅
+└── wizard/
+    ├── __init__.py      (8 líneas)    ✅
+    ├── main.py          (63 líneas)   ✅
+    ├── menus.py         (700 líneas)  ⚠️ Considerar dividir
+    └── runner.py        (320 líneas)  ✅
 ```
 
-**Resultado**: Todos los archivos bajo 500 líneas. Tests: 98/98 pasando.
+**Resultado**: Tests: 142/142 pasando. Archivos grandes a revisar: runoff.py (521), menus.py (~700).
 
 ---
 

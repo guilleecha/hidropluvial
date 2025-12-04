@@ -20,9 +20,10 @@ class PostExecutionMenu:
     def __init__(self, session: Session, c: float = None, cn: float = None, length: float = None):
         self.session = session
         self.manager = get_session_manager()
-        self.c = c
-        self.cn = cn
-        self.length = length
+        # Usar valores de la sesión si no se pasan explícitamente
+        self.c = c if c is not None else session.cuenca.c
+        self.cn = cn if cn is not None else session.cuenca.cn
+        self.length = length if length is not None else session.cuenca.length_m
 
     def show(self) -> None:
         """Muestra el menu post-ejecucion en un loop."""

@@ -648,6 +648,12 @@ def continue_session_menu() -> None:
     if "resumen" in action.lower():
         from hidropluvial.cli.session.base import session_summary
         session_summary(session_id)
+    elif "Agregar" in action:
+        # Cargar sesión y abrir menú post-ejecución para agregar análisis
+        session = manager.get_session(session_id)
+        if session:
+            menu = PostExecutionMenu(session, manager)
+            menu.run()
     elif "reporte" in action.lower():
         output = questionary.text(
             "Nombre del archivo (sin extension):",

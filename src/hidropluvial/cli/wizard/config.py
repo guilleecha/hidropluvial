@@ -42,7 +42,37 @@ class WizardConfig:
 
     @classmethod
     def from_wizard(cls) -> Optional["WizardConfig"]:
-        """Recolecta datos interactivamente."""
+        """Recolecta datos interactivamente con navegación."""
+        from hidropluvial.cli.wizard.steps import WizardNavigator
+
+        navigator = WizardNavigator()
+        state = navigator.run()
+
+        if state is None:
+            return None
+
+        # Convertir WizardState a WizardConfig
+        config = cls(
+            nombre=state.nombre,
+            area_ha=state.area_ha,
+            slope_pct=state.slope_pct,
+            p3_10=state.p3_10,
+            c=state.c,
+            cn=state.cn,
+            length_m=state.length_m,
+            c_weighted_data=state.c_weighted_data,
+            tc_methods=state.tc_methods,
+            storm_codes=state.storm_codes,
+            return_periods=state.return_periods,
+            x_factors=state.x_factors,
+            output_name=state.output_name,
+        )
+
+        return config
+
+    @classmethod
+    def from_wizard_legacy(cls) -> Optional["WizardConfig"]:
+        """Recolecta datos interactivamente (versión sin navegación)."""
         config = cls()
 
         if not config._collect_cuenca_data():

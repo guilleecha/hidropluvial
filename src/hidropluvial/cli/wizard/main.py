@@ -11,7 +11,7 @@ from hidropluvial.cli.wizard.runner import AnalysisRunner
 from hidropluvial.cli.wizard.menus import (
     PostExecutionMenu,
     continue_session_menu,
-    idf_lookup_menu,
+    manage_sessions_menu,
 )
 
 
@@ -32,7 +32,7 @@ def wizard_main() -> None:
         choices=[
             "1. Nuevo analisis completo (guiado)",
             "2. Continuar sesion existente",
-            "3. Consultar tabla IDF",
+            "3. Gestionar sesiones (ver, eliminar, renombrar)",
             "4. Ver comandos disponibles",
             "5. Salir",
         ],
@@ -48,7 +48,7 @@ def wizard_main() -> None:
     elif "2." in choice:
         continue_session_menu()
     elif "3." in choice:
-        idf_lookup_menu()
+        manage_sessions_menu()
     elif "4." in choice:
         from hidropluvial.cli.commands import show_commands
         show_commands()

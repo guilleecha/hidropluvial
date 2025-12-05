@@ -22,6 +22,19 @@ def manager(temp_sessions_dir):
     return SessionManager(sessions_dir=temp_sessions_dir)
 
 
+@pytest.fixture(autouse=True)
+def mock_get_session_manager(manager):
+    """Mock get_session_manager para usar directorio temporal en todos los tests."""
+    with patch(
+        "hidropluvial.cli.wizard.runner.get_session_manager",
+        return_value=manager,
+    ), patch(
+        "hidropluvial.cli.wizard.menus.base.get_session_manager",
+        return_value=manager,
+    ):
+        yield manager
+
+
 @pytest.fixture
 def sample_session(manager):
     """Sesión de ejemplo con datos completos."""
@@ -300,7 +313,7 @@ class TestContinueSessionMenu:
     def test_no_sessions_shows_message(self, manager, capsys):
         """Test mensaje cuando no hay sesiones."""
         with patch(
-            "hidropluvial.cli.wizard.menus.get_session_manager",
+            "hidropluvial.cli.wizard.menus.base.get_session_manager",
             return_value=manager,
         ):
             continue_session_menu()

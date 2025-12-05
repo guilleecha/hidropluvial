@@ -105,6 +105,7 @@ def generate_hydrograph_tikz(
     height: str = "8cm",
     legend_pos: str = "north east",
     ymax: float | None = None,
+    include_figure: bool = True,
 ) -> str:
     """
     Genera código TikZ para hidrograma.
@@ -119,6 +120,7 @@ def generate_hydrograph_tikz(
         height: Alto del gráfico
         legend_pos: Posición de la leyenda
         ymax: Valor máximo del eje Y (auto si None)
+        include_figure: Si True, envuelve en \\begin{figure}...\\end{figure}
 
     Returns:
         Código LaTeX/TikZ completo
@@ -159,10 +161,8 @@ def generate_hydrograph_tikz(
 
     plots_str = "\n\t\t\n".join(plots)
 
-    # Construir figura completa
-    tex = f"""\\begin{{figure}}[H]
-	\\centering
-	\\begin{{tikzpicture}}
+    # Construir contenido tikzpicture
+    tikz_content = f"""\\begin{{tikzpicture}}
 		\\begin{{axis}}[
 			width={width},
 			height={height},
@@ -181,11 +181,19 @@ def generate_hydrograph_tikz(
 {plots_str}
 
 		\\end{{axis}}
-	\\end{{tikzpicture}}
+	\\end{{tikzpicture}}"""
+
+    if include_figure:
+        tex = f"""\\begin{{figure}}[H]
+	\\centering
+	{tikz_content}
 	\\caption{{{caption}}}
 	\\label{{{label}}}
 \\end{{figure}}
 """
+    else:
+        tex = tikz_content + "\n"
+
     return tex
 
 
@@ -253,6 +261,7 @@ def generate_hyetograph_tikz(
     height: str = "8cm",
     bar_width: int | None = None,
     ymax: float | None = None,
+    include_figure: bool = True,
 ) -> str:
     """
     Genera código TikZ para hietograma (barras invertidas).
@@ -269,6 +278,7 @@ def generate_hyetograph_tikz(
         height: Alto del gráfico
         bar_width: Ancho de las barras (auto si None)
         ymax: Valor máximo del eje Y (auto si None)
+        include_figure: Si True, envuelve en \\begin{figure}...\\end{figure}
 
     Returns:
         Código LaTeX/TikZ completo
@@ -299,10 +309,8 @@ def generate_hyetograph_tikz(
     # Título opcional
     title_line = f"title={{{title}}},\n\t\t\t" if title else ""
 
-    # Construir figura
-    tex = f"""\\begin{{figure}}[H]
-	\\centering
-	\\begin{{tikzpicture}}
+    # Construir contenido tikzpicture
+    tikz_content = f"""\\begin{{tikzpicture}}
 		\\begin{{axis}}[
 			{title_line}width={width},
 			height={height},
@@ -329,11 +337,19 @@ def generate_hyetograph_tikz(
 {coords}
 			}};
 		\\end{{axis}}
-	\\end{{tikzpicture}}
+	\\end{{tikzpicture}}"""
+
+    if include_figure:
+        tex = f"""\\begin{{figure}}[H]
+	\\centering
+	{tikz_content}
 	\\caption{{{caption}}}
 	\\label{{{label}}}
 \\end{{figure}}
 """
+    else:
+        tex = tikz_content + "\n"
+
     return tex
 
 

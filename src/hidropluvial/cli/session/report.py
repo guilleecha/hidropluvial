@@ -14,24 +14,24 @@ from hidropluvial.cli.session.base import get_session_manager
 
 def session_report(
     session_id: Annotated[str, typer.Argument(help="ID o nombre de la sesión")],
-    output: Annotated[str, typer.Option("--output", "-o", help="Directorio de salida")] = "report",
+    output: Annotated[Optional[str], typer.Option("--output", "-o", help="Nombre del directorio de salida (default: nombre de sesión)")] = None,
     author: Annotated[str, typer.Option("--author", help="Autor del reporte")] = "",
     template_dir: Annotated[Optional[str], typer.Option("--template", "-t", help="Directorio con template Pablo Pizarro")] = None,
 ):
     """
     Genera reporte LaTeX con gráficos TikZ para cada análisis.
 
-    Crea un directorio con:
+    Crea estructura en output/<nombre_sesion>/:
     - Archivo principal (.tex)
-    - Gráficos de hietogramas (hietograma_*.tex)
-    - Gráficos de hidrogramas (hidrograma_*.tex)
+    - hietogramas/*.tex
+    - hidrogramas/*.tex
 
     Con --template: Genera documento compatible con template Pablo Pizarro
     y copia los archivos del template al directorio de salida.
 
     Ejemplo:
-        hidropluvial session report abc123 -o reporte_cuenca --author "Ing. Pérez"
-        hidropluvial session report abc123 -o reporte --template examples/
+        hidropluvial session report abc123 --author "Ing. Pérez"
+        hidropluvial session report abc123 -o mi_reporte --template examples/
     """
     from hidropluvial.reports.charts import (
         HydrographSeries,
@@ -51,8 +51,17 @@ def session_report(
         typer.echo(f"Error: No hay análisis en la sesión.", err=True)
         raise typer.Exit(1)
 
-    # Crear directorio de salida y subdirectorios para gráficos
-    output_dir = Path(output)
+    # Determinar nombre del directorio de salida
+    if output is None:
+        # Usar nombre de sesión sanitizado
+        safe_name = session.name.lower().replace(" ", "_").replace("/", "_")
+        output_name = safe_name
+    else:
+        output_name = output
+
+    # Crear estructura: output/<nombre_sesion>/
+    base_output = Path("output")
+    output_dir = base_output / output_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     hidrogramas_dir = output_dir / "hidrogramas"
@@ -104,6 +113,7 @@ def session_report(
                 label=f"fig:hyeto_{file_id}",
                 width=r"0.9\textwidth",
                 height="6cm",
+                include_figure=False,  # Se incluirá dentro de minipage en fichas
             )
 
             hyeto_path.write_text(hyeto_tikz, encoding="utf-8")
@@ -145,6 +155,7 @@ def session_report(
                 label=f"fig:hydro_{file_id}",
                 width=r"0.9\textwidth",
                 height="6cm",
+                include_figure=False,  # Se incluirá dentro de minipage en fichas
             )
 
             hydro_path.write_text(hydro_tikz, encoding="utf-8")
@@ -229,6 +240,64 @@ $P_{{3,10}}$ & {session.cuenca.p3_10:.1f} mm \\\\
 \\caption{Características de la cuenca}
 \\label{tab:cuenca}
 \\end{table}
+"""
+
+    # Agregar tabla de ponderación de C si existe
+    if session.cuenca.c_weighted and session.cuenca.c_weighted.items:
+        cw = session.cuenca.c_weighted
+        cuenca_content += f"""
+\\subsection{{Determinación del Coeficiente C}}
+
+El coeficiente de escorrentía C se determinó mediante ponderación por área
+usando la tabla \\textbf{{{cw.table_used.upper() if cw.table_used else "N/A"}}}.
+
+\\begin{{table}}[H]
+\\centering
+\\begin{{tabular}}{{lrrr}}
+\\toprule
+Cobertura & Área (ha) & \\% Área & C \\\\
+\\midrule
+"""
+        for item in cw.items:
+            pct = (item.area_ha / session.cuenca.area_ha) * 100 if session.cuenca.area_ha > 0 else 0
+            cuenca_content += f"{item.description} & {item.area_ha:.2f} & {pct:.1f}\\% & {item.value:.2f} \\\\\n"
+
+        cuenca_content += f"""\\midrule
+\\textbf{{Total}} & \\textbf{{{session.cuenca.area_ha:.2f}}} & \\textbf{{100\\%}} & \\textbf{{{cw.weighted_value:.2f}}} \\\\
+\\bottomrule
+\\end{{tabular}}
+\\caption{{Ponderación del coeficiente de escorrentía C}}
+\\label{{tab:c_ponderado}}
+\\end{{table}}
+"""
+
+    # Agregar tabla de ponderación de CN si existe
+    if session.cuenca.cn_weighted and session.cuenca.cn_weighted.items:
+        cnw = session.cuenca.cn_weighted
+        cuenca_content += f"""
+\\subsection{{Determinación del Curve Number CN}}
+
+El Curve Number se determinó mediante ponderación por área
+usando la tabla \\textbf{{{cnw.table_used.upper() if cnw.table_used else "NRCS"}}}.
+
+\\begin{{table}}[H]
+\\centering
+\\begin{{tabular}}{{lrrr}}
+\\toprule
+Cobertura/Uso de suelo & Área (ha) & \\% Área & CN \\\\
+\\midrule
+"""
+        for item in cnw.items:
+            pct = (item.area_ha / session.cuenca.area_ha) * 100 if session.cuenca.area_ha > 0 else 0
+            cuenca_content += f"{item.description} & {item.area_ha:.2f} & {pct:.1f}\\% & {item.value:.0f} \\\\\n"
+
+        cuenca_content += f"""\\midrule
+\\textbf{{Total}} & \\textbf{{{session.cuenca.area_ha:.2f}}} & \\textbf{{100\\%}} & \\textbf{{{cnw.weighted_value:.0f}}} \\\\
+\\bottomrule
+\\end{{tabular}}
+\\caption{{Ponderación del Curve Number CN}}
+\\label{{tab:cn_ponderado}}
+\\end{{table}}
 """
 
     # --- sec_tc.tex: Tiempos de concentración ---
@@ -340,55 +409,69 @@ Variación máx/mín & {variation:.1f}\\% \\\\
             x_display = f"X={analysis.hydrograph.x_factor:.2f}" if analysis.hydrograph.x_factor else ""
             ficha_titulo = f"{analysis.tc.method.title()} + {analysis.storm.type.upper()} $T_r$={analysis.storm.return_period} años {x_display}"
 
+            # Calcular parámetros del Hidrograma Unitario
+            tc_hr = analysis.tc.tc_hr
+            # Asumir dt = Tc/10 para el HU (intervalo típico)
+            dt_hr = tc_hr / 10
+            x = analysis.hydrograph.x_factor if analysis.hydrograph.x_factor else 1.0
+
+            # Tp = Du/2 + 0.6*Tc (tiempo al pico del HU)
+            tp_hu_hr = dt_hr / 2 + 0.6 * tc_hr
+            tp_hu_min = tp_hu_hr * 60
+
+            # Tb = (1 + X) * Tp (tiempo base del HU)
+            tb_hu_hr = (1 + x) * tp_hu_hr
+            tb_hu_min = tb_hu_hr * 60
+
+            # qp_unit = 0.278 * A[km²] / Tp * 2 / (1 + X) para 1 mm de escorrentía
+            area_km2 = session.cuenca.area_ha / 100
+            qp_unit = 0.278 * area_km2 / tp_hu_hr * 2 / (1 + x)
+
             fichas_content += f"""\\subsection{{{ficha_titulo}}}
 
 % Tabla de parámetros del análisis
 \\begin{{table}}[H]
 \\centering
 \\small
-\\begin{{tabular}}{{lr|lr}}
+\\begin{{tabular}}{{lr|lr|lr}}
 \\toprule
-\\multicolumn{{2}}{{c|}}{{\\textbf{{Entrada}}}} & \\multicolumn{{2}}{{c}}{{\\textbf{{Resultados}}}} \\\\
+\\multicolumn{{2}}{{c|}}{{\\textbf{{Tormenta}}}} & \\multicolumn{{2}}{{c|}}{{\\textbf{{Hidrograma Unitario}}}} & \\multicolumn{{2}}{{c}}{{\\textbf{{Resultados}}}} \\\\
 \\midrule
-Método $T_c$ & {analysis.tc.method.title()} & Precipitación & {analysis.storm.total_depth_mm:.1f} mm \\\\
-$T_c$ & {analysis.tc.tc_min:.1f} min & Escorrentía & {analysis.hydrograph.runoff_mm:.1f} mm \\\\
-Tormenta & {analysis.storm.type.upper()} & $Q_p$ & \\textbf{{{analysis.hydrograph.peak_flow_m3s:.3f} m$^3$/s}} \\\\
-$T_r$ & {analysis.storm.return_period} años & $T_p$ & {analysis.hydrograph.time_to_peak_min:.1f} min \\\\
+$T_c$ ({analysis.tc.method.title()}) & {analysis.tc.tc_min:.1f} min & $T_p$ (HU) & {tp_hu_min:.1f} min & Precipitación & {analysis.storm.total_depth_mm:.1f} mm \\\\
+Tipo & {analysis.storm.type.upper()} & $T_b$ (HU) & {tb_hu_min:.1f} min & Escorrentía & {analysis.hydrograph.runoff_mm:.1f} mm \\\\
+$T_r$ & {analysis.storm.return_period} años & $q_p$ (HU) & {qp_unit:.3f} m$^3$/s/mm & $Q_p$ & \\textbf{{{analysis.hydrograph.peak_flow_m3s:.3f} m$^3$/s}} \\\\
 """
             if analysis.hydrograph.x_factor:
-                fichas_content += f"Factor X & {analysis.hydrograph.x_factor:.2f} & Volumen & {analysis.hydrograph.volume_m3:.0f} m$^3$ \\\\\n"
+                fichas_content += f"Duración & {analysis.storm.duration_hr:.1f} hr & Factor X & {x:.2f} & Volumen & {analysis.hydrograph.volume_m3:.0f} m$^3$ \\\\\n"
             else:
-                fichas_content += f" &  & Volumen & {analysis.hydrograph.volume_m3:.0f} m$^3$ \\\\\n"
+                fichas_content += f"Duración & {analysis.storm.duration_hr:.1f} hr & & & Volumen & {analysis.hydrograph.volume_m3:.0f} m$^3$ \\\\\n"
 
             fichas_content += f"""\\bottomrule
 \\end{{tabular}}
 \\caption{{Ficha técnica: {ficha_titulo}}}
 \\end{{table}}
 
-% Hietograma e Hidrograma
-\\begin{{figure}}[H]
-\\centering
 """
-            # Incluir hietograma si existe
+            # Incluir hietograma (ancho completo)
             hyeto_file = f"hietograma_{file_id}.tex"
             if hyeto_file in generated_files["hyetographs"]:
-                fichas_content += f"""\\begin{{minipage}}{{0.48\\textwidth}}
+                fichas_content += f"""% Hietograma
+\\begin{{figure}}[H]
 \\centering
-\\resizebox{{\\textwidth}}{{!}}{{\\input{{hietogramas/{hyeto_file}}}}}
-\\end{{minipage}}
-\\hfill
+\\resizebox{{0.95\\textwidth}}{{!}}{{\\input{{hietogramas/{hyeto_file}}}}}
+\\caption{{Hietograma - {ficha_titulo}}}
+\\end{{figure}}
+
 """
 
-            # Incluir hidrograma si existe
+            # Incluir hidrograma (ancho completo)
             hydro_file = f"hidrograma_{file_id}.tex"
             if hydro_file in generated_files["hydrographs"]:
-                fichas_content += f"""\\begin{{minipage}}{{0.48\\textwidth}}
+                fichas_content += f"""% Hidrograma
+\\begin{{figure}}[H]
 \\centering
-\\resizebox{{\\textwidth}}{{!}}{{\\input{{hidrogramas/{hydro_file}}}}}
-\\end{{minipage}}
-"""
-
-            fichas_content += f"""\\caption{{Hietograma e Hidrograma - {ficha_titulo}}}
+\\resizebox{{0.95\\textwidth}}{{!}}{{\\input{{hidrogramas/{hydro_file}}}}}
+\\caption{{Hidrograma - {ficha_titulo}}}
 \\end{{figure}}
 
 """

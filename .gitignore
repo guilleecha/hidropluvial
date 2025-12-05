@@ -61,6 +61,9 @@ tmp/
 temp/
 *.tmp
 
+# Directorio de reportes generados
+output/
+
 # Salidas LaTeX compiladas (mantener .tex fuentes)
 *.aux
 *.log

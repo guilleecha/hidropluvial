@@ -93,9 +93,9 @@ def get_key() -> str:
 def plot_combined(
     analysis,
     title: str,
-    width: int = 80,
-    height_hyeto: int = 10,
-    height_hydro: int = 14,
+    width: int = 85,
+    height_hyeto: int = 12,
+    height_hydro: int = 18,
 ) -> None:
     """
     Plotea hietograma e hidrograma combinados (uno arriba del otro).
@@ -124,7 +124,7 @@ def plot_combined(
         time_hr = [t / 60 for t in storm.time_min]
 
         # Usar barras para el hietograma
-        plt.bar(time_hr, storm.intensity_mmhr, color="cyan", width=0.8)
+        plt.bar(time_hr, storm.intensity_mmhr, color="cyan")
 
         plt.title(f"Hietograma - P={storm.total_depth_mm:.1f}mm, imax={storm.peak_intensity_mmhr:.1f}mm/h")
         plt.ylabel("i (mm/h)")
@@ -246,8 +246,8 @@ def interactive_hydrograph_viewer(
             analysis,
             title,
             width=width,
-            height_hyeto=8,
-            height_hydro=12,
+            height_hyeto=12,
+            height_hydro=18,
         )
 
         # Info adicional compacta

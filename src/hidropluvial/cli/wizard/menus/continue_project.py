@@ -261,15 +261,12 @@ class ContinueProjectMenu(BaseMenu):
                 "Que deseas hacer?",
                 choices=[
                     "Ver tabla resumen",
-                    "Ver hidrogramas (navegacion interactiva)",
+                    "Ver graficos (hietograma + hidrograma)",
                     "Comparar hidrogramas",
-                    "Ver hietograma",
                     "Agregar mas analisis",
                     "Filtrar resultados",
                     "Exportar (Excel/LaTeX)",
-                    "Editar datos de la cuenca",
-                    "Agregar/editar notas",
-                    "Eliminar cuenca",
+                    "Editar cuenca...",
                     "← Volver (elegir otra cuenca)",
                     "← Salir al menu principal",
                 ],
@@ -311,25 +308,18 @@ class ContinueProjectMenu(BaseMenu):
 
         if "tabla" in action.lower():
             self._show_table(session)
-        elif "navegacion" in action.lower():
+        elif "graficos" in action.lower():
             self._show_interactive_viewer()
         elif "Comparar" in action:
             self._compare_hydrographs(session)
-        elif "hietograma" in action.lower():
-            self._show_hyetograph(session)
         elif "Agregar" in action and "analisis" in action.lower():
             self._add_analysis()
         elif "Filtrar" in action:
             self._filter_results(session)
         elif "Exportar" in action:
             self._export(session)
-        elif "Editar" in action:
-            self._edit_basin()
-        elif "notas" in action.lower():
-            self._manage_notes()
-        elif "Eliminar" in action:
-            if self._delete_basin():
-                return
+        elif "Editar cuenca" in action:
+            self._show_edit_submenu()
 
     def _safe_call(self, func, *args, **kwargs) -> None:
         """Ejecuta una funcion capturando typer.Exit."""
@@ -405,22 +395,29 @@ class ContinueProjectMenu(BaseMenu):
 
         return ",".join(indices)
 
-    def _show_hyetograph(self, session) -> None:
-        """Muestra hietograma de un analisis."""
-        if not self.basin.analyses:
-            self.echo("  No hay analisis disponibles.")
-            return
+    def _show_edit_submenu(self) -> None:
+        """Muestra submenu de edicion de cuenca."""
+        while True:
+            action = self.select(
+                f"Editar cuenca '{self.basin.name}':",
+                choices=[
+                    "Editar datos (area, pendiente, C, CN)",
+                    "Editar notas",
+                    "Eliminar cuenca",
+                    "← Volver",
+                ],
+            )
 
-        choices = []
-        for i, a in enumerate(self.basin.analyses):
-            storm = a.storm
-            choices.append(f"{i}: {storm.type} Tr{storm.return_period} P={storm.total_depth_mm:.1f}mm")
+            if action is None or "Volver" in action:
+                return
 
-        selected = self.select("Selecciona analisis:", choices)
-        if selected:
-            idx = int(selected.split(":")[0])
-            from hidropluvial.cli.session.preview import session_preview
-            self._safe_call(session_preview, session.id, analysis_idx=idx, hyetograph=True)
+            if "datos" in action.lower():
+                self._edit_basin()
+            elif "notas" in action.lower():
+                self._manage_notes()
+            elif "Eliminar" in action:
+                if self._delete_basin():
+                    return
 
     def _add_analysis(self) -> None:
         """Agrega mas analisis a la cuenca."""

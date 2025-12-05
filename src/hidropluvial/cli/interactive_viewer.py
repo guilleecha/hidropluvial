@@ -120,14 +120,21 @@ def plot_combined(
     plt.plot_size(width, height_hyeto)
 
     if storm.time_min and storm.intensity_mmhr:
-        # Convertir a horas para consistencia con hidrograma
-        time_hr = [t / 60 for t in storm.time_min]
+        # Calcular intervalo dt y convertir a horas
+        if len(storm.time_min) > 1:
+            dt_min = storm.time_min[1] - storm.time_min[0]
+        else:
+            dt_min = 5.0
+        dt_hr = dt_min / 60
 
-        # Usar barras para el hietograma
-        plt.bar(time_hr, storm.intensity_mmhr, color="cyan")
+        # Usar inicio de intervalo (time_min tiene el centro)
+        time_hr = [(t - dt_min/2) / 60 for t in storm.time_min]
+
+        # Usar barras con ancho explícito basado en dt
+        plt.bar(time_hr, storm.intensity_mmhr, color="cyan", width=dt_hr * 0.9)
 
         # Configurar ticks limpios en X (horas enteras)
-        max_time = max(time_hr) if time_hr else 6
+        max_time = max(time_hr) + dt_hr if time_hr else 6
         x_ticks = list(range(0, int(max_time) + 2))
         plt.xticks(x_ticks, [str(t) for t in x_ticks])
 

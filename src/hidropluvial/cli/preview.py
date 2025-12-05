@@ -10,6 +10,8 @@ from typing import Sequence
 
 import plotext as plt
 
+from hidropluvial.cli.formatters import format_flow
+
 
 # Caracteres para sparklines (8 niveles)
 SPARK_CHARS = " ▁▂▃▄▅▆▇█"
@@ -296,11 +298,12 @@ def print_summary_table_with_sparklines(rows: list[dict], show_sparkline: bool =
         x = row.get('x', 1.0) or 1.0
         qp = row.get('qpeak_m3s', 0)
         tp = row.get('tp_hr', 0)
+        qp_str = format_flow(qp)
 
         if show_sparkline and 'hydrograph_flow' in row:
             spark = sparkline(row['hydrograph_flow'], width=20)
-            print(f"{tc:12} {storm:10} {tr:>4} {x:>5.2f} {qp:>10.3f} {tp:>7.2f} {spark}")
+            print(f"{tc:12} {storm:10} {tr:>4} {x:>5.2f} {qp_str:>10} {tp:>7.2f} {spark}")
         else:
-            print(f"{tc:12} {storm:10} {tr:>4} {x:>5.2f} {qp:>10.3f} {tp:>7.2f}")
+            print(f"{tc:12} {storm:10} {tr:>4} {x:>5.2f} {qp_str:>10} {tp:>7.2f}")
 
     print("=" * len(header) + "\n")

@@ -6,6 +6,9 @@ from typing import Optional
 
 from hidropluvial.cli.wizard.menus.base import BaseMenu
 from hidropluvial.cli.wizard.menus.basin_management import BasinManagementMenu
+from hidropluvial.cli.theme import (
+    get_console, print_projects_table, print_sessions_table, print_info,
+)
 from hidropluvial.project import Project, get_project_manager
 
 
@@ -66,36 +69,24 @@ class ProjectManagementMenu(BaseMenu):
 
     def _show_overview(self, projects: list[dict], sessions: list[dict]) -> None:
         """Muestra resumen de proyectos."""
-        self.echo(f"\n{'='*65}")
-        self.echo(f"  GESTION DE PROYECTOS")
-        self.echo(f"{'='*65}")
+        console = get_console()
+        console.print()
 
         if projects:
-            self.echo(f"  {'ID':<10} {'Nombre':<28} {'Cuencas':>8} {'Analisis':>10}")
-            self.echo(f"  {'-'*60}")
-
-            for p in projects[:10]:
-                name = p['name'][:27] if len(p['name']) > 27 else p['name']
-                self.echo(
-                    f"  {p['id']:<10} {name:<28} {p['n_basins']:>8} {p['total_analyses']:>10}"
-                )
-
+            print_projects_table(projects[:10], title="Gestion de Proyectos")
             if len(projects) > 10:
-                self.echo(f"  ... y {len(projects) - 10} proyectos mas")
+                print_info(f"... y {len(projects) - 10} proyectos mas")
 
         if sessions:
-            self.echo(f"\n  --- Sesiones Legacy (no migradas): {len(sessions)} ---")
-            for s in sessions[:5]:
-                name = s['name'][:27] if len(s['name']) > 27 else s['name']
-                self.echo(f"    {s['id']}: {name} ({s['n_analyses']} analisis)")
-
+            console.print()
+            print_sessions_table(sessions[:5], title=f"Sesiones Legacy ({len(sessions)} no migradas)")
             if len(sessions) > 5:
-                self.echo(f"  ... y {len(sessions) - 5} sesiones mas")
-
-        self.echo(f"{'='*65}\n")
+                print_info(f"... y {len(sessions) - 5} sesiones mas")
 
         total_basins = sum(p.get("n_basins", 0) for p in projects)
-        self.echo(f"  Total: {len(projects)} proyectos, {total_basins + len(sessions)} cuencas\n")
+        console.print()
+        print_info(f"Total: {len(projects)} proyectos, {total_basins + len(sessions)} cuencas")
+        console.print()
 
     def _handle_action(self, action: str, projects: list[dict], sessions: list[dict]) -> None:
         """Maneja la accion seleccionada."""
@@ -311,15 +302,9 @@ class ProjectManagementMenu(BaseMenu):
                 self.echo("\n  No quedan sesiones legacy.\n")
                 return
 
-            self.echo(f"\n{'='*60}")
-            self.echo(f"  SESIONES LEGACY")
-            self.echo(f"{'='*60}")
-
-            for s in sessions:
-                name = s['name'][:35] if len(s['name']) > 35 else s['name']
-                self.echo(f"  {s['id']}: {name} ({s['n_analyses']} analisis)")
-
-            self.echo(f"{'='*60}\n")
+            console = get_console()
+            console.print()
+            print_sessions_table(sessions, title="Sesiones Legacy")
 
             action = self.select(
                 "Que deseas hacer?",

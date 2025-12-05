@@ -6,6 +6,9 @@ from typing import Optional
 
 from hidropluvial.cli.wizard.menus.base import BaseMenu
 from hidropluvial.cli.wizard.menus.cuenca_editor import CuencaEditor
+from hidropluvial.cli.theme import (
+    get_console, print_basins_table, print_header, print_info,
+)
 from hidropluvial.project import Project, Basin, get_project_manager
 
 
@@ -60,24 +63,14 @@ class BasinManagementMenu(BaseMenu):
 
     def _show_overview(self) -> None:
         """Muestra resumen de cuencas del proyecto."""
-        self.echo(f"\n{'='*60}")
-        self.echo(f"  CUENCAS DEL PROYECTO: {self.project.name}")
-        self.echo(f"{'='*60}")
+        console = get_console()
+        console.print()
 
-        if self.project.basins:
-            self.echo(f"  {'ID':<10} {'Nombre':<30} {'Area (ha)':>10} {'Analisis':>8}")
-            self.echo(f"  {'-'*58}")
+        title = f"Cuencas del Proyecto: {self.project.name}"
+        print_basins_table(self.project.basins, title=title)
 
-            for b in self.project.basins:
-                name = b.name[:29] if len(b.name) > 29 else b.name
-                self.echo(
-                    f"  {b.id:<10} {name:<30} {b.area_ha:>10.1f} {len(b.analyses):>8}"
-                )
-        else:
-            self.echo("  No hay cuencas en este proyecto.")
-
-        self.echo(f"{'='*60}")
-        self.echo(f"  Total: {self.project.n_basins} cuencas, {self.project.total_analyses} analisis\n")
+        print_info(f"Total: {self.project.n_basins} cuencas, {self.project.total_analyses} analisis")
+        console.print()
 
     def _handle_action(self, action: str) -> None:
         """Maneja la accion seleccionada."""

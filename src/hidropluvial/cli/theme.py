@@ -534,3 +534,136 @@ def create_analysis_table(show_method: bool = True) -> Table:
         table.add_column(name, justify=justify)
 
     return table
+
+
+def create_projects_table(title: str = None) -> Table:
+    """Crea tabla para listar proyectos."""
+    p = get_palette()
+
+    table = Table(
+        title=title,
+        title_style=f"bold {p.primary}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    table.add_column("ID", style=p.accent, justify="left")
+    table.add_column("Nombre", justify="left")
+    table.add_column("Cuencas", justify="right", style=p.number)
+    table.add_column("Analisis", justify="right", style=p.number)
+
+    return table
+
+
+def create_basins_table(title: str = None) -> Table:
+    """Crea tabla para listar cuencas."""
+    p = get_palette()
+
+    table = Table(
+        title=title,
+        title_style=f"bold {p.primary}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    table.add_column("ID", style=p.accent, justify="left")
+    table.add_column("Nombre", justify="left")
+    table.add_column("Area (ha)", justify="right", style=p.number)
+    table.add_column("Analisis", justify="right", style=p.number)
+
+    return table
+
+
+def create_sessions_table(title: str = None) -> Table:
+    """Crea tabla para listar sesiones legacy."""
+    p = get_palette()
+
+    table = Table(
+        title=title,
+        title_style=f"bold {p.primary}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    table.add_column("ID", style=p.accent, justify="left")
+    table.add_column("Nombre", justify="left")
+    table.add_column("Analisis", justify="right", style=p.number)
+
+    return table
+
+
+def print_projects_table(projects: list[dict], title: str = "PROYECTOS") -> None:
+    """Imprime tabla de proyectos."""
+    console = get_console()
+    p = get_palette()
+
+    if not projects:
+        console.print(f"  No hay proyectos.", style=p.muted)
+        return
+
+    table = create_projects_table(title)
+
+    for proj in projects:
+        name = proj['name'][:35] if len(proj['name']) > 35 else proj['name']
+        table.add_row(
+            proj['id'],
+            name,
+            str(proj.get('n_basins', 0)),
+            str(proj.get('total_analyses', 0)),
+        )
+
+    console.print(table)
+
+
+def print_basins_table(basins, title: str = "CUENCAS") -> None:
+    """Imprime tabla de cuencas."""
+    console = get_console()
+    p = get_palette()
+
+    if not basins:
+        console.print(f"  No hay cuencas.", style=p.muted)
+        return
+
+    table = create_basins_table(title)
+
+    for basin in basins:
+        name = basin.name[:35] if len(basin.name) > 35 else basin.name
+        table.add_row(
+            basin.id,
+            name,
+            f"{basin.area_ha:.1f}",
+            str(len(basin.analyses)),
+        )
+
+    console.print(table)
+
+
+def print_sessions_table(sessions: list[dict], title: str = "SESIONES LEGACY") -> None:
+    """Imprime tabla de sesiones legacy."""
+    console = get_console()
+    p = get_palette()
+
+    if not sessions:
+        console.print(f"  No hay sesiones.", style=p.muted)
+        return
+
+    table = create_sessions_table(title)
+
+    for sess in sessions:
+        name = sess['name'][:35] if len(sess['name']) > 35 else sess['name']
+        table.add_row(
+            sess['id'],
+            name,
+            str(sess.get('n_analyses', 0)),
+        )
+
+    console.print(table)

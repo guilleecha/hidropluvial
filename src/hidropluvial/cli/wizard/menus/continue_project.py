@@ -5,6 +5,7 @@ Menu para continuar con un proyecto/cuenca existente.
 from typing import Optional
 
 from hidropluvial.cli.wizard.menus.base import BaseMenu
+from hidropluvial.cli.theme import get_console, print_basins_detail_table
 from hidropluvial.project import Project, Basin, ProjectManager
 
 
@@ -166,17 +167,13 @@ class ContinueProjectMenu(BaseMenu):
 
     def _list_basins(self) -> None:
         """Lista las cuencas del proyecto."""
-        if not self.project.basins:
-            self.echo("  No hay cuencas en este proyecto.")
-            return
-
-        self.echo(f"\n  Cuencas en {self.project.name}:")
-        self.echo(f"  {'-'*50}")
-        for b in self.project.basins:
-            self.echo(f"  [{b.id}] {b.name}")
-            self.echo(f"       Area: {b.area_ha} ha, S: {b.slope_pct}%")
-            self.echo(f"       Analisis: {len(b.analyses)}")
-        self.echo("")
+        console = get_console()
+        console.print()
+        print_basins_detail_table(
+            self.project.basins,
+            title=f"Cuencas en {self.project.name}"
+        )
+        console.print()
 
     def _select_basin(self) -> Optional[Basin]:
         """Permite seleccionar una cuenca del proyecto."""

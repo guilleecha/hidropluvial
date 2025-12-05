@@ -625,7 +625,7 @@ def print_projects_table(projects: list[dict], title: str = "PROYECTOS") -> None
 
 
 def print_basins_table(basins, title: str = "CUENCAS") -> None:
-    """Imprime tabla de cuencas."""
+    """Imprime tabla de cuencas (version compacta)."""
     console = get_console()
     p = get_palette()
 
@@ -642,6 +642,73 @@ def print_basins_table(basins, title: str = "CUENCAS") -> None:
             name,
             f"{basin.area_ha:.1f}",
             str(len(basin.analyses)),
+        )
+
+    console.print(table)
+
+
+def print_basins_detail_table(basins, title: str = "CUENCAS") -> None:
+    """Imprime tabla detallada de cuencas con mas informacion."""
+    console = get_console()
+    p = get_palette()
+
+    if not basins:
+        console.print(f"  No hay cuencas.", style=p.muted)
+        return
+
+    table = Table(
+        title=title,
+        title_style=f"bold {p.primary}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    table.add_column("ID", style=p.accent, justify="left")
+    table.add_column("Nombre", justify="left")
+    table.add_column("Area", justify="right", style=p.number)
+    table.add_column("S%", justify="right", style=p.number)
+    table.add_column("C", justify="right", style=p.number)
+    table.add_column("CN", justify="right", style=p.number)
+    table.add_column("Analisis", justify="right")
+    table.add_column("Tr", justify="left", style=p.muted)
+
+    for basin in basins:
+        name = basin.name[:25] if len(basin.name) > 25 else basin.name
+
+        # Formatear C y CN
+        c_str = f"{basin.c:.2f}" if basin.c else "-"
+        cn_str = str(basin.cn) if basin.cn else "-"
+
+        # Obtener periodos de retorno unicos
+        if basin.analyses:
+            trs = sorted(set(a.storm.return_period for a in basin.analyses))
+            tr_str = ",".join(str(t) for t in trs[:4])
+            if len(trs) > 4:
+                tr_str += "..."
+        else:
+            tr_str = "-"
+
+        # Contar analisis y colorear segun cantidad
+        n_analyses = len(basin.analyses)
+        if n_analyses == 0:
+            analyses_str = Text("0", style=p.muted)
+        elif n_analyses < 5:
+            analyses_str = Text(str(n_analyses), style=p.warning)
+        else:
+            analyses_str = Text(str(n_analyses), style=p.success)
+
+        table.add_row(
+            basin.id,
+            name,
+            f"{basin.area_ha:.1f}",
+            f"{basin.slope_pct:.1f}",
+            c_str,
+            cn_str,
+            analyses_str,
+            tr_str,
         )
 
     console.print(table)

@@ -6,12 +6,18 @@ import pytest
 from hidropluvial.core.idf import (
     sherman_intensity,
     bernard_intensity,
+    koutsoyiannis_intensity,
     depth_from_intensity,
     intensity_from_depth,
     generate_idf_table,
     get_intensity,
+    get_depth,
 )
-from hidropluvial.config import ShermanCoefficients, BernardCoefficients
+from hidropluvial.config import (
+    ShermanCoefficients,
+    BernardCoefficients,
+    KoutsoyiannisCoefficients,
+)
 
 
 class TestShermanIntensity:
@@ -116,3 +122,189 @@ class TestGetIntensity:
         """Test método inválido."""
         with pytest.raises(ValueError, match="Método desconocido"):
             get_intensity(60, 100, "invalid_method", sherman_coeffs)
+
+    def test_bernard_method(self):
+        """Test método Bernard."""
+        coeffs = BernardCoefficients(a=1500.0, m=0.2, n=0.7)
+        intensity = get_intensity(60, 100, "bernard", coeffs)
+        assert intensity > 0
+
+    def test_koutsoyiannis_method(self):
+        """Test método Koutsoyiannis."""
+        coeffs = KoutsoyiannisCoefficients(mu=50.0, sigma=15.0, theta=10.0, eta=0.7)
+        intensity = get_intensity(60, 10, "koutsoyiannis", coeffs)
+        assert intensity > 0
+
+    def test_wrong_coeffs_type_sherman(self):
+        """Test tipo de coeficientes incorrecto para Sherman."""
+        coeffs = BernardCoefficients(a=1500.0, m=0.2, n=0.7)
+        with pytest.raises(TypeError, match="ShermanCoefficients"):
+            get_intensity(60, 100, "sherman", coeffs)
+
+    def test_wrong_coeffs_type_bernard(self, sherman_coeffs):
+        """Test tipo de coeficientes incorrecto para Bernard."""
+        with pytest.raises(TypeError, match="BernardCoefficients"):
+            get_intensity(60, 100, "bernard", sherman_coeffs)
+
+    def test_wrong_coeffs_type_koutsoyiannis(self, sherman_coeffs):
+        """Test tipo de coeficientes incorrecto para Koutsoyiannis."""
+        with pytest.raises(TypeError, match="KoutsoyiannisCoefficients"):
+            get_intensity(60, 100, "koutsoyiannis", sherman_coeffs)
+
+
+class TestGetDepth:
+    """Tests para función get_depth."""
+
+    def test_sherman_method(self, sherman_coeffs):
+        """Test profundidad con método Sherman."""
+        depth = get_depth(60, 100, "sherman", sherman_coeffs)
+        assert depth > 0
+
+    def test_depth_equals_intensity_times_duration(self, sherman_coeffs):
+        """Test que depth = intensity * duration / 60."""
+        duration = 60  # minutos
+        intensity = get_intensity(duration, 100, "sherman", sherman_coeffs)
+        depth = get_depth(duration, 100, "sherman", sherman_coeffs)
+        expected_depth = intensity * duration / 60
+        assert depth == pytest.approx(expected_depth, rel=0.01)
+
+
+class TestBernardIntensity:
+    """Tests para ecuación Bernard."""
+
+    def test_basic_calculation(self):
+        """Test cálculo básico de intensidad Bernard."""
+        coeffs = BernardCoefficients(a=1500.0, m=0.2, n=0.7)
+        intensity = bernard_intensity(60, 100, coeffs)
+        assert intensity > 0
+        assert isinstance(intensity, float)
+
+    def test_intensity_decreases_with_duration(self):
+        """Intensidad debe disminuir con mayor duración."""
+        coeffs = BernardCoefficients(a=1500.0, m=0.2, n=0.7)
+        i_30 = bernard_intensity(30, 100, coeffs)
+        i_60 = bernard_intensity(60, 100, coeffs)
+        i_120 = bernard_intensity(120, 100, coeffs)
+        assert i_30 > i_60 > i_120
+
+    def test_intensity_increases_with_return_period(self):
+        """Intensidad debe aumentar con mayor período de retorno."""
+        coeffs = BernardCoefficients(a=1500.0, m=0.2, n=0.7)
+        i_10 = bernard_intensity(60, 10, coeffs)
+        i_50 = bernard_intensity(60, 50, coeffs)
+        i_100 = bernard_intensity(60, 100, coeffs)
+        assert i_10 < i_50 < i_100
+
+    def test_array_input(self):
+        """Test con array de duraciones."""
+        coeffs = BernardCoefficients(a=1500.0, m=0.2, n=0.7)
+        durations = np.array([15, 30, 60, 120])
+        intensities = bernard_intensity(durations, 100, coeffs)
+        assert len(intensities) == 4
+        assert all(intensities > 0)
+
+    def test_very_short_duration(self):
+        """Test con duración muy corta (evita división por cero)."""
+        coeffs = BernardCoefficients(a=1500.0, m=0.2, n=0.7)
+        # Duración muy pequeña, debe manejar sin error
+        intensity = bernard_intensity(0.01, 10, coeffs)
+        assert intensity > 0
+
+
+class TestKoutsoyiannisIntensity:
+    """Tests para ecuación Koutsoyiannis."""
+
+    def test_basic_calculation(self):
+        """Test cálculo básico de intensidad Koutsoyiannis."""
+        coeffs = KoutsoyiannisCoefficients(mu=50.0, sigma=15.0, theta=10.0, eta=0.7)
+        intensity = koutsoyiannis_intensity(60, 10, coeffs)
+        assert intensity > 0
+        assert isinstance(intensity, float)
+
+    def test_intensity_decreases_with_duration(self):
+        """Intensidad debe disminuir con mayor duración."""
+        coeffs = KoutsoyiannisCoefficients(mu=50.0, sigma=15.0, theta=10.0, eta=0.7)
+        i_30 = koutsoyiannis_intensity(30, 10, coeffs)
+        i_60 = koutsoyiannis_intensity(60, 10, coeffs)
+        i_120 = koutsoyiannis_intensity(120, 10, coeffs)
+        assert i_30 > i_60 > i_120
+
+    def test_intensity_increases_with_return_period(self):
+        """Intensidad debe aumentar con mayor período de retorno."""
+        coeffs = KoutsoyiannisCoefficients(mu=50.0, sigma=15.0, theta=10.0, eta=0.7)
+        i_10 = koutsoyiannis_intensity(60, 10, coeffs)
+        i_50 = koutsoyiannis_intensity(60, 50, coeffs)
+        i_100 = koutsoyiannis_intensity(60, 100, coeffs)
+        assert i_10 < i_50 < i_100
+
+    def test_array_input(self):
+        """Test con array de duraciones."""
+        coeffs = KoutsoyiannisCoefficients(mu=50.0, sigma=15.0, theta=10.0, eta=0.7)
+        durations = np.array([15, 30, 60, 120])
+        intensities = koutsoyiannis_intensity(durations, 10, coeffs)
+        assert len(intensities) == 4
+        assert all(intensities > 0)
+
+    def test_invalid_return_period(self):
+        """Test con período de retorno <= 1."""
+        coeffs = KoutsoyiannisCoefficients(mu=50.0, sigma=15.0, theta=10.0, eta=0.7)
+        with pytest.raises(ValueError, match="> 1"):
+            koutsoyiannis_intensity(60, 1, coeffs)
+
+
+class TestGenerateIDFTableMethods:
+    """Tests adicionales para generación de tabla IDF con diferentes métodos."""
+
+    def test_bernard_table(self):
+        """Test generación de tabla con método Bernard."""
+        coeffs = BernardCoefficients(a=1500.0, m=0.2, n=0.7)
+        durations = [15, 30, 60, 120]
+        periods = [10, 50, 100]
+
+        result = generate_idf_table(durations, periods, "bernard", coeffs)
+
+        assert result["intensities"].shape == (3, 4)
+        assert np.all(result["intensities"] > 0)
+
+    def test_koutsoyiannis_table(self):
+        """Test generación de tabla con método Koutsoyiannis."""
+        coeffs = KoutsoyiannisCoefficients(mu=50.0, sigma=15.0, theta=10.0, eta=0.7)
+        durations = [15, 30, 60, 120]
+        periods = [10, 50, 100]
+
+        result = generate_idf_table(durations, periods, "koutsoyiannis", coeffs)
+
+        assert result["intensities"].shape == (3, 4)
+        assert np.all(result["intensities"] > 0)
+
+    def test_invalid_method_table(self, sherman_coeffs):
+        """Test método inválido en generación de tabla."""
+        with pytest.raises(ValueError, match="Método desconocido"):
+            generate_idf_table([60], [10], "invalid", sherman_coeffs)
+
+    def test_wrong_coeffs_type_in_table(self, sherman_coeffs):
+        """Test tipo de coeficientes incorrecto en tabla Bernard."""
+        with pytest.raises(TypeError):
+            generate_idf_table([60], [10], "bernard", sherman_coeffs)
+
+
+class TestDepthIntensityArrays:
+    """Tests adicionales para conversiones con arrays."""
+
+    def test_depth_from_intensity_array(self):
+        """Test conversión con arrays."""
+        intensities = np.array([120, 60, 30])
+        durations = np.array([30, 60, 120])
+        depths = depth_from_intensity(intensities, durations)
+        # 120 * 30/60 = 60, 60 * 60/60 = 60, 30 * 120/60 = 60
+        expected = np.array([60, 60, 60])
+        np.testing.assert_array_almost_equal(depths, expected)
+
+    def test_intensity_from_depth_array(self):
+        """Test conversión inversa con arrays."""
+        depths = np.array([60, 60, 60])
+        durations = np.array([30, 60, 120])
+        intensities = intensity_from_depth(depths, durations)
+        # 60 * 60/30 = 120, 60 * 60/60 = 60, 60 * 60/120 = 30
+        expected = np.array([120, 60, 30])
+        np.testing.assert_array_almost_equal(intensities, expected)

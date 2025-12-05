@@ -120,7 +120,7 @@ def _select_or_create_project_for_basin() -> Optional[Project]:
         for p in projects:
             choices.append(f"{p['id']} - {p['name']} ({p['n_basins']} cuencas)")
 
-    choices.append("Cancelar")
+    choices.append("← Volver al menu principal")
 
     choice = questionary.select(
         "Donde deseas crear la cuenca?",
@@ -128,7 +128,7 @@ def _select_or_create_project_for_basin() -> Optional[Project]:
         style=WIZARD_STYLE,
     ).ask()
 
-    if choice is None or "Cancelar" in choice:
+    if choice is None or "Volver" in choice:
         return None
 
     if "Crear nuevo proyecto" in choice:

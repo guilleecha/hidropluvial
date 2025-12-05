@@ -9,6 +9,17 @@ import typer
 
 from hidropluvial.cli.session.base import get_session_manager
 from hidropluvial.cli.wizard.config import WizardConfig
+from hidropluvial.cli.theme import (
+    get_console,
+    get_palette,
+    print_success,
+    print_info,
+    print_section,
+    print_completion_banner,
+    print_result_row,
+    create_analysis_table,
+)
+from rich.text import Text
 from hidropluvial.config import AntecedentMoistureCondition
 from hidropluvial.core import (
     kirpich,
@@ -145,7 +156,7 @@ class AnalysisRunner:
                 name=f"Proyecto - {self.config.nombre}",
                 description=f"Proyecto creado automaticamente para la cuenca {self.config.nombre}",
             )
-            typer.echo(f"  + Proyecto creado: {self.project.id}")
+            print_success(f"Proyecto creado: {self.project.id}")
 
         # Convertir session a basin y agregar al proyecto
         self.basin = Basin.from_session(self.session)
@@ -188,7 +199,7 @@ class AnalysisRunner:
             )
             self.manager.set_weighted_coefficient(self.session, weighted_coef)
 
-        typer.echo(f"  + Sesion creada: {self.session.id}")
+        print_success(f"Sesion creada: {self.session.id}")
 
     def _calculate_tc(self) -> None:
         """Calcula tiempo de concentracion con los metodos seleccionados."""
@@ -219,7 +230,7 @@ class AnalysisRunner:
 
             if tc_hr:
                 result = self.manager.add_tc_result(self.session, method, tc_hr, **tc_params)
-                typer.echo(f"  + Tc ({method}): {result.tc_min:.1f} min")
+                print_result_row(f"Tc ({method})", f"{result.tc_min:.1f}", "min")
 
     def _run_analyses(self) -> None:
         """Ejecuta todos los analisis."""
@@ -246,7 +257,7 @@ class AnalysisRunner:
                             self._run_single_analysis(tc_result, tr, 1.0, storm_code, runoff_method)
                             n_analyses += 1
 
-        typer.echo(f"  + {n_analyses} analisis completados")
+        print_success(f"{n_analyses} analisis completados")
 
     def _run_single_analysis(self, tc_result, tr: int, x: float, storm_code: str, runoff_method: str = "racional") -> None:
         """Ejecuta un analisis individual.
@@ -405,22 +416,33 @@ class AnalysisRunner:
         """Genera reporte LaTeX."""
         from hidropluvial.cli.session.report import session_report
 
-        typer.echo(f"\n  Generando reporte...")
+        print_info("Generando reporte...")
         session_report(self.session.id, self.config.output_name, author=None, template_dir=None)
 
     def _print_summary(self) -> None:
         """Imprime resumen final."""
-        typer.echo("\n" + "=" * 60)
-        typer.echo("  ANALISIS COMPLETADO")
-        typer.echo("=" * 60)
+        console = get_console()
+        p = get_palette()
 
         rows = self.manager.get_summary_table(self.session)
+        n_analyses = len(rows) if rows else 0
+
+        print_completion_banner(n_analyses, self.session.id)
+
         if rows:
             max_q = max(rows, key=lambda r: r['qpeak_m3s'])
-            typer.echo(f"\n  Caudal maximo: {max_q['qpeak_m3s']:.3f} m3/s")
-            typer.echo(f"  ({max_q['tc_method']} + {max_q['storm']} Tr{max_q['tr']})")
 
-        typer.echo(f"\n  Sesion guardada: {self.session.id}")
+            # Mostrar caudal máximo destacado
+            text = Text()
+            text.append("  Caudal maximo: ", style=p.label)
+            text.append(f"{max_q['qpeak_m3s']:.2f}", style=f"bold {p.accent}")
+            text.append(" m3/s", style=p.unit)
+            console.print(text)
+
+            text = Text()
+            text.append(f"  ({max_q['tc_method']} + {max_q['storm']} Tr{max_q['tr']})", style=p.muted)
+            console.print(text)
+            console.print()
 
 
 class AdditionalAnalysisRunner:
@@ -621,7 +643,7 @@ class AdditionalAnalysisRunner:
                     if storm_code != "gz":
                         break
 
-        typer.echo(f"  + {n_analyses} analisis agregados")
-        typer.echo(f"  Total en sesion: {len(self.session.analyses) + n_analyses} analisis")
+        print_success(f"{n_analyses} analisis agregados")
+        print_info(f"Total en sesion: {len(self.session.analyses) + n_analyses} analisis")
 
         return n_analyses

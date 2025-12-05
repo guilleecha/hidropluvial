@@ -7,7 +7,7 @@ from typing import Optional
 import typer
 import questionary
 
-from hidropluvial.cli.wizard.styles import WIZARD_STYLE
+from hidropluvial.cli.wizard.styles import WIZARD_STYLE, print_banner, get_console
 from hidropluvial.cli.wizard.config import WizardConfig
 from hidropluvial.cli.wizard.runner import AnalysisRunner
 from hidropluvial.cli.wizard.menus import (
@@ -22,12 +22,7 @@ def wizard_main() -> None:
     """
     Asistente interactivo para crear analisis hidrologicos.
     """
-    typer.echo("""
-+-------------------------------------------------------------+
-|         HIDROPLUVIAL - Asistente de Analisis                |
-|         Calculos hidrologicos para Uruguay                  |
-+-------------------------------------------------------------+
-""")
+    print_banner()
 
     while True:
         # Menu principal

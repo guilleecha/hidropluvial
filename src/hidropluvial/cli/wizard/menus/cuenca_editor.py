@@ -141,24 +141,154 @@ class CuencaEditor:
         return new_values
 
     def _collect_c_cn_values(self, new_values: dict) -> None:
-        """Recolecta valores de C y CN (solo si area no cambio)."""
-        # Coef C
-        c_default = self.cuenca.c if self.cuenca.c else "N/A"
-        val = self._ask_float(f"Coef. C [{c_default}]:", self.cuenca.c or 0)
-        if val is not None and val != 0:
-            new_values["c"] = val
+        """Recolecta valores de C y CN (area no cambio)."""
+        area = self.cuenca.area_ha
 
-        # CN
-        cn_str = questionary.text(
-            f"CN [{self.cuenca.cn if self.cuenca.cn else 'N/A'}]:",
-            default=str(self.cuenca.cn) if self.cuenca.cn else "",
+        # Preguntar si quiere modificar C
+        if self.cuenca.c:
+            c_result = self._ask_coefficient_edit("C", self.cuenca.c, area)
+            if c_result is not None:
+                new_values["c"] = c_result
+        else:
+            # No tiene C, preguntar si quiere agregar
+            add_c = questionary.confirm(
+                "Agregar coeficiente C (Racional)?",
+                default=False,
+                style=WIZARD_STYLE,
+            ).ask()
+            if add_c:
+                c_result = self._ask_new_coefficient("C", area)
+                if c_result is not None:
+                    new_values["c"] = c_result
+
+        # Preguntar si quiere modificar CN
+        if self.cuenca.cn:
+            cn_result = self._ask_cn_edit(self.cuenca.cn, area)
+            if cn_result is not None:
+                new_values["cn"] = cn_result
+        else:
+            # No tiene CN, preguntar si quiere agregar
+            add_cn = questionary.confirm(
+                "Agregar CN (SCS)?",
+                default=False,
+                style=WIZARD_STYLE,
+            ).ask()
+            if add_cn:
+                cn_result = self._ask_new_cn(area)
+                if cn_result is not None:
+                    new_values["cn"] = cn_result
+
+    def _ask_coefficient_edit(self, coef_name: str, current: float, area: float) -> Optional[float]:
+        """Pregunta como editar un coeficiente C existente."""
+        choice = questionary.select(
+            f"Coeficiente {coef_name} actual = {current:.2f}. Que deseas hacer?",
+            choices=[
+                f"Mantener {coef_name} = {current:.2f}",
+                f"Recalcular {coef_name} usando tablas de coberturas",
+                f"Ingresar nuevo valor de {coef_name} directamente",
+            ],
             style=WIZARD_STYLE,
         ).ask()
-        if cn_str and cn_str.strip() and cn_str != str(self.cuenca.cn):
-            try:
-                new_values["cn"] = int(cn_str)
-            except ValueError:
-                pass
+
+        if choice is None or "Mantener" in choice:
+            return None
+
+        if "Recalcular" in choice:
+            return self._recalculate_c(area)
+
+        if "Ingresar" in choice:
+            val = self._ask_float(f"Nuevo valor de {coef_name} (0.1-1.0):", current)
+            return val
+
+        return None
+
+    def _ask_new_coefficient(self, coef_name: str, area: float) -> Optional[float]:
+        """Pregunta como ingresar un nuevo coeficiente C."""
+        choice = questionary.select(
+            f"Como deseas configurar {coef_name}?",
+            choices=[
+                f"Calcular {coef_name} usando tablas de coberturas",
+                f"Ingresar valor de {coef_name} directamente",
+                "Cancelar",
+            ],
+            style=WIZARD_STYLE,
+        ).ask()
+
+        if choice is None or "Cancelar" in choice:
+            return None
+
+        if "Calcular" in choice:
+            return self._recalculate_c(area)
+
+        if "Ingresar" in choice:
+            val = self._ask_float(f"Valor de {coef_name} (0.1-1.0):", 0.5)
+            return val
+
+        return None
+
+    def _ask_cn_edit(self, current_cn: int, area: float) -> Optional[int]:
+        """Pregunta como editar un CN existente."""
+        choice = questionary.select(
+            f"CN actual = {current_cn}. Que deseas hacer?",
+            choices=[
+                f"Mantener CN = {current_cn}",
+                "Recalcular CN usando tablas de coberturas",
+                "Ingresar nuevo valor de CN directamente",
+            ],
+            style=WIZARD_STYLE,
+        ).ask()
+
+        if choice is None or "Mantener" in choice:
+            return None
+
+        if "Recalcular" in choice:
+            return self._recalculate_cn(area)
+
+        if "Ingresar" in choice:
+            cn_str = questionary.text(
+                "Nuevo valor de CN (30-98):",
+                default=str(current_cn),
+                style=WIZARD_STYLE,
+            ).ask()
+            if cn_str:
+                try:
+                    return int(cn_str)
+                except ValueError:
+                    pass
+
+        return None
+
+    def _ask_new_cn(self, area: float) -> Optional[int]:
+        """Pregunta como ingresar un nuevo CN."""
+        choice = questionary.select(
+            "Como deseas configurar CN?",
+            choices=[
+                "Calcular CN usando tablas de coberturas",
+                "Ingresar valor de CN directamente",
+                "Cancelar",
+            ],
+            style=WIZARD_STYLE,
+        ).ask()
+
+        if choice is None or "Cancelar" in choice:
+            return None
+
+        if "Calcular" in choice:
+            return self._recalculate_cn(area)
+
+        if "Ingresar" in choice:
+            cn_str = questionary.text(
+                "Valor de CN (30-98):",
+                default="75",
+                style=WIZARD_STYLE,
+            ).ask()
+            if cn_str:
+                try:
+                    return int(cn_str)
+                except ValueError:
+                    pass
+
+        return None
 
     def _handle_area_change(self, new_values: dict) -> str:
         """

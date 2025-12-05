@@ -16,6 +16,10 @@ pytest tests/ -v
 
 ### Últimas Actualizaciones
 
+- **Visor interactivo combinado**: Hietograma + hidrograma en la misma pantalla
+- **Unidad de tiempo adaptativa**: Minutos (<2h) o horas (≥2h) según duración de tormenta
+- **Tablas Rich mejoradas**: `print_analyses_summary_table()` y `print_comparison_table()`
+- **Menú reorganizado**: Submenú "Editar cuenca..." agrupa opciones de edición
 - **Gestión de Proyectos/Cuencas**: Nueva arquitectura jerárquica (Project → Basin)
 - **Parámetros de hidrograma**: tp (tiempo pico unitario), tb (tiempo base), Tp (tiempo pico resultado)
 - **Unidades mejoradas**: Volumen en hm³, caudal con 2 cifras significativas
@@ -189,6 +193,13 @@ Project (Estudio/Trabajo)
 ---
 
 ## Changelog Reciente
+
+### v1.2.0 (Diciembre 2024)
+- Visor interactivo combinado: hietograma + hidrograma en la misma pantalla
+- Unidad de tiempo adaptativa: minutos (<2h) o horas (≥2h) según duración
+- Tablas Rich mejoradas con estilo consistente
+- Menú reorganizado: submenú "Editar cuenca..." agrupa opciones
+- Navegación con flechas (←/→/↑/↓) en el visor de gráficos
 
 ### v1.1.0 (Diciembre 2024)
 - Nueva arquitectura Project/Basin

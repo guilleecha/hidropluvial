@@ -512,15 +512,69 @@ Una vez seleccionada una cuenca:
 ```
 ? Que deseas hacer?
 > Ver tabla resumen
-  Ver hidrogramas (navegacion interactiva)
+  Ver graficos (hietograma + hidrograma)
   Comparar hidrogramas
-  Ver hietograma
   Agregar mas analisis
   Filtrar resultados
   Exportar (Excel/LaTeX)
-  Editar datos de la cuenca
-  Agregar/editar notas
+  Editar cuenca...
+```
+
+### Visor Interactivo de Gráficos
+
+El visor interactivo muestra **hietograma e hidrograma combinados** en la misma pantalla, permitiendo ver la relación causa-efecto entre la lluvia y el caudal.
+
+```
+? Que deseas hacer?
+> Ver graficos (hietograma + hidrograma)
+```
+
+**Navegación:**
+- `←` / `→`: Cambiar entre análisis
+- `↑` / `↓`: Ir al primero / último
+- `q` / `ESC`: Salir del visor
+
+**Características:**
+- Hietograma en la parte superior con barras de intensidad
+- Hidrograma en la parte inferior con curva de caudal
+- Marca del caudal pico con ×
+- Unidad de tiempo adaptativa:
+  - Minutos si la tormenta dura < 2 horas
+  - Horas si la tormenta dura ≥ 2 horas
+
+```
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │           Hietograma - P=106.2mm, imax=54.3mm/h                     │
+  │  60 ┤                                                                │
+  │  40 ┤   ████                                                         │
+  │  20 ┤███████████████                                                 │
+  │   0 └────────────────────────────────────────────────────────(min)   │
+  ├─────────────────────────────────────────────────────────────────────┤
+  │           Hidrograma - Qp=12 m3/s, Tp=35min                         │
+  │  12 ┤              ×                                                 │
+  │   8 ┤            ╱   ╲                                               │
+  │   4 ┤          ╱       ╲                                             │
+  │   0 └────────────────────────────────────────────────Tiempo (h)     │
+  └─────────────────────────────────────────────────────────────────────┘
+  [1/12] Kirpich + GZ Tr10
+
+  Cuenca: Las Piedras
+  Tc=23min  tp=29min  X=1.00  tb=77min
+  P=106.2mm  Pe=65.7mm  Vol=0.041hm3
+
+  [<-] Anterior  [->] Siguiente  [q] Salir
+```
+
+### Submenú Editar Cuenca
+
+Las opciones de edición están agrupadas:
+
+```
+? Editar cuenca 'Las Piedras':
+> Editar datos (area, pendiente, C, CN)
+  Editar notas
   Eliminar cuenca
+  ← Volver
 ```
 
 ---

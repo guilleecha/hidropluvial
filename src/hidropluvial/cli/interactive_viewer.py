@@ -120,27 +120,44 @@ def plot_combined(
     plt.plot_size(width, height_hyeto)
 
     if storm.time_min and storm.intensity_mmhr:
-        # Calcular intervalo dt y convertir a horas
+        # Calcular intervalo dt
         if len(storm.time_min) > 1:
             dt_min = storm.time_min[1] - storm.time_min[0]
         else:
             dt_min = 5.0
-        dt_hr = dt_min / 60
 
-        # Usar inicio de intervalo (time_min tiene el centro)
-        time_hr = [(t - dt_min/2) / 60 for t in storm.time_min]
+        # Calcular duracion total de la tormenta
+        storm_duration_min = max(storm.time_min) + dt_min / 2 if storm.time_min else 60
+
+        # Usar minutos si duracion < 2 horas, sino horas
+        use_minutes = storm_duration_min < 120
+
+        if use_minutes:
+            # Tiempo en minutos
+            time_values = [(t - dt_min/2) for t in storm.time_min]
+            dt_value = dt_min
+            time_label = "min"
+            # Ticks cada 10 o 15 minutos segun duracion
+            tick_step = 10 if storm_duration_min <= 60 else 15
+            max_time = max(time_values) + dt_value if time_values else 60
+            x_ticks = list(range(0, int(max_time) + tick_step, tick_step))
+        else:
+            # Tiempo en horas
+            time_values = [(t - dt_min/2) / 60 for t in storm.time_min]
+            dt_value = dt_min / 60
+            time_label = "h"
+            max_time = max(time_values) + dt_value if time_values else 6
+            x_ticks = list(range(0, int(max_time) + 2))
 
         # Usar barras con ancho explícito basado en dt
-        plt.bar(time_hr, storm.intensity_mmhr, color="cyan", width=dt_hr * 0.9)
+        plt.bar(time_values, storm.intensity_mmhr, color="cyan", width=dt_value * 0.9)
 
-        # Configurar ticks limpios en X (horas enteras)
-        max_time = max(time_hr) + dt_hr if time_hr else 6
-        x_ticks = list(range(0, int(max_time) + 2))
+        # Configurar ticks limpios en X
         plt.xticks(x_ticks, [str(t) for t in x_ticks])
 
         plt.title(f"Hietograma - P={storm.total_depth_mm:.1f}mm, imax={storm.peak_intensity_mmhr:.1f}mm/h")
         plt.ylabel("i (mm/h)")
-        plt.xlabel("")  # Sin label en X para el superior
+        plt.xlabel(f"({time_label})")  # Indicar unidad usada
     else:
         plt.title("Hietograma - Sin datos")
 

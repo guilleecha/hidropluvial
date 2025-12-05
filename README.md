@@ -15,6 +15,7 @@
 - **Tiempo de concentración** - Kirpich, Témez, Desbordes (DINAGUA)
 - **Escorrentía** - SCS Curve Number (con AMC y λ configurable), Método Racional
 - **Hidrogramas** - SCS triangular/curvilíneo, Triangular con factor X
+- **Visor interactivo** - Hietograma + hidrograma combinados con navegación por teclado
 - **Gestión de Proyectos y Cuencas** - Organización jerárquica para estudios complejos
 - **Reportes LaTeX** - Memorias de cálculo con gráficos TikZ/PGFPlots
 - **Exportación** - Excel, CSV, fichas técnicas PDF

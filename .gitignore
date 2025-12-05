@@ -43,6 +43,9 @@ dmypy.json
 # Configuración MCP (contiene tokens/API keys)
 .mcp.json
 
+# Configuración local de Claude Code
+.claude/settings.local.json
+
 # Variables de entorno
 .env
 .env.local
@@ -63,6 +66,20 @@ temp/
 
 # Directorio de reportes generados
 output/
+outputs/
+
+# Archivos Excel temporales
+~$*.xlsx
+*.xlsx
+
+# PDFs generados (mantener solo fuentes)
+examples/**/*.pdf
+
+# Archivos de prueba locales
+prueba_*.xlsx
+
+# Archivos temporales de pip/instalación
+=*
 
 # Salidas LaTeX compiladas (mantener .tex fuentes)
 *.aux

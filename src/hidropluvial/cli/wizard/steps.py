@@ -39,6 +39,11 @@ class WizardState:
     # Datos de ponderación
     c_weighted_data: Optional[dict] = None
 
+    # Parámetros avanzados
+    amc: str = "II"  # Condición de humedad antecedente: I, II, III
+    lambda_coef: float = 0.2  # Coeficiente lambda para abstracción inicial
+    t0_min: float = 5.0  # Tiempo de entrada inicial para Desbordes
+
     # Parámetros de análisis
     tc_methods: list[str] = field(default_factory=list)
     storm_codes: list[str] = field(default_factory=lambda: ["gz"])
@@ -652,6 +657,155 @@ class StepLongitud(WizardStep):
         return StepResult.NEXT
 
 
+class StepParametrosAvanzados(WizardStep):
+    """Paso: Parámetros avanzados (AMC, Lambda, t0)."""
+
+    @property
+    def title(self) -> str:
+        return "Parámetros Avanzados"
+
+    def execute(self) -> StepResult:
+        self.echo(f"\n-- {self.title} --\n")
+
+        # Preguntar si quiere configurar parámetros avanzados
+        res, configurar = self.confirm(
+            "¿Configurar parámetros avanzados? (AMC, Lambda, t0)",
+            default=False,
+        )
+
+        if res != StepResult.NEXT:
+            return res
+
+        if not configurar:
+            # Usar valores por defecto
+            self.state.amc = "II"
+            self.state.lambda_coef = 0.2
+            self.state.t0_min = 5.0
+            return StepResult.NEXT
+
+        # Configurar AMC si usa CN
+        if self.state.cn:
+            res = self._configure_amc()
+            if res != StepResult.NEXT:
+                return res
+
+            # Configurar Lambda
+            res = self._configure_lambda()
+            if res != StepResult.NEXT:
+                return res
+
+        # Configurar t0 si usa C (método Desbordes)
+        if self.state.c:
+            res = self._configure_t0()
+            if res != StepResult.NEXT:
+                return res
+
+        return StepResult.NEXT
+
+    def _configure_amc(self) -> StepResult:
+        """Configura la condición de humedad antecedente."""
+        self.echo("\n  Condición de Humedad Antecedente (AMC):")
+        self.echo("    I  - Suelo seco (menor escorrentía)")
+        self.echo("    II - Condición promedio (default)")
+        self.echo("    III - Suelo húmedo (mayor escorrentía)")
+
+        amc_choices = [
+            "AMC I - Suelo seco",
+            "AMC II - Condición promedio",
+            "AMC III - Suelo húmedo",
+        ]
+
+        res, amc_choice = self.select("\nCondición AMC:", amc_choices)
+
+        if res != StepResult.NEXT:
+            return res
+
+        if amc_choice:
+            if "AMC I" in amc_choice:
+                self.state.amc = "I"
+            elif "AMC III" in amc_choice:
+                self.state.amc = "III"
+            else:
+                self.state.amc = "II"
+
+        return StepResult.NEXT
+
+    def _configure_lambda(self) -> StepResult:
+        """Configura el coeficiente Lambda."""
+        self.echo("\n  Coeficiente Lambda (λ) para abstracción inicial:")
+        self.echo("    Ia = λ × S")
+        self.echo("    λ = 0.20 - Valor tradicional SCS")
+        self.echo("    λ = 0.05 - Cuencas urbanas (Hawkins 2002)")
+
+        lambda_choices = [
+            "0.20 - Tradicional SCS (default)",
+            "0.05 - Cuencas urbanas",
+            "Otro valor",
+        ]
+
+        res, lambda_choice = self.select("\nCoeficiente λ:", lambda_choices)
+
+        if res != StepResult.NEXT:
+            return res
+
+        if lambda_choice:
+            if "0.20" in lambda_choice:
+                self.state.lambda_coef = 0.2
+            elif "0.05" in lambda_choice:
+                self.state.lambda_coef = 0.05
+            elif "Otro" in lambda_choice:
+                res, val = self.text(
+                    "Valor de λ (0.01 - 0.30):",
+                    validate=lambda x: validate_range(x, 0.01, 0.30),
+                    default="0.20",
+                )
+                if res != StepResult.NEXT:
+                    return res
+                if val:
+                    self.state.lambda_coef = float(val)
+
+        return StepResult.NEXT
+
+    def _configure_t0(self) -> StepResult:
+        """Configura el tiempo de entrada inicial t0."""
+        self.echo("\n  Tiempo de entrada inicial (t0) para método Desbordes:")
+        self.echo("    t0 = 5 min - Valor típico (default)")
+        self.echo("    t0 < 5 min - Cuencas muy urbanizadas")
+        self.echo("    t0 > 5 min - Cuencas rurales")
+
+        t0_choices = [
+            "5 min - Valor típico (default)",
+            "3 min - Cuenca muy urbanizada",
+            "10 min - Cuenca rural",
+            "Otro valor",
+        ]
+
+        res, t0_choice = self.select("\nTiempo t0:", t0_choices)
+
+        if res != StepResult.NEXT:
+            return res
+
+        if t0_choice:
+            if "5 min" in t0_choice:
+                self.state.t0_min = 5.0
+            elif "3 min" in t0_choice:
+                self.state.t0_min = 3.0
+            elif "10 min" in t0_choice:
+                self.state.t0_min = 10.0
+            elif "Otro" in t0_choice:
+                res, val = self.text(
+                    "Valor de t0 (minutos):",
+                    validate=validate_positive_float,
+                    default="5",
+                )
+                if res != StepResult.NEXT:
+                    return res
+                if val:
+                    self.state.t0_min = float(val)
+
+        return StepResult.NEXT
+
+
 class StepMetodosTc(WizardStep):
     """Paso: Métodos de tiempo de concentración."""
 
@@ -822,6 +976,7 @@ class WizardNavigator:
             StepDatosCuenca(self.state),
             StepMetodoEscorrentia(self.state),
             StepLongitud(self.state),
+            StepParametrosAvanzados(self.state),
             StepMetodosTc(self.state),
             StepTormenta(self.state),
             StepSalida(self.state),

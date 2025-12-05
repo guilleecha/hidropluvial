@@ -29,6 +29,7 @@ class SessionManagementMenu(BaseMenu):
                 "Que deseas hacer?",
                 choices=[
                     "Ver detalles de una sesion",
+                    "Exportar sesion (Excel/LaTeX)",
                     "Editar cuenca",
                     "Duplicar sesion",
                     "Renombrar sesion",
@@ -70,6 +71,8 @@ class SessionManagementMenu(BaseMenu):
         """Maneja la accion seleccionada."""
         if "Ver detalles" in action:
             self._view_details(sessions)
+        elif "Exportar" in action:
+            self._export_session(sessions)
         elif "Editar cuenca" in action:
             self._edit_cuenca(sessions)
         elif "Duplicar" in action:
@@ -98,7 +101,38 @@ class SessionManagementMenu(BaseMenu):
         session_id = self._select_session(sessions, "Selecciona sesion:")
         if session_id:
             from hidropluvial.cli.session.base import session_show
-            session_show(session_id)
+            try:
+                session_show(session_id)
+            except SystemExit:
+                pass  # Capturar typer.Exit
+
+    def _export_session(self, sessions: list[dict]) -> None:
+        """Exportar una sesion a Excel o LaTeX."""
+        # Filtrar sesiones con analisis
+        sessions_with_analyses = [s for s in sessions if s['n_analyses'] > 0]
+
+        if not sessions_with_analyses:
+            self.echo("\n  No hay sesiones con analisis para exportar.\n")
+            return
+
+        choices = [
+            f"{s['id']} - {s['name']} ({s['n_analyses']} analisis)"
+            for s in sessions_with_analyses
+        ]
+        choices.append("Cancelar")
+
+        choice = self.select("Selecciona sesion a exportar:", choices)
+
+        if choice is None or choice == "Cancelar":
+            return
+
+        session_id = choice.split(" - ")[0]
+        session = self.manager.get_session(session_id)
+
+        if session:
+            from hidropluvial.cli.wizard.menus.export_menu import ExportMenu
+            export_menu = ExportMenu(session)
+            export_menu.show()
 
     def _rename(self, sessions: list[dict]) -> None:
         """Renombrar una sesion."""

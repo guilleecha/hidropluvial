@@ -31,6 +31,11 @@ class WizardConfig:
     # Datos de ponderación (para recálculo por Tr)
     c_weighted_data: Optional[dict] = None  # {table_key, items con table_index}
 
+    # Parámetros avanzados
+    amc: str = "II"  # Condición de humedad antecedente: I, II, III
+    lambda_coef: float = 0.2  # Coeficiente lambda para abstracción inicial
+    t0_min: float = 5.0  # Tiempo de entrada inicial para Desbordes
+
     # Parametros de analisis
     tc_methods: list[str] = field(default_factory=list)
     storm_codes: list[str] = field(default_factory=lambda: ["gz"])
@@ -61,6 +66,9 @@ class WizardConfig:
             cn=state.cn,
             length_m=state.length_m,
             c_weighted_data=state.c_weighted_data,
+            amc=state.amc,
+            lambda_coef=state.lambda_coef,
+            t0_min=state.t0_min,
             tc_methods=state.tc_methods,
             storm_codes=state.storm_codes,
             return_periods=state.return_periods,

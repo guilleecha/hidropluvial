@@ -26,32 +26,37 @@ def wizard_main() -> None:
 +-------------------------------------------------------------+
 """)
 
-    # Menu principal
-    choice = questionary.select(
-        "Que deseas hacer?",
-        choices=[
-            "1. Nuevo analisis completo (guiado)",
-            "2. Continuar sesion existente",
-            "3. Gestionar sesiones (ver, eliminar, renombrar)",
-            "4. Ver comandos disponibles",
-            "5. Salir",
-        ],
-        style=WIZARD_STYLE,
-    ).ask()
+    while True:
+        # Menu principal
+        choice = questionary.select(
+            "Que deseas hacer?",
+            choices=[
+                "1. Nuevo analisis completo (guiado)",
+                "2. Continuar sesion existente",
+                "3. Gestionar sesiones (ver, eliminar, renombrar)",
+                "4. Ver comandos disponibles",
+                "5. Salir",
+            ],
+            style=WIZARD_STYLE,
+        ).ask()
 
-    if choice is None or "5." in choice:
-        typer.echo("\nHasta pronto!\n")
-        raise typer.Exit()
+        if choice is None or "5." in choice:
+            typer.echo("\nHasta pronto!\n")
+            raise typer.Exit()
 
-    if "1." in choice:
-        _new_analysis()
-    elif "2." in choice:
-        continue_session_menu()
-    elif "3." in choice:
-        manage_sessions_menu()
-    elif "4." in choice:
-        from hidropluvial.cli.commands import show_commands
-        show_commands()
+        try:
+            if "1." in choice:
+                _new_analysis()
+            elif "2." in choice:
+                continue_session_menu()
+            elif "3." in choice:
+                manage_sessions_menu()
+            elif "4." in choice:
+                from hidropluvial.cli.commands import show_commands
+                show_commands()
+        except SystemExit:
+            # Capturar typer.Exit para volver al menu principal
+            pass
 
 
 def _new_analysis() -> None:

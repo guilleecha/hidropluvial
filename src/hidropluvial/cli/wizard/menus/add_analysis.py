@@ -160,10 +160,10 @@ class AddAnalysisMenu(SessionMenu):
         if new_tc is None:
             return
 
-        tc_hr = self._calculate_tc(new_tc.lower())
+        method = new_tc.lower()
+        tc_hr, tc_params = self._calculate_tc_with_params(method)
         if tc_hr:
-            method = new_tc.lower()
-            result = self.manager.add_tc_result(self.session, method, tc_hr)
+            result = self.manager.add_tc_result(self.session, method, tc_hr, **tc_params)
             self.echo(f"  + Tc ({method}): {result.tc_min:.1f} min")
 
             # Ejecutar analisis con nuevo Tc
@@ -181,16 +181,19 @@ class AddAnalysisMenu(SessionMenu):
             tc_choices.append("Temez")
         return tc_choices
 
-    def _calculate_tc(self, method: str) -> Optional[float]:
-        """Calcula Tc segun el metodo."""
+    def _calculate_tc_with_params(self, method: str) -> tuple[Optional[float], dict]:
+        """Calcula Tc segun el metodo y retorna parametros usados."""
         if method == "kirpich" and self.length:
-            return kirpich(self.length, self.session.cuenca.slope_pct / 100)
+            tc_hr = kirpich(self.length, self.session.cuenca.slope_pct / 100)
+            return tc_hr, {"length_m": self.length}
         elif method == "temez" and self.length:
-            return temez(self.length / 1000, self.session.cuenca.slope_pct / 100)
+            tc_hr = temez(self.length / 1000, self.session.cuenca.slope_pct / 100)
+            return tc_hr, {"length_m": self.length}
         elif method == "desbordes" and self.c:
-            return desbordes(
+            tc_hr = desbordes(
                 self.session.cuenca.area_ha,
                 self.session.cuenca.slope_pct,
                 self.c,
             )
-        return None
+            return tc_hr, {"c": self.c, "area_ha": self.session.cuenca.area_ha}
+        return None, {}

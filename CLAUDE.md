@@ -3,9 +3,21 @@
 ## Descripción
 Herramienta Python para cálculos hidrológicos con generación automática de reportes LaTeX.
 
+## Branches de GitHub
+- **`master`**: Versión estable, solo para releases
+- **`develop`**: Desarrollo activo, nuevas funcionalidades
+
+Flujo de trabajo:
+1. Desarrollar en `develop`
+2. Cuando esté estable, merge a `master`
+3. Crear tags de versión en `master`
+
 ## Documentación Principal
 - **LEER PRIMERO:** `docs/SPEC.md` - Especificación técnica completa
 - `docs/DESARROLLO.md` - Estado del proyecto, estructura, configuración MCP
+- `docs/METODOLOGIAS.md` - Fundamentos teóricos de los métodos implementados
+- `docs/MANUAL_USUARIO.md` - Guía práctica con ejemplos
+- `docs/INSTALACION.md` - Guía de instalación desde cero
 - `docs/guia_graficos.md` - Guía de generación de gráficos TikZ/PGFPlots
 
 ## Stack Tecnológico

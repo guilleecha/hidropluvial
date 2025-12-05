@@ -9,6 +9,7 @@ import typer
 
 from hidropluvial.cli.session.base import get_session_manager
 from hidropluvial.cli.wizard.config import WizardConfig
+from hidropluvial.config import AntecedentMoistureCondition
 from hidropluvial.core import (
     kirpich,
     desbordes,
@@ -20,10 +21,20 @@ from hidropluvial.core import (
     triangular_uh_x,
     convolve_uh,
     adjust_c_for_tr,
+    adjust_cn_for_amc,
     recalculate_weighted_c_for_tr,
 )
 from hidropluvial.core.coefficients import get_c_for_tr_from_table
 from hidropluvial.session import Session, CoverageItem
+
+
+def _get_amc_enum(amc_str: str) -> AntecedentMoistureCondition:
+    """Convierte string AMC a enum."""
+    if amc_str == "I":
+        return AntecedentMoistureCondition.DRY
+    elif amc_str == "III":
+        return AntecedentMoistureCondition.WET
+    return AntecedentMoistureCondition.AVERAGE
 
 
 def _get_c_for_tr(config: WizardConfig, tr: int) -> float:
@@ -141,15 +152,29 @@ class AnalysisRunner:
             method = method_str.split()[0].lower()
             tc_hr = None
 
+            tc_params = {}
+
             if method == "kirpich" and self.config.length_m:
                 tc_hr = kirpich(self.config.length_m, self.config.slope_pct / 100)
+                tc_params = {"length_m": self.config.length_m}
             elif method == "temez" and self.config.length_m:
                 tc_hr = temez(self.config.length_m / 1000, self.config.slope_pct / 100)
+                tc_params = {"length_m": self.config.length_m}
             elif method == "desbordes" and self.config.c:
-                tc_hr = desbordes(self.config.area_ha, self.config.slope_pct, self.config.c)
+                tc_hr = desbordes(
+                    self.config.area_ha,
+                    self.config.slope_pct,
+                    self.config.c,
+                    self.config.t0_min,
+                )
+                tc_params = {
+                    "c": self.config.c,
+                    "area_ha": self.config.area_ha,
+                    "t0_min": self.config.t0_min,
+                }
 
             if tc_hr:
-                result = self.manager.add_tc_result(self.session, method, tc_hr)
+                result = self.manager.add_tc_result(self.session, method, tc_hr, **tc_params)
                 typer.echo(f"  + Tc ({method}): {result.tc_min:.1f} min")
 
     def _run_analyses(self) -> None:
@@ -181,9 +206,9 @@ class AnalysisRunner:
         if self.config.c:
             c_adjusted = _get_c_for_tr(self.config, tr)
 
-        # Recalcular Tc si es método Desbordes (depende de C)
+        # Recalcular Tc si es método Desbordes (depende de C y t0)
         if tc_result.method == "desbordes" and c_adjusted:
-            tc_hr = desbordes(area, self.config.slope_pct, c_adjusted)
+            tc_hr = desbordes(area, self.config.slope_pct, c_adjusted, self.config.t0_min)
         else:
             tc_hr = tc_result.tc_hr
 
@@ -214,12 +239,19 @@ class AnalysisRunner:
         depths = np.array(hyetograph.depth_mm)
 
         # Escorrentia
+        cn_adjusted = None
         if c_adjusted:
             excess_mm = c_adjusted * depths
             runoff_mm = float(np.sum(excess_mm))
         elif self.config.cn:
+            # Ajustar CN por condición de humedad antecedente (AMC)
+            amc_enum = _get_amc_enum(self.config.amc)
+            cn_adjusted = adjust_cn_for_amc(self.config.cn, amc_enum)
+
             cumulative = np.array(hyetograph.cumulative_mm)
-            excess_mm = rainfall_excess_series(cumulative, self.config.cn)
+            excess_mm = rainfall_excess_series(
+                cumulative, cn_adjusted, self.config.lambda_coef
+            )
             runoff_mm = float(np.sum(excess_mm))
         else:
             return
@@ -244,6 +276,23 @@ class AnalysisRunner:
         time_to_peak = float(hydrograph_time[peak_idx])
         volume_m3 = float(np.trapezoid(hydrograph_flow, hydrograph_time * 3600))
 
+        # Preparar parametros de Tc para guardar
+        tc_params = {}
+        if tc_result.method == "desbordes" and c_adjusted:
+            tc_params = {
+                "c": c_adjusted,
+                "area_ha": area,
+                "t0_min": self.config.t0_min,
+            }
+        elif tc_result.parameters:
+            tc_params = dict(tc_result.parameters)
+
+        # Agregar parámetros de escorrentía SCS si aplica
+        if cn_adjusted is not None:
+            tc_params["cn_adjusted"] = round(cn_adjusted, 1)
+            tc_params["amc"] = self.config.amc
+            tc_params["lambda"] = self.config.lambda_coef
+
         # Guardar analisis
         self.manager.add_analysis(
             session=self.session,
@@ -264,6 +313,7 @@ class AnalysisRunner:
             storm_intensity_mmhr=list(hyetograph.intensity_mmhr),
             hydrograph_time_hr=[float(t) for t in hydrograph_time],
             hydrograph_flow_m3s=[float(q) for q in hydrograph_flow],
+            **tc_params,
         )
 
     def _generate_report(self) -> None:
@@ -291,11 +341,22 @@ class AnalysisRunner:
 class AdditionalAnalysisRunner:
     """Ejecuta analisis adicionales sobre una sesion existente."""
 
-    def __init__(self, session: Session, c: float = None, cn: float = None):
+    def __init__(
+        self,
+        session: Session,
+        c: float = None,
+        cn: float = None,
+        amc: str = "II",
+        lambda_coef: float = 0.2,
+        t0_min: float = 5.0,
+    ):
         self.session = session
         self.manager = get_session_manager()
         self.c = c
         self.cn = cn
+        self.amc = amc
+        self.lambda_coef = lambda_coef
+        self.t0_min = t0_min
 
     def run(
         self,
@@ -320,9 +381,9 @@ class AdditionalAnalysisRunner:
                     if self.c:
                         c_adjusted = _get_c_for_tr_from_session(self.session, self.c, tr)
 
-                    # Recalcular Tc si es método Desbordes (depende de C)
+                    # Recalcular Tc si es método Desbordes (depende de C y t0)
                     if tc_result.method == "desbordes" and c_adjusted:
-                        tc_hr = desbordes(area, self.session.cuenca.slope_pct, c_adjusted)
+                        tc_hr = desbordes(area, self.session.cuenca.slope_pct, c_adjusted, self.t0_min)
                     else:
                         tc_hr = tc_result.tc_hr
 
@@ -353,12 +414,19 @@ class AdditionalAnalysisRunner:
                     depths = np.array(hyetograph.depth_mm)
 
                     # Escorrentia
+                    cn_adjusted = None
                     if c_adjusted:
                         excess_mm = c_adjusted * depths
                         runoff_mm = float(np.sum(excess_mm))
                     elif self.cn:
+                        # Ajustar CN por condición de humedad antecedente (AMC)
+                        amc_enum = _get_amc_enum(self.amc)
+                        cn_adjusted = adjust_cn_for_amc(self.cn, amc_enum)
+
                         cumulative = np.array(hyetograph.cumulative_mm)
-                        excess_mm = rainfall_excess_series(cumulative, self.cn)
+                        excess_mm = rainfall_excess_series(
+                            cumulative, cn_adjusted, self.lambda_coef
+                        )
                         runoff_mm = float(np.sum(excess_mm))
                     else:
                         continue
@@ -383,6 +451,23 @@ class AdditionalAnalysisRunner:
                     time_to_peak = float(hydrograph_time[peak_idx])
                     volume_m3 = float(np.trapezoid(hydrograph_flow, hydrograph_time * 3600))
 
+                    # Preparar parametros de Tc para guardar
+                    tc_params = {}
+                    if tc_result.method == "desbordes" and c_adjusted:
+                        tc_params = {
+                            "c": c_adjusted,
+                            "area_ha": area,
+                            "t0_min": self.t0_min,
+                        }
+                    elif tc_result.parameters:
+                        tc_params = dict(tc_result.parameters)
+
+                    # Agregar parámetros de escorrentía SCS si aplica
+                    if cn_adjusted is not None:
+                        tc_params["cn_adjusted"] = round(cn_adjusted, 1)
+                        tc_params["amc"] = self.amc
+                        tc_params["lambda"] = self.lambda_coef
+
                     # Guardar analisis
                     self.manager.add_analysis(
                         session=self.session,
@@ -403,6 +488,7 @@ class AdditionalAnalysisRunner:
                         storm_intensity_mmhr=list(hyetograph.intensity_mmhr),
                         hydrograph_time_hr=[float(t) for t in hydrograph_time],
                         hydrograph_flow_m3s=[float(q) for q in hydrograph_flow],
+                        **tc_params,
                     )
 
                     n_analyses += 1

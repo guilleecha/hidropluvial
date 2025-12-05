@@ -20,6 +20,7 @@ from hidropluvial.cli.session.analyze import session_analyze
 from hidropluvial.cli.session.batch import session_batch
 from hidropluvial.cli.session.report import session_report
 from hidropluvial.cli.session.preview import session_preview
+from hidropluvial.cli.session.export import session_export, compare_sessions
 
 # Crear sub-aplicación
 session_app = typer.Typer(help="Gestión de sesiones de análisis")
@@ -38,5 +39,7 @@ session_app.command("clean")(session_clean)
 session_app.command("rename")(session_rename)
 session_app.command("batch")(session_batch)
 session_app.command("report")(session_report)
+session_app.command("export")(session_export)
+session_app.command("compare")(compare_sessions)
 
 __all__ = ["session_app", "get_session_manager"]

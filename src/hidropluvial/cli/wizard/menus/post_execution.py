@@ -42,7 +42,7 @@ class PostExecutionMenu(SessionMenu):
                     "Definir CN por ponderacion (tablas NRCS)",
                     "Editar datos de la cuenca",
                     "Agregar/editar notas",
-                    "Generar reporte LaTeX",
+                    "Exportar (Excel/LaTeX)",
                     "Salir",
                 ],
             )
@@ -64,8 +64,6 @@ class PostExecutionMenu(SessionMenu):
             self._show_single_hydrograph()
         elif "Filtrar" in action:
             self._filter_results()
-        elif "reporte" in action.lower():
-            self._generate_report()
         elif "ponderacion" in action.lower():
             self._define_weighted_cn()
             self.reload_session()
@@ -78,19 +76,29 @@ class PostExecutionMenu(SessionMenu):
         elif "notas" in action.lower():
             self._manage_notes()
             self.reload_session()
+        elif "Exportar" in action:
+            self._export()
         elif "Agregar" in action:
             self._add_analysis()
             self.reload_session()
 
+    def _safe_call(self, func, *args, **kwargs) -> None:
+        """Ejecuta una funcion capturando typer.Exit para no salir del wizard."""
+        try:
+            func(*args, **kwargs)
+        except SystemExit:
+            # typer.Exit() lanza SystemExit, lo capturamos para continuar
+            pass
+
     def _show_table(self) -> None:
         """Muestra tabla con sparklines."""
         from hidropluvial.cli.session.preview import session_preview
-        session_preview(self.session.id, analysis_idx=None, compare=False)
+        self._safe_call(session_preview, self.session.id, analysis_idx=None, compare=False)
 
     def _compare_hydrographs(self) -> None:
         """Compara todos los hidrogramas."""
         from hidropluvial.cli.session.preview import session_preview
-        session_preview(self.session.id, analysis_idx=None, compare=True)
+        self._safe_call(session_preview, self.session.id, analysis_idx=None, compare=True)
 
     def _show_single_hydrograph(self) -> None:
         """Muestra un hidrograma individual."""
@@ -110,17 +118,13 @@ class PostExecutionMenu(SessionMenu):
         if selected:
             idx = int(selected.split(":")[0])
             from hidropluvial.cli.session.preview import session_preview
-            session_preview(self.session.id, analysis_idx=idx, compare=False)
+            self._safe_call(session_preview, self.session.id, analysis_idx=idx, compare=False)
 
-    def _generate_report(self) -> None:
-        """Genera reporte LaTeX."""
-        default_name = self.session.name.lower().replace(" ", "_")
-        output = self.text("Nombre del archivo (sin extension):", default=default_name)
-
-        if output:
-            from hidropluvial.cli.session.report import session_report
-            session_report(self.session.id, output, author=None, template_dir=None)
-            self.echo(f"\n  Reporte generado: {output}.tex")
+    def _export(self) -> None:
+        """Exporta los resultados a Excel o LaTeX con opciones de filtrado."""
+        from hidropluvial.cli.wizard.menus.export_menu import ExportMenu
+        export_menu = ExportMenu(self.session)
+        export_menu.show()
 
     def _define_weighted_cn(self) -> None:
         """Define el CN mediante ponderacion por areas."""
@@ -299,7 +303,8 @@ class PostExecutionMenu(SessionMenu):
         """Muestra resultados filtrados."""
         from hidropluvial.cli.session.preview import session_preview
 
-        session_preview(
+        self._safe_call(
+            session_preview,
             self.session.id,
             analysis_idx=None,
             compare=False,
@@ -311,7 +316,8 @@ class PostExecutionMenu(SessionMenu):
 
         # Ofrecer comparar filtrados
         if self.confirm("Comparar hidrogramas filtrados?", default=False):
-            session_preview(
+            self._safe_call(
+                session_preview,
                 self.session.id,
                 analysis_idx=None,
                 compare=True,
@@ -374,22 +380,16 @@ class PostExecutionMenu(SessionMenu):
 
     def _edit_session_notes(self) -> None:
         """Edita las notas generales de la sesion."""
-        self.echo("\n  Notas de la sesion (Enter dos veces para terminar):")
+        self.echo("\n  Notas de la sesion:")
         self.echo("  (Dejar vacio para eliminar notas existentes)\n")
 
         current = self.session.notes or ""
 
-        # Para notas multilinea, usamos un editor simple
-        new_notes = self.text(
-            "Notas:",
-            default=current,
-            back_option=False,
-        )
+        new_notes = self.text("Notas:", default=current)
 
         if new_notes is not None:
-            _, notes_val = new_notes
-            self.manager.set_session_notes(self.session, notes_val)
-            if notes_val:
+            self.manager.set_session_notes(self.session, new_notes)
+            if new_notes:
                 self.echo("\n  Notas guardadas.")
             else:
                 self.echo("\n  Notas eliminadas.")
@@ -428,13 +428,11 @@ class PostExecutionMenu(SessionMenu):
                 new_note = self.text(
                     "Nueva nota (vacio para eliminar):",
                     default=a.note or "",
-                    back_option=False,
                 )
 
                 if new_note is not None:
-                    _, note_val = new_note
-                    self.manager.set_analysis_note(self.session, analysis_id, note_val)
-                    if note_val:
+                    self.manager.set_analysis_note(self.session, analysis_id, new_note)
+                    if new_note:
                         self.echo(f"\n  Nota guardada para analisis {analysis_id}.")
                     else:
                         self.echo(f"\n  Nota eliminada de analisis {analysis_id}.")

@@ -1,25 +1,23 @@
 """
-Menu para gestionar proyectos y cuencas.
+Menu para gestionar proyectos.
 """
 
 from typing import Optional
 
-import questionary
-
 from hidropluvial.cli.wizard.menus.base import BaseMenu
-from hidropluvial.cli.wizard.menus.cuenca_editor import CuencaEditor
-from hidropluvial.project import Project, Basin, get_project_manager
+from hidropluvial.cli.wizard.menus.basin_management import BasinManagementMenu
+from hidropluvial.project import Project, get_project_manager
 
 
 class ProjectManagementMenu(BaseMenu):
-    """Menu para gestionar proyectos y cuencas (ver, eliminar, renombrar, duplicar)."""
+    """Menu para gestionar proyectos (crear, ver, editar, eliminar)."""
 
     def __init__(self):
         super().__init__()
         self.project_manager = get_project_manager()
 
     def show(self) -> None:
-        """Muestra el menu de gestion de proyectos y cuencas."""
+        """Muestra el menu de gestion de proyectos."""
         projects = self.project_manager.list_projects()
         sessions = self.manager.list_sessions()  # Legacy sessions
 
@@ -29,29 +27,7 @@ class ProjectManagementMenu(BaseMenu):
             return
 
         while True:
-            self._show_overview(projects, sessions)
-
-            action = self.select(
-                "Que deseas hacer?",
-                choices=[
-                    "Ver detalles de un proyecto/cuenca",
-                    "Exportar cuenca (Excel/LaTeX)",
-                    "Editar cuenca",
-                    "Duplicar cuenca",
-                    "Renombrar proyecto/cuenca",
-                    "Eliminar proyecto/cuenca",
-                    "Eliminar cuencas vacias",
-                    "Crear nuevo proyecto",
-                    "Migrar sesiones legacy a proyecto",
-                    "Volver al menu principal",
-                ],
-            )
-
-            if action is None or "Volver" in action:
-                return
-
-            # Ejecutar accion y recargar listas
-            self._handle_action(action, projects, sessions)
+            # Recargar listas
             projects = self.project_manager.list_projects()
             sessions = self.manager.list_sessions()
 
@@ -59,14 +35,39 @@ class ProjectManagementMenu(BaseMenu):
                 self.echo("\n  No quedan proyectos ni cuencas.\n")
                 return
 
-    def _show_overview(self, projects: list[dict], sessions: list[dict]) -> None:
-        """Muestra resumen de proyectos y cuencas."""
-        total_projects = len(projects)
-        total_sessions = len(sessions)
-        total_basins = sum(p.get("n_basins", 0) for p in projects)
+            self._show_overview(projects, sessions)
 
+            # Construir opciones segun lo que existe
+            choices = []
+
+            if projects:
+                choices.extend([
+                    "Ver detalles de un proyecto",
+                    "Gestionar cuencas de un proyecto",
+                    "Editar metadatos de proyecto",
+                    "Renombrar proyecto",
+                    "Eliminar proyecto",
+                ])
+
+            choices.append("Crear nuevo proyecto")
+
+            if sessions:
+                choices.append("Migrar sesiones legacy a proyecto")
+                choices.append("Gestionar sesiones legacy")
+
+            choices.append("← Volver al menu principal")
+
+            action = self.select("Que deseas hacer?", choices)
+
+            if action is None or "Volver" in action:
+                return
+
+            self._handle_action(action, projects, sessions)
+
+    def _show_overview(self, projects: list[dict], sessions: list[dict]) -> None:
+        """Muestra resumen de proyectos."""
         self.echo(f"\n{'='*65}")
-        self.echo(f"  GESTION DE PROYECTOS Y CUENCAS")
+        self.echo(f"  GESTION DE PROYECTOS")
         self.echo(f"{'='*65}")
 
         if projects:
@@ -83,64 +84,48 @@ class ProjectManagementMenu(BaseMenu):
                 self.echo(f"  ... y {len(projects) - 10} proyectos mas")
 
         if sessions:
-            if projects:
-                self.echo(f"\n  --- Sesiones Legacy (no migradas): {len(sessions)} ---")
-            else:
-                self.echo(f"  {'ID':<10} {'Nombre':<28} {'Cuenca':<15} {'N':>5}")
-                self.echo(f"  {'-'*60}")
-
+            self.echo(f"\n  --- Sesiones Legacy (no migradas): {len(sessions)} ---")
             for s in sessions[:5]:
                 name = s['name'][:27] if len(s['name']) > 27 else s['name']
-                cuenca = s['cuenca'][:14] if len(s['cuenca']) > 14 else s['cuenca']
-                self.echo(f"  {s['id']:<10} {name:<28} {cuenca:<15} {s['n_analyses']:>5}")
+                self.echo(f"    {s['id']}: {name} ({s['n_analyses']} analisis)")
 
             if len(sessions) > 5:
                 self.echo(f"  ... y {len(sessions) - 5} sesiones mas")
 
         self.echo(f"{'='*65}\n")
-        self.echo(f"  Total: {total_projects} proyectos, {total_basins + total_sessions} cuencas\n")
+
+        total_basins = sum(p.get("n_basins", 0) for p in projects)
+        self.echo(f"  Total: {len(projects)} proyectos, {total_basins + len(sessions)} cuencas\n")
 
     def _handle_action(self, action: str, projects: list[dict], sessions: list[dict]) -> None:
         """Maneja la accion seleccionada."""
         if "Ver detalles" in action:
-            self._view_details(projects, sessions)
-        elif "Exportar" in action:
-            self._export_basin(projects, sessions)
-        elif "Editar cuenca" in action:
-            self._edit_cuenca(projects, sessions)
-        elif "Duplicar" in action:
-            self._duplicate(projects, sessions)
-        elif "Renombrar" in action:
-            self._rename(projects, sessions)
+            self._view_project_details(projects)
+        elif "Gestionar cuencas" in action:
+            self._manage_basins(projects)
+        elif "Editar metadatos" in action:
+            self._edit_project_metadata(projects)
+        elif "Renombrar proyecto" in action:
+            self._rename_project(projects)
         elif "Eliminar proyecto" in action:
-            self._delete(projects, sessions)
-        elif "vacias" in action:
-            self._delete_empty(projects, sessions)
+            self._delete_project(projects)
         elif "Crear nuevo" in action:
             self._create_project()
-        elif "Migrar" in action:
+        elif "Migrar sesiones" in action:
             self._migrate_sessions(sessions)
+        elif "Gestionar sesiones legacy" in action:
+            self._manage_legacy_sessions(sessions)
 
-    def _select_project_or_basin(
-        self, projects: list[dict], sessions: list[dict], prompt: str
-    ) -> Optional[tuple[str, str, Optional[str]]]:
-        """
-        Permite seleccionar un proyecto o cuenca.
+    def _select_project(self, projects: list[dict], prompt: str) -> Optional[Project]:
+        """Permite seleccionar un proyecto."""
+        if not projects:
+            self.echo("  No hay proyectos disponibles.")
+            return None
 
-        Returns:
-            Tupla (tipo, id, parent_id) donde:
-            - tipo: 'project', 'basin', o 'session'
-            - id: ID del elemento
-            - parent_id: ID del proyecto padre (solo para basins)
-        """
-        choices = []
-
-        for p in projects:
-            choices.append(f"[Proyecto] {p['id']} - {p['name']} ({p['n_basins']} cuencas)")
-
-        for s in sessions:
-            choices.append(f"[Cuenca legacy] {s['id']} - {s['name']} ({s['n_analyses']} analisis)")
-
+        choices = [
+            f"{p['id']} - {p['name']} ({p['n_basins']} cuencas)"
+            for p in projects
+        ]
         choices.append("← Cancelar")
 
         choice = self.select(prompt, choices)
@@ -148,56 +133,15 @@ class ProjectManagementMenu(BaseMenu):
         if choice is None or "Cancelar" in choice:
             return None
 
-        if "[Proyecto]" in choice:
-            project_id = choice.split(" - ")[0].replace("[Proyecto] ", "")
-            return ("project", project_id, None)
-        elif "[Cuenca legacy]" in choice:
-            session_id = choice.split(" - ")[0].replace("[Cuenca legacy] ", "")
-            return ("session", session_id, None)
+        project_id = choice.split(" - ")[0]
+        return self.project_manager.get_project(project_id)
 
-        return None
-
-    def _select_basin_from_project(self, project: Project) -> Optional[Basin]:
-        """Permite seleccionar una cuenca de un proyecto."""
-        if not project.basins:
-            self.echo("  No hay cuencas en este proyecto.")
-            return None
-
-        choices = []
-        for b in project.basins:
-            choices.append(f"{b.id} - {b.name} ({len(b.analyses)} analisis)")
-        choices.append("← Cancelar")
-
-        choice = self.select("Selecciona una cuenca:", choices)
-
-        if choice is None or "Cancelar" in choice:
-            return None
-
-        basin_id = choice.split(" - ")[0]
-        return project.get_basin(basin_id)
-
-    def _view_details(self, projects: list[dict], sessions: list[dict]) -> None:
-        """Ver detalles de un proyecto o cuenca."""
-        selection = self._select_project_or_basin(projects, sessions, "Selecciona:")
-
-        if not selection:
+    def _view_project_details(self, projects: list[dict]) -> None:
+        """Ver detalles de un proyecto."""
+        project = self._select_project(projects, "Selecciona proyecto:")
+        if not project:
             return
 
-        sel_type, sel_id, _ = selection
-
-        if sel_type == "project":
-            project = self.project_manager.get_project(sel_id)
-            if project:
-                self._show_project_details(project)
-        elif sel_type == "session":
-            from hidropluvial.cli.session.base import session_show
-            try:
-                session_show(sel_id)
-            except SystemExit:
-                pass
-
-    def _show_project_details(self, project: Project) -> None:
-        """Muestra detalles de un proyecto."""
         self.echo(f"\n{'='*55}")
         self.echo(f"  PROYECTO: {project.name}")
         self.echo(f"{'='*55}")
@@ -221,260 +165,77 @@ class ProjectManagementMenu(BaseMenu):
 
         self.echo(f"{'='*55}\n")
 
-    def _export_basin(self, projects: list[dict], sessions: list[dict]) -> None:
-        """Exportar una cuenca a Excel o LaTeX."""
-        # Construir lista de cuencas con analisis
-        choices = []
-
-        for p in projects:
-            project = self.project_manager.get_project(p['id'])
-            if project:
-                for b in project.basins:
-                    if b.analyses:
-                        choices.append(
-                            f"{b.id} - {b.name} [Proyecto: {project.name}] ({len(b.analyses)} analisis)"
-                        )
-
-        sessions_with_analyses = [s for s in sessions if s['n_analyses'] > 0]
-        for s in sessions_with_analyses:
-            choices.append(f"{s['id']} - {s['name']} [Legacy] ({s['n_analyses']} analisis)")
-
-        if not choices:
-            self.echo("\n  No hay cuencas con analisis para exportar.\n")
+    def _manage_basins(self, projects: list[dict]) -> None:
+        """Abre el menu de gestion de cuencas de un proyecto."""
+        project = self._select_project(projects, "Selecciona proyecto para gestionar cuencas:")
+        if not project:
             return
 
-        choices.append("← Cancelar")
+        menu = BasinManagementMenu(project)
+        menu.show()
 
-        choice = self.select("Selecciona cuenca a exportar:", choices)
-
-        if choice is None or "Cancelar" in choice:
+    def _edit_project_metadata(self, projects: list[dict]) -> None:
+        """Edita metadatos de un proyecto."""
+        project = self._select_project(projects, "Selecciona proyecto a editar:")
+        if not project:
             return
 
-        basin_id = choice.split(" - ")[0]
+        self.echo(f"\n  Editando metadatos de '{project.name}'...\n")
 
-        # Buscar la cuenca
-        session = None
+        new_name = self.text("Nombre:", default=project.name)
+        if new_name:
+            project.name = new_name
 
-        # Buscar en proyectos
-        for p in projects:
-            project = self.project_manager.get_project(p['id'])
-            if project:
-                basin = project.get_basin(basin_id)
-                if basin:
-                    session = basin.to_session()
-                    break
+        new_desc = self.text("Descripcion:", default=project.description or "")
+        if new_desc is not None:
+            project.description = new_desc
 
-        # Buscar en sesiones legacy
-        if not session:
-            session = self.manager.get_session(basin_id)
+        new_author = self.text("Autor:", default=project.author or "")
+        if new_author is not None:
+            project.author = new_author
 
-        if session:
-            from hidropluvial.cli.wizard.menus.export_menu import ExportMenu
-            export_menu = ExportMenu(session)
-            export_menu.show()
+        new_location = self.text("Ubicacion:", default=project.location or "")
+        if new_location is not None:
+            project.location = new_location
 
-    def _rename(self, projects: list[dict], sessions: list[dict]) -> None:
-        """Renombrar un proyecto o cuenca."""
-        selection = self._select_project_or_basin(projects, sessions, "Selecciona a renombrar:")
+        self.project_manager.save_project(project)
+        self.echo("\n  Metadatos actualizados.\n")
 
-        if not selection:
+    def _rename_project(self, projects: list[dict]) -> None:
+        """Renombrar un proyecto."""
+        project = self._select_project(projects, "Selecciona proyecto a renombrar:")
+        if not project:
             return
-
-        sel_type, sel_id, _ = selection
-
-        if sel_type == "project":
-            project = self.project_manager.get_project(sel_id)
-            if project:
-                new_name = self.text(
-                    f"Nuevo nombre (actual: {project.name}):",
-                    default=project.name,
-                )
-                if new_name and new_name != project.name:
-                    project.name = new_name
-                    self.project_manager.save_project(project)
-                    self.echo(f"\n  Proyecto renombrado a '{new_name}'\n")
-
-        elif sel_type == "session":
-            session = self.manager.get_session(sel_id)
-            if session:
-                new_name = self.text(
-                    f"Nuevo nombre (actual: {session.name}):",
-                    default=session.name,
-                )
-                if new_name and new_name != session.name:
-                    session.name = new_name
-                    self.manager.save(session)
-                    self.echo(f"\n  Cuenca renombrada a '{new_name}'\n")
-
-    def _delete(self, projects: list[dict], sessions: list[dict]) -> None:
-        """Eliminar un proyecto o cuenca."""
-        selection = self._select_project_or_basin(projects, sessions, "Selecciona a eliminar:")
-
-        if not selection:
-            return
-
-        sel_type, sel_id, _ = selection
-
-        if sel_type == "project":
-            project = self.project_manager.get_project(sel_id)
-            if project:
-                if self.confirm(
-                    f"Eliminar proyecto '{project.name}' y todas sus cuencas?",
-                    default=False,
-                ):
-                    if self.project_manager.delete_project(project.id):
-                        self.echo(f"\n  Proyecto {project.id} eliminado.\n")
-                    else:
-                        self.echo(f"\n  Error al eliminar proyecto.\n")
-
-        elif sel_type == "session":
-            if self.confirm(f"Eliminar cuenca {sel_id}?", default=False):
-                if self.manager.delete(sel_id):
-                    self.echo(f"\n  Cuenca {sel_id} eliminada.\n")
-                else:
-                    self.echo(f"\n  Error al eliminar cuenca.\n")
-
-    def _delete_empty(self, projects: list[dict], sessions: list[dict]) -> None:
-        """Eliminar cuencas sin analisis."""
-        empty_basins = []
-
-        # Buscar en proyectos
-        for p in projects:
-            project = self.project_manager.get_project(p['id'])
-            if project:
-                for b in project.basins:
-                    if not b.analyses:
-                        empty_basins.append({
-                            "type": "basin",
-                            "id": b.id,
-                            "name": b.name,
-                            "project": project,
-                        })
-
-        # Buscar en sesiones legacy
-        empty_sessions = [s for s in sessions if s['n_analyses'] == 0]
-        for s in empty_sessions:
-            empty_basins.append({
-                "type": "session",
-                "id": s['id'],
-                "name": s['name'],
-                "project": None,
-            })
-
-        if not empty_basins:
-            self.echo("\n  No hay cuencas vacias.\n")
-            return
-
-        self.echo(f"\n  Cuencas vacias encontradas: {len(empty_basins)}")
-        for item in empty_basins:
-            project_name = f" [{item['project'].name}]" if item['project'] else " [Legacy]"
-            self.echo(f"    - {item['id']}: {item['name']}{project_name}")
-
-        if self.confirm(f"\nEliminar {len(empty_basins)} cuencas vacias?", default=False):
-            deleted = 0
-            for item in empty_basins:
-                if item['type'] == 'basin':
-                    project = item['project']
-                    if project.remove_basin(item['id']):
-                        self.project_manager.save_project(project)
-                        deleted += 1
-                else:
-                    if self.manager.delete(item['id']):
-                        deleted += 1
-
-            self.echo(f"\n  {deleted} cuencas eliminadas.\n")
-
-    def _edit_cuenca(self, projects: list[dict], sessions: list[dict]) -> None:
-        """Editar parametros de una cuenca."""
-        # Solo mostrar sesiones legacy por ahora
-        # (para cuencas en proyectos usar el otro menu)
-        if not sessions:
-            self.echo("\n  No hay cuencas legacy para editar.\n")
-            self.echo("  Para editar cuencas de proyectos, usa 'Continuar proyecto'.\n")
-            return
-
-        choices = [
-            f"{s['id']} - {s['name']} ({s['n_analyses']} analisis)"
-            for s in sessions
-        ]
-        choices.append("← Cancelar")
-
-        choice = self.select("Selecciona cuenca a editar:", choices)
-
-        if choice is None or "Cancelar" in choice:
-            return
-
-        session_id = choice.split(" - ")[0]
-        session = self.manager.get_session(session_id)
-        cuenca = session.cuenca
-
-        self._show_cuenca_values(session, cuenca)
-
-        if session.analyses:
-            self.echo(f"  ADVERTENCIA: Esta cuenca tiene {len(session.analyses)} analisis.")
-            self.echo(f"  Al modificar la cuenca se eliminaran todos los analisis.\n")
-
-        # Usar editor de cuenca
-        editor = CuencaEditor(session, self.manager)
-        editor.edit()
-
-    def _show_cuenca_values(self, session, cuenca) -> None:
-        """Muestra valores actuales de la cuenca."""
-        self.echo(f"\n{'='*55}")
-        self.echo(f"  EDITAR CUENCA: {session.name}")
-        self.echo(f"{'='*55}")
-        self.echo(f"  Valores actuales:")
-        self.echo(f"    Area:      {cuenca.area_ha} ha")
-        self.echo(f"    Pendiente: {cuenca.slope_pct} %")
-        self.echo(f"    P3,10:     {cuenca.p3_10} mm")
-        if cuenca.c is not None:
-            self.echo(f"    Coef. C:   {cuenca.c}")
-        if cuenca.cn is not None:
-            self.echo(f"    CN:        {cuenca.cn}")
-        if cuenca.length_m:
-            self.echo(f"    Longitud:  {cuenca.length_m} m")
-        self.echo(f"{'='*55}\n")
-
-    def _duplicate(self, projects: list[dict], sessions: list[dict]) -> None:
-        """Duplicar una cuenca existente."""
-        if not sessions:
-            self.echo("\n  No hay cuencas legacy para duplicar.\n")
-            self.echo("  Para duplicar cuencas de proyectos, usa 'Continuar proyecto'.\n")
-            return
-
-        choices = [f"{s['id']} - {s['name']}" for s in sessions]
-        choices.append("← Cancelar")
-
-        choice = self.select("Selecciona cuenca a duplicar:", choices)
-
-        if choice is None or "Cancelar" in choice:
-            return
-
-        session_id = choice.split(" - ")[0]
-        session = self.manager.get_session(session_id)
 
         new_name = self.text(
-            "Nombre para la nueva cuenca:",
-            default=f"{session.name} (copia)",
+            f"Nuevo nombre (actual: {project.name}):",
+            default=project.name,
         )
 
-        if not new_name:
+        if new_name and new_name != project.name:
+            project.name = new_name
+            self.project_manager.save_project(project)
+            self.echo(f"\n  Proyecto renombrado a '{new_name}'\n")
+
+    def _delete_project(self, projects: list[dict]) -> None:
+        """Eliminar un proyecto."""
+        project = self._select_project(projects, "Selecciona proyecto a eliminar:")
+        if not project:
             return
 
-        new_session, changes = self.manager.clone_with_modified_cuenca(
-            session,
-            new_name=new_name,
-        )
+        msg = f"Eliminar proyecto '{project.name}'"
+        if project.basins:
+            msg += f" y sus {project.n_basins} cuencas"
+        msg += "?"
 
-        self.echo(f"\n  Cuenca duplicada:")
-        self.echo(f"    ID original: {session.id}")
-        self.echo(f"    ID nueva:    {new_session.id}")
-        self.echo(f"    Nombre:      {new_session.name}")
-        self.echo(f"\n  La nueva cuenca no tiene analisis.")
-        self.echo(f"  Usa 'Continuar proyecto/cuenca' para agregar analisis.\n")
+        if self.confirm(msg, default=False):
+            if self.project_manager.delete_project(project.id):
+                self.echo(f"\n  Proyecto '{project.name}' eliminado.\n")
+            else:
+                self.echo(f"\n  Error al eliminar proyecto.\n")
 
     def _create_project(self) -> None:
-        """Crea un nuevo proyecto vacio."""
+        """Crea un nuevo proyecto."""
         self.echo("\n  Crear nuevo proyecto\n")
 
         name = self.text("Nombre del proyecto:")
@@ -495,7 +256,7 @@ class ProjectManagementMenu(BaseMenu):
         self.echo(f"\n  Proyecto creado:")
         self.echo(f"    ID: {project.id}")
         self.echo(f"    Nombre: {project.name}")
-        self.echo(f"\n  Usa 'Nueva cuenca' para agregar cuencas al proyecto.\n")
+        self.echo(f"\n  Usa 'Nueva cuenca' o 'Gestionar cuencas' para agregar cuencas.\n")
 
     def _migrate_sessions(self, sessions: list[dict]) -> None:
         """Migra sesiones legacy a un proyecto."""
@@ -537,6 +298,130 @@ class ProjectManagementMenu(BaseMenu):
                 self.echo("\n  Error en la migracion.\n")
         else:
             self.echo("\n  Migracion individual no implementada aun.\n")
+
+    def _manage_legacy_sessions(self, sessions: list[dict]) -> None:
+        """Menu para gestionar sesiones legacy."""
+        if not sessions:
+            self.echo("\n  No hay sesiones legacy.\n")
+            return
+
+        while True:
+            sessions = self.manager.list_sessions()
+            if not sessions:
+                self.echo("\n  No quedan sesiones legacy.\n")
+                return
+
+            self.echo(f"\n{'='*60}")
+            self.echo(f"  SESIONES LEGACY")
+            self.echo(f"{'='*60}")
+
+            for s in sessions:
+                name = s['name'][:35] if len(s['name']) > 35 else s['name']
+                self.echo(f"  {s['id']}: {name} ({s['n_analyses']} analisis)")
+
+            self.echo(f"{'='*60}\n")
+
+            action = self.select(
+                "Que deseas hacer?",
+                choices=[
+                    "Ver detalles de sesion",
+                    "Renombrar sesion",
+                    "Eliminar sesion",
+                    "Eliminar sesiones vacias",
+                    "← Volver",
+                ],
+            )
+
+            if action is None or "Volver" in action:
+                return
+
+            if "Ver detalles" in action:
+                self._view_session_details(sessions)
+            elif "Renombrar" in action:
+                self._rename_session(sessions)
+            elif "Eliminar sesion" in action and "vacias" not in action:
+                self._delete_session(sessions)
+            elif "vacias" in action:
+                self._delete_empty_sessions(sessions)
+
+    def _select_session(self, sessions: list[dict], prompt: str) -> Optional[str]:
+        """Permite seleccionar una sesion legacy."""
+        choices = [
+            f"{s['id']} - {s['name']} ({s['n_analyses']} analisis)"
+            for s in sessions
+        ]
+        choices.append("← Cancelar")
+
+        choice = self.select(prompt, choices)
+
+        if choice is None or "Cancelar" in choice:
+            return None
+
+        return choice.split(" - ")[0]
+
+    def _view_session_details(self, sessions: list[dict]) -> None:
+        """Ver detalles de una sesion legacy."""
+        session_id = self._select_session(sessions, "Selecciona sesion:")
+        if not session_id:
+            return
+
+        from hidropluvial.cli.session.base import session_show
+        try:
+            session_show(session_id)
+        except SystemExit:
+            pass
+
+    def _rename_session(self, sessions: list[dict]) -> None:
+        """Renombrar una sesion legacy."""
+        session_id = self._select_session(sessions, "Selecciona sesion a renombrar:")
+        if not session_id:
+            return
+
+        session = self.manager.get_session(session_id)
+        if not session:
+            return
+
+        new_name = self.text(
+            f"Nuevo nombre (actual: {session.name}):",
+            default=session.name,
+        )
+
+        if new_name and new_name != session.name:
+            session.name = new_name
+            self.manager.save(session)
+            self.echo(f"\n  Sesion renombrada a '{new_name}'\n")
+
+    def _delete_session(self, sessions: list[dict]) -> None:
+        """Eliminar una sesion legacy."""
+        session_id = self._select_session(sessions, "Selecciona sesion a eliminar:")
+        if not session_id:
+            return
+
+        if self.confirm(f"Eliminar sesion {session_id}?", default=False):
+            if self.manager.delete(session_id):
+                self.echo(f"\n  Sesion {session_id} eliminada.\n")
+            else:
+                self.echo(f"\n  Error al eliminar sesion.\n")
+
+    def _delete_empty_sessions(self, sessions: list[dict]) -> None:
+        """Eliminar sesiones sin analisis."""
+        empty_sessions = [s for s in sessions if s['n_analyses'] == 0]
+
+        if not empty_sessions:
+            self.echo("\n  No hay sesiones vacias.\n")
+            return
+
+        self.echo(f"\n  Sesiones vacias encontradas: {len(empty_sessions)}")
+        for s in empty_sessions:
+            self.echo(f"    - {s['id']}: {s['name']}")
+
+        if self.confirm(f"\nEliminar {len(empty_sessions)} sesiones vacias?", default=False):
+            deleted = 0
+            for s in empty_sessions:
+                if self.manager.delete(s['id']):
+                    deleted += 1
+
+            self.echo(f"\n  {deleted} sesiones eliminadas.\n")
 
 
 # Alias para compatibilidad

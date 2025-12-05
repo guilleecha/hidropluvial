@@ -337,11 +337,19 @@ class TestAdditionalAnalysisRunner:
 class TestContinueSessionMenu:
     """Tests para continue_session_menu (ahora continue_project_menu)."""
 
-    def test_no_sessions_shows_message(self, manager, capsys):
+    def test_no_sessions_shows_message(self, manager, tmp_path, capsys):
         """Test mensaje cuando no hay sesiones ni proyectos."""
+        from hidropluvial.project import ProjectManager
+
+        # Crear un ProjectManager con directorio temporal vacío
+        temp_project_manager = ProjectManager(data_dir=tmp_path / "hidropluvial_test")
+
         with patch(
             "hidropluvial.cli.wizard.menus.base.get_session_manager",
             return_value=manager,
+        ), patch(
+            "hidropluvial.cli.wizard.menus.continue_project.ProjectManager",
+            return_value=temp_project_manager,
         ):
             continue_session_menu()
 

@@ -70,10 +70,11 @@ El wizard guía paso a paso para:
 
 ? Que deseas hacer?
 > 1. Nueva cuenca (analisis guiado)
-  2. Continuar proyecto/cuenca existente
-  3. Gestionar proyectos y cuencas
-  4. Ver comandos disponibles
-  5. Salir
+  2. Crear nuevo proyecto
+  3. Continuar proyecto/cuenca existente
+  4. Gestionar proyectos y cuencas
+  5. Ver comandos disponibles
+  6. Salir
 ```
 
 ### Ejemplo de Flujo Completo

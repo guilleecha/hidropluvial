@@ -552,6 +552,88 @@ class StepMetodoEscorrentia(WizardStep):
                 return StepResult.BACK
             self.state.cn = cn_weighted
 
+        # Preguntar por parámetros SCS-CN (AMC y Lambda)
+        res = self._configure_cn_parameters()
+        if res != StepResult.NEXT:
+            return res
+
+        return StepResult.NEXT
+
+    def _configure_cn_parameters(self) -> StepResult:
+        """Configura AMC y Lambda para el método SCS-CN."""
+        self.echo(f"\n  CN base = {self.state.cn}")
+
+        res, configurar = self.confirm(
+            "¿Configurar condición de humedad (AMC) y coeficiente Lambda?",
+            default=False,
+        )
+
+        if res != StepResult.NEXT:
+            return res
+
+        if not configurar:
+            # Usar valores por defecto
+            self.state.amc = "II"
+            self.state.lambda_coef = 0.2
+            self.echo("  Usando valores por defecto: AMC II, λ = 0.20")
+            return StepResult.NEXT
+
+        # Configurar AMC
+        self.echo("\n  Condición de Humedad Antecedente (AMC):")
+        self.echo("    I  - Suelo seco (5 días sin lluvia, menor escorrentía)")
+        self.echo("    II - Condición promedio (default)")
+        self.echo("    III - Suelo húmedo (lluvia reciente, mayor escorrentía)")
+
+        amc_choices = [
+            "AMC I - Suelo seco",
+            "AMC II - Condición promedio (recomendado)",
+            "AMC III - Suelo húmedo",
+        ]
+
+        res, amc_choice = self.select("Condición AMC:", amc_choices)
+
+        if res != StepResult.NEXT:
+            return res
+
+        if "AMC I" in amc_choice:
+            self.state.amc = "I"
+        elif "AMC III" in amc_choice:
+            self.state.amc = "III"
+        else:
+            self.state.amc = "II"
+
+        # Configurar Lambda
+        self.echo("\n  Coeficiente Lambda (λ) para abstracción inicial:")
+        self.echo("    Ia = λ × S  (donde S es la retención potencial)")
+        self.echo("    λ = 0.20: Valor tradicional SCS")
+        self.echo("    λ = 0.05: Áreas urbanas (NRCS actualizado)")
+
+        lambda_choices = [
+            "λ = 0.20 - Tradicional SCS (recomendado)",
+            "λ = 0.05 - Áreas urbanas/impermeables",
+            "Otro valor",
+        ]
+
+        res, lambda_choice = self.select("Coeficiente λ:", lambda_choices)
+
+        if res != StepResult.NEXT:
+            return res
+
+        if "0.20" in lambda_choice:
+            self.state.lambda_coef = 0.2
+        elif "0.05" in lambda_choice:
+            self.state.lambda_coef = 0.05
+        elif "Otro" in lambda_choice:
+            res, val = self.text(
+                "Valor de λ (0.01-0.30):",
+                validate=lambda x: validate_range(x, 0.01, 0.30),
+            )
+            if res != StepResult.NEXT:
+                return res
+            if val:
+                self.state.lambda_coef = float(val)
+
+        self.echo(f"\n  Configurado: AMC {self.state.amc}, λ = {self.state.lambda_coef}")
         return StepResult.NEXT
 
     def _calculate_weighted_cn(self) -> Optional[int]:
@@ -720,18 +802,28 @@ class StepLongitud(WizardStep):
 
 
 class StepParametrosAvanzados(WizardStep):
-    """Paso: Parámetros avanzados (AMC, Lambda, t0)."""
+    """Paso: Parámetro t0 para método Desbordes.
+
+    Nota: AMC y Lambda ahora se configuran en el paso de CN (StepCoeficientes).
+    Este paso solo pregunta por t0 si se usa el coeficiente C (método Desbordes).
+    """
 
     @property
     def title(self) -> str:
-        return "Parámetros Avanzados"
+        return "Parámetro t0 (Desbordes)"
 
     def execute(self) -> StepResult:
-        self.echo(f"\n-- {self.title} --\n")
+        # Solo preguntar por t0 si se usa C (para método Desbordes)
+        if not self.state.c:
+            # Sin C no se usa Desbordes, t0 no aplica
+            self.state.t0_min = 5.0  # Valor por defecto por si acaso
+            return StepResult.NEXT
 
-        # Preguntar si quiere configurar parámetros avanzados
+        self.echo(f"\n-- {self.title} --\n")
+        self.echo("  El método Desbordes usa un tiempo de entrada inicial (t0).")
+
         res, configurar = self.confirm(
-            "¿Configurar parámetros avanzados? (AMC, Lambda, t0)",
+            "¿Configurar t0? (default: 5 min)",
             default=False,
         )
 
@@ -739,94 +831,11 @@ class StepParametrosAvanzados(WizardStep):
             return res
 
         if not configurar:
-            # Usar valores por defecto
-            self.state.amc = "II"
-            self.state.lambda_coef = 0.2
             self.state.t0_min = 5.0
+            self.echo("  Usando t0 = 5 min (valor por defecto)")
             return StepResult.NEXT
 
-        # Configurar AMC si usa CN
-        if self.state.cn:
-            res = self._configure_amc()
-            if res != StepResult.NEXT:
-                return res
-
-            # Configurar Lambda
-            res = self._configure_lambda()
-            if res != StepResult.NEXT:
-                return res
-
-        # Configurar t0 si usa C (método Desbordes)
-        if self.state.c:
-            res = self._configure_t0()
-            if res != StepResult.NEXT:
-                return res
-
-        return StepResult.NEXT
-
-    def _configure_amc(self) -> StepResult:
-        """Configura la condición de humedad antecedente."""
-        self.echo("\n  Condición de Humedad Antecedente (AMC):")
-        self.echo("    I  - Suelo seco (menor escorrentía)")
-        self.echo("    II - Condición promedio (default)")
-        self.echo("    III - Suelo húmedo (mayor escorrentía)")
-
-        amc_choices = [
-            "AMC I - Suelo seco",
-            "AMC II - Condición promedio",
-            "AMC III - Suelo húmedo",
-        ]
-
-        res, amc_choice = self.select("\nCondición AMC:", amc_choices)
-
-        if res != StepResult.NEXT:
-            return res
-
-        if amc_choice:
-            if "AMC I" in amc_choice:
-                self.state.amc = "I"
-            elif "AMC III" in amc_choice:
-                self.state.amc = "III"
-            else:
-                self.state.amc = "II"
-
-        return StepResult.NEXT
-
-    def _configure_lambda(self) -> StepResult:
-        """Configura el coeficiente Lambda."""
-        self.echo("\n  Coeficiente Lambda (λ) para abstracción inicial:")
-        self.echo("    Ia = λ × S")
-        self.echo("    λ = 0.20 - Valor tradicional SCS")
-        self.echo("    λ = 0.05 - Cuencas urbanas (Hawkins 2002)")
-
-        lambda_choices = [
-            "0.20 - Tradicional SCS (default)",
-            "0.05 - Cuencas urbanas",
-            "Otro valor",
-        ]
-
-        res, lambda_choice = self.select("\nCoeficiente λ:", lambda_choices)
-
-        if res != StepResult.NEXT:
-            return res
-
-        if lambda_choice:
-            if "0.20" in lambda_choice:
-                self.state.lambda_coef = 0.2
-            elif "0.05" in lambda_choice:
-                self.state.lambda_coef = 0.05
-            elif "Otro" in lambda_choice:
-                res, val = self.text(
-                    "Valor de λ (0.01 - 0.30):",
-                    validate=lambda x: validate_range(x, 0.01, 0.30),
-                    default="0.20",
-                )
-                if res != StepResult.NEXT:
-                    return res
-                if val:
-                    self.state.lambda_coef = float(val)
-
-        return StepResult.NEXT
+        return self._configure_t0()
 
     def _configure_t0(self) -> StepResult:
         """Configura el tiempo de entrada inicial t0."""
@@ -842,7 +851,7 @@ class StepParametrosAvanzados(WizardStep):
             "Otro valor",
         ]
 
-        res, t0_choice = self.select("\nTiempo t0:", t0_choices)
+        res, t0_choice = self.select("Tiempo t0:", t0_choices)
 
         if res != StepResult.NEXT:
             return res
@@ -865,6 +874,7 @@ class StepParametrosAvanzados(WizardStep):
                 if val:
                     self.state.t0_min = float(val)
 
+        self.echo(f"\n  Configurado: t0 = {self.state.t0_min} min")
         return StepResult.NEXT
 
 

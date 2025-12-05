@@ -126,6 +126,11 @@ def plot_combined(
         # Usar barras para el hietograma
         plt.bar(time_hr, storm.intensity_mmhr, color="cyan")
 
+        # Configurar ticks limpios en X (horas enteras)
+        max_time = max(time_hr) if time_hr else 6
+        x_ticks = list(range(0, int(max_time) + 2))
+        plt.xticks(x_ticks, [str(t) for t in x_ticks])
+
         plt.title(f"Hietograma - P={storm.total_depth_mm:.1f}mm, imax={storm.peak_intensity_mmhr:.1f}mm/h")
         plt.ylabel("i (mm/h)")
         plt.xlabel("")  # Sin label en X para el superior
@@ -146,6 +151,11 @@ def plot_combined(
         peak_q = hydro.flow_m3s[peak_idx]
         peak_t = hydro.time_hr[peak_idx]
         plt.scatter([peak_t], [peak_q], marker="x", color="red")
+
+        # Configurar ticks limpios en X (horas enteras)
+        max_time = max(hydro.time_hr) if hydro.time_hr else 6
+        x_ticks = list(range(0, int(max_time) + 2))
+        plt.xticks(x_ticks, [str(t) for t in x_ticks])
 
         from hidropluvial.cli.formatters import format_flow
         plt.title(f"Hidrograma - Qp={format_flow(hydro.peak_flow_m3s)} m3/s, Tp={hydro.time_to_peak_min:.0f}min")

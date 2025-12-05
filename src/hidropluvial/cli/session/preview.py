@@ -13,8 +13,8 @@ from hidropluvial.cli.preview import (
     plot_hyetograph_terminal,
     plot_hydrograph_comparison_terminal,
     print_hyetograph_bars,
-    print_summary_table_with_sparklines,
 )
+from hidropluvial.cli.theme import print_analyses_summary_table, get_console
 
 
 def session_preview(
@@ -195,34 +195,28 @@ def session_preview(
         return
 
     # Modo por defecto: tabla con sparklines
-    typer.echo(f"\n  Sesion: {session.name} ({session.id}){filter_msg}")
-    typer.echo(f"  Cuenca: {session.cuenca.area_ha} ha, S={session.cuenca.slope_pct}%")
+    console = get_console()
+    console.print()
+    console.print(f"  Sesion: [bold]{session.name}[/bold] ({session.id}){filter_msg}")
+    console.print(f"  Cuenca: {session.cuenca.area_ha} ha, S={session.cuenca.slope_pct}%")
     if active_filters:
-        typer.echo(f"  Mostrando {len(analyses)} de {len(session.analyses)} analisis")
+        console.print(f"  Mostrando {len(analyses)} de {len(session.analyses)} analisis")
+    console.print()
 
-    rows = []
-    for i, analysis in enumerate(analyses):
-        hydro = analysis.hydrograph
-        storm_data = analysis.storm
-        rows.append({
-            'idx': i,
-            'tc_method': hydro.tc_method,
-            'storm': storm_data.type,
-            'tr': storm_data.return_period,
-            'x': hydro.x_factor,
-            'qpeak_m3s': hydro.peak_flow_m3s,
-            'tp_hr': hydro.time_to_peak_hr,
-            'hydrograph_flow': hydro.flow_m3s or [],
-        })
+    # Usar la nueva tabla Rich
+    print_analyses_summary_table(
+        analyses,
+        title=f"Analisis - {session.name}",
+        show_sparkline=True,
+    )
 
-    print_summary_table_with_sparklines(rows, show_sparkline=True)
-
-    typer.echo("  Comandos:")
-    typer.echo(f"    hp session preview {session_id} -i 0         Ver hidrograma #0")
-    typer.echo(f"    hp session preview {session_id} -i 0 --hyeto Ver hietograma #0")
-    typer.echo(f"    hp session preview {session_id} --compare    Comparar todos")
-    typer.echo(f"    hp session preview {session_id} --tr 10      Filtrar por Tr")
-    typer.echo("")
+    console.print()
+    console.print("  [dim]Comandos:[/dim]")
+    console.print(f"    [dim]hp session preview {session_id} -i 0[/dim]         Ver hidrograma #0")
+    console.print(f"    [dim]hp session preview {session_id} -i 0 --hyeto[/dim] Ver hietograma #0")
+    console.print(f"    [dim]hp session preview {session_id} --compare[/dim]    Comparar todos")
+    console.print(f"    [dim]hp session preview {session_id} --tr 10[/dim]      Filtrar por Tr")
+    console.print()
 
 
 def _filter_analyses(

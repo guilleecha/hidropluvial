@@ -261,3 +261,126 @@ def print_sessions_table(sessions: list[dict], title: str = "SESIONES LEGACY") -
         )
 
     console.print(table)
+
+
+def print_analyses_summary_table(
+    analyses,
+    title: str = "RESUMEN DE ANALISIS",
+    show_sparkline: bool = True,
+    sparkline_width: int = 15,
+) -> None:
+    """
+    Imprime tabla resumen de analisis con formato Rich.
+
+    Muestra informacion clave de cada analisis:
+    - Idx: Indice para referencia
+    - Metodo Tc: Metodo de tiempo de concentracion
+    - Tormenta: Tipo de tormenta
+    - Tr: Periodo de retorno (anos)
+    - Tc: Tiempo de concentracion (min)
+    - P: Precipitacion total (mm)
+    - Pe: Escorrentia efectiva (mm)
+    - Qp: Caudal pico (m3/s) - destacado
+    - Tp: Tiempo al pico (min)
+    - Vol: Volumen (hm3)
+    - Hidrograma: Sparkline visual
+
+    Args:
+        analyses: Lista de AnalysisRun
+        title: Titulo de la tabla
+        show_sparkline: Si mostrar sparklines
+        sparkline_width: Ancho del sparkline
+    """
+    from hidropluvial.cli.preview import sparkline
+    from hidropluvial.cli.formatters import format_flow, format_volume_hm3
+
+    console = get_console()
+    p = get_palette()
+
+    if not analyses:
+        console.print("  No hay analisis.", style=p.muted)
+        return
+
+    table = Table(
+        title=title,
+        title_style=f"bold {p.primary}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    # Columnas
+    table.add_column("#", justify="right", style=p.muted, width=3)
+    table.add_column("Metodo Tc", justify="left")
+    table.add_column("Tormenta", justify="left")
+    table.add_column("Tr", justify="right", style=p.number)
+    table.add_column("Tc", justify="right", style=p.number)
+    table.add_column("P", justify="right", style=p.number)
+    table.add_column("Pe", justify="right", style=p.number)
+    table.add_column("Qp", justify="right")  # Estilo especial
+    table.add_column("Tp", justify="right", style=p.number)
+    table.add_column("Vol", justify="right", style=p.number)
+    if show_sparkline:
+        table.add_column("Hidrograma", justify="left")
+
+    # Encontrar Qp maximo para destacar
+    max_qp = max(a.hydrograph.peak_flow_m3s for a in analyses) if analyses else 0
+
+    for idx, analysis in enumerate(analyses):
+        hydro = analysis.hydrograph
+        storm = analysis.storm
+        tc = analysis.tc
+
+        # Formatear valores
+        tc_min = f"{tc.tc_min:.0f}" if tc.tc_min else "-"
+        p_total = f"{storm.total_depth_mm:.1f}" if storm.total_depth_mm else "-"
+        pe = f"{hydro.runoff_mm:.1f}" if hydro.runoff_mm else "-"
+        tp = f"{hydro.time_to_peak_min:.0f}" if hydro.time_to_peak_min else "-"
+        vol = format_volume_hm3(hydro.volume_m3)
+
+        # Qp con formato especial - destacar el maximo
+        qp_val = hydro.peak_flow_m3s
+        qp_str = format_flow(qp_val)
+        if qp_val == max_qp:
+            qp_text = Text(qp_str, style=f"bold {p.accent}")
+        else:
+            qp_text = Text(qp_str, style=p.number)
+
+        # Tipo de tormenta abreviado
+        storm_type = storm.type.upper()[:6]
+
+        # X factor si existe
+        method_str = tc.method
+        if hydro.x_factor:
+            method_str = f"{tc.method} X={hydro.x_factor:.2f}"
+
+        row = [
+            str(idx),
+            method_str[:18],
+            storm_type,
+            str(storm.return_period),
+            tc_min,
+            p_total,
+            pe,
+            qp_text,
+            tp,
+            vol,
+        ]
+
+        if show_sparkline:
+            if hydro.flow_m3s:
+                spark = sparkline(hydro.flow_m3s, width=sparkline_width)
+                row.append(Text(spark, style=p.info))
+            else:
+                row.append("-")
+
+        table.add_row(*row)
+
+    console.print(table)
+
+    # Leyenda de unidades
+    console.print(
+        f"  [dim]Tc: min | P: mm | Pe: mm | Qp: m³/s | Tp: min | Vol: hm³[/dim]"
+    )

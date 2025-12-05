@@ -181,29 +181,45 @@ class AnalysisRunner:
         """Ejecuta todos los analisis."""
         n_analyses = 0
 
+        # Determinar métodos de escorrentía disponibles
+        runoff_methods = []
+        if self.config.c:
+            runoff_methods.append("racional")
+        if self.config.cn:
+            runoff_methods.append("scs-cn")
+
         for tc_result in self.session.tc_results:
             for storm_code in self.config.storm_codes:
                 for tr in self.config.return_periods:
-                    if storm_code == "gz":
-                        # Multiples valores de X para GZ
-                        for x in self.config.x_factors:
-                            self._run_single_analysis(tc_result, tr, x, storm_code)
+                    for runoff_method in runoff_methods:
+                        if storm_code == "gz":
+                            # Multiples valores de X para GZ
+                            for x in self.config.x_factors:
+                                self._run_single_analysis(tc_result, tr, x, storm_code, runoff_method)
+                                n_analyses += 1
+                        else:
+                            # Solo X=1.0 para tormentas no-GZ
+                            self._run_single_analysis(tc_result, tr, 1.0, storm_code, runoff_method)
                             n_analyses += 1
-                    else:
-                        # Solo X=1.0 para tormentas no-GZ
-                        self._run_single_analysis(tc_result, tr, 1.0, storm_code)
-                        n_analyses += 1
 
         typer.echo(f"  + {n_analyses} analisis completados")
 
-    def _run_single_analysis(self, tc_result, tr: int, x: float, storm_code: str) -> None:
-        """Ejecuta un analisis individual."""
+    def _run_single_analysis(self, tc_result, tr: int, x: float, storm_code: str, runoff_method: str = "racional") -> None:
+        """Ejecuta un analisis individual.
+
+        Args:
+            tc_result: Resultado de tiempo de concentración
+            tr: Período de retorno (años)
+            x: Factor X morfológico
+            storm_code: Código de tormenta (gz, blocks, blocks24)
+            runoff_method: Método de escorrentía ('racional' o 'scs-cn')
+        """
         p3_10 = self.config.p3_10
         area = self.config.area_ha
 
-        # Obtener C ajustado para el Tr del análisis (si aplica)
+        # Obtener C ajustado para el Tr del análisis (si aplica y usa método racional)
         c_adjusted = None
-        if self.config.c:
+        if runoff_method == "racional" and self.config.c:
             c_adjusted = _get_c_for_tr(self.config, tr)
 
         # Recalcular Tc si es método Desbordes (depende de C y t0)
@@ -238,13 +254,14 @@ class AnalysisRunner:
 
         depths = np.array(hyetograph.depth_mm)
 
-        # Escorrentia
+        # Escorrentía según método seleccionado
         cn_adjusted = None
-        if c_adjusted:
+        if runoff_method == "racional" and c_adjusted:
+            # Método Racional: Q = C × P
             excess_mm = c_adjusted * depths
             runoff_mm = float(np.sum(excess_mm))
-        elif self.config.cn:
-            # Ajustar CN por condición de humedad antecedente (AMC)
+        elif runoff_method == "scs-cn" and self.config.cn:
+            # Método SCS-CN
             amc_enum = _get_amc_enum(self.config.amc)
             cn_adjusted = adjust_cn_for_amc(self.config.cn, amc_enum)
 
@@ -254,15 +271,18 @@ class AnalysisRunner:
             )
             runoff_mm = float(np.sum(excess_mm))
         else:
+            # No hay coeficiente para el método solicitado
             return
 
         # Hidrograma unitario
         dt_hr = dt / 60
         x_val = x if storm_code == "gz" else 1.0
 
-        if storm_code == "gz" or self.config.c:
+        if runoff_method == "racional" or storm_code == "gz":
+            # Hidrograma triangular con factor X para método racional o tormenta GZ
             uh_time, uh_flow = triangular_uh_x(area, tc_hr, dt_hr, x_val)
         else:
+            # Hidrograma SCS para método CN
             uh_time, uh_flow = scs_triangular_uh(area / 100, tc_hr, dt_hr)
             x_val = 1.67
 
@@ -287,8 +307,13 @@ class AnalysisRunner:
         elif tc_result.parameters:
             tc_params = dict(tc_result.parameters)
 
-        # Agregar parámetros de escorrentía SCS si aplica
-        if cn_adjusted is not None:
+        # Agregar método de escorrentía usado
+        tc_params["runoff_method"] = runoff_method
+
+        # Agregar parámetros según el método de escorrentía
+        if runoff_method == "racional" and c_adjusted:
+            tc_params["c"] = round(c_adjusted, 3)
+        elif runoff_method == "scs-cn" and cn_adjusted is not None:
             tc_params["cn_adjusted"] = round(cn_adjusted, 1)
             tc_params["amc"] = self.config.amc
             tc_params["lambda"] = self.config.lambda_coef
@@ -364,11 +389,30 @@ class AdditionalAnalysisRunner:
         storm_code: str,
         return_periods: list[int],
         x_factors: list[float],
+        runoff_method: str = None,
     ) -> int:
-        """Ejecuta analisis adicionales. Retorna cantidad de analisis agregados."""
+        """Ejecuta analisis adicionales. Retorna cantidad de analisis agregados.
+
+        Args:
+            tc_methods: Lista de métodos de Tc a usar
+            storm_code: Código de tormenta
+            return_periods: Lista de períodos de retorno
+            x_factors: Lista de factores X
+            runoff_method: Método de escorrentía ('racional', 'scs-cn' o None para ambos)
+        """
         p3_10 = self.session.cuenca.p3_10
         area = self.session.cuenca.area_ha
         n_analyses = 0
+
+        # Determinar métodos de escorrentía a usar
+        if runoff_method:
+            runoff_methods = [runoff_method]
+        else:
+            runoff_methods = []
+            if self.c:
+                runoff_methods.append("racional")
+            if self.cn:
+                runoff_methods.append("scs-cn")
 
         for tc_result in self.session.tc_results:
             if tc_result.method not in tc_methods:
@@ -376,122 +420,127 @@ class AdditionalAnalysisRunner:
 
             for tr in return_periods:
                 for x in x_factors:
-                    # Obtener C ajustado para el Tr del análisis (si aplica)
-                    c_adjusted = None
-                    if self.c:
-                        c_adjusted = _get_c_for_tr_from_session(self.session, self.c, tr)
+                    for r_method in runoff_methods:
+                        # Obtener C ajustado para el Tr del análisis (si usa método racional)
+                        c_adjusted = None
+                        if r_method == "racional" and self.c:
+                            c_adjusted = _get_c_for_tr_from_session(self.session, self.c, tr)
 
-                    # Recalcular Tc si es método Desbordes (depende de C y t0)
-                    if tc_result.method == "desbordes" and c_adjusted:
-                        tc_hr = desbordes(area, self.session.cuenca.slope_pct, c_adjusted, self.t0_min)
-                    else:
-                        tc_hr = tc_result.tc_hr
+                        # Recalcular Tc si es método Desbordes (depende de C y t0)
+                        if tc_result.method == "desbordes" and c_adjusted:
+                            tc_hr = desbordes(area, self.session.cuenca.slope_pct, c_adjusted, self.t0_min)
+                        else:
+                            tc_hr = tc_result.tc_hr
 
-                    # Determinar duracion
-                    if storm_code == "gz":
-                        duration_hr = 6.0
-                        dt = 5.0
-                    elif storm_code == "blocks24":
-                        duration_hr = 24.0
-                        dt = 10.0
-                    else:
-                        duration_hr = max(tc_hr, 1.0)
-                        dt = 5.0
+                        # Determinar duracion
+                        if storm_code == "gz":
+                            duration_hr = 6.0
+                            dt = 5.0
+                        elif storm_code == "blocks24":
+                            duration_hr = 24.0
+                            dt = 10.0
+                        else:
+                            duration_hr = max(tc_hr, 1.0)
+                            dt = 5.0
 
-                    # Generar tormenta
-                    if storm_code == "gz":
-                        peak_position = 1.0 / 6.0
-                        hyetograph = alternating_blocks_dinagua(
-                            p3_10, tr, duration_hr, dt, None, peak_position
+                        # Generar tormenta
+                        if storm_code == "gz":
+                            peak_position = 1.0 / 6.0
+                            hyetograph = alternating_blocks_dinagua(
+                                p3_10, tr, duration_hr, dt, None, peak_position
+                            )
+                        elif storm_code == "bimodal":
+                            hyetograph = bimodal_dinagua(p3_10, tr, duration_hr, dt)
+                        else:
+                            hyetograph = alternating_blocks_dinagua(
+                                p3_10, tr, duration_hr, dt, None
+                            )
+
+                        depths = np.array(hyetograph.depth_mm)
+
+                        # Escorrentía según método seleccionado
+                        cn_adjusted = None
+                        if r_method == "racional" and c_adjusted:
+                            excess_mm = c_adjusted * depths
+                            runoff_mm = float(np.sum(excess_mm))
+                        elif r_method == "scs-cn" and self.cn:
+                            amc_enum = _get_amc_enum(self.amc)
+                            cn_adjusted = adjust_cn_for_amc(self.cn, amc_enum)
+
+                            cumulative = np.array(hyetograph.cumulative_mm)
+                            excess_mm = rainfall_excess_series(
+                                cumulative, cn_adjusted, self.lambda_coef
+                            )
+                            runoff_mm = float(np.sum(excess_mm))
+                        else:
+                            continue
+
+                        # Hidrograma unitario
+                        dt_hr = dt / 60
+                        x_val = x if storm_code == "gz" else 1.0
+
+                        if r_method == "racional" or storm_code == "gz":
+                            uh_time, uh_flow = triangular_uh_x(area, tc_hr, dt_hr, x_val)
+                        else:
+                            uh_time, uh_flow = scs_triangular_uh(area / 100, tc_hr, dt_hr)
+                            x_val = 1.67
+
+                        # Convolucion
+                        hydrograph_flow = convolve_uh(excess_mm, uh_flow)
+                        n_total = len(hydrograph_flow)
+                        hydrograph_time = np.arange(n_total) * dt_hr
+
+                        peak_idx = np.argmax(hydrograph_flow)
+                        peak_flow = float(hydrograph_flow[peak_idx])
+                        time_to_peak = float(hydrograph_time[peak_idx])
+                        volume_m3 = float(np.trapezoid(hydrograph_flow, hydrograph_time * 3600))
+
+                        # Preparar parametros de Tc para guardar
+                        tc_params = {}
+                        if tc_result.method == "desbordes" and c_adjusted:
+                            tc_params = {
+                                "c": c_adjusted,
+                                "area_ha": area,
+                                "t0_min": self.t0_min,
+                            }
+                        elif tc_result.parameters:
+                            tc_params = dict(tc_result.parameters)
+
+                        # Agregar método de escorrentía usado
+                        tc_params["runoff_method"] = r_method
+
+                        # Agregar parámetros según el método
+                        if r_method == "racional" and c_adjusted:
+                            tc_params["c"] = round(c_adjusted, 3)
+                        elif r_method == "scs-cn" and cn_adjusted is not None:
+                            tc_params["cn_adjusted"] = round(cn_adjusted, 1)
+                            tc_params["amc"] = self.amc
+                            tc_params["lambda"] = self.lambda_coef
+
+                        # Guardar analisis
+                        self.manager.add_analysis(
+                            session=self.session,
+                            tc_method=tc_result.method,
+                            tc_hr=tc_hr,
+                            storm_type=storm_code,
+                            return_period=tr,
+                            duration_hr=duration_hr,
+                            total_depth_mm=hyetograph.total_depth_mm,
+                            peak_intensity_mmhr=hyetograph.peak_intensity_mmhr,
+                            n_intervals=len(hyetograph.time_min),
+                            peak_flow_m3s=peak_flow,
+                            time_to_peak_hr=time_to_peak,
+                            volume_m3=volume_m3,
+                            runoff_mm=runoff_mm,
+                            x_factor=x if storm_code == "gz" else None,
+                            storm_time_min=list(hyetograph.time_min),
+                            storm_intensity_mmhr=list(hyetograph.intensity_mmhr),
+                            hydrograph_time_hr=[float(t) for t in hydrograph_time],
+                            hydrograph_flow_m3s=[float(q) for q in hydrograph_flow],
+                            **tc_params,
                         )
-                    elif storm_code == "bimodal":
-                        hyetograph = bimodal_dinagua(p3_10, tr, duration_hr, dt)
-                    else:
-                        hyetograph = alternating_blocks_dinagua(
-                            p3_10, tr, duration_hr, dt, None
-                        )
 
-                    depths = np.array(hyetograph.depth_mm)
-
-                    # Escorrentia
-                    cn_adjusted = None
-                    if c_adjusted:
-                        excess_mm = c_adjusted * depths
-                        runoff_mm = float(np.sum(excess_mm))
-                    elif self.cn:
-                        # Ajustar CN por condición de humedad antecedente (AMC)
-                        amc_enum = _get_amc_enum(self.amc)
-                        cn_adjusted = adjust_cn_for_amc(self.cn, amc_enum)
-
-                        cumulative = np.array(hyetograph.cumulative_mm)
-                        excess_mm = rainfall_excess_series(
-                            cumulative, cn_adjusted, self.lambda_coef
-                        )
-                        runoff_mm = float(np.sum(excess_mm))
-                    else:
-                        continue
-
-                    # Hidrograma unitario
-                    dt_hr = dt / 60
-                    x_val = x if storm_code == "gz" else 1.0
-
-                    if storm_code == "gz" or self.c:
-                        uh_time, uh_flow = triangular_uh_x(area, tc_hr, dt_hr, x_val)
-                    else:
-                        uh_time, uh_flow = scs_triangular_uh(area / 100, tc_hr, dt_hr)
-                        x_val = 1.67
-
-                    # Convolucion
-                    hydrograph_flow = convolve_uh(excess_mm, uh_flow)
-                    n_total = len(hydrograph_flow)
-                    hydrograph_time = np.arange(n_total) * dt_hr
-
-                    peak_idx = np.argmax(hydrograph_flow)
-                    peak_flow = float(hydrograph_flow[peak_idx])
-                    time_to_peak = float(hydrograph_time[peak_idx])
-                    volume_m3 = float(np.trapezoid(hydrograph_flow, hydrograph_time * 3600))
-
-                    # Preparar parametros de Tc para guardar
-                    tc_params = {}
-                    if tc_result.method == "desbordes" and c_adjusted:
-                        tc_params = {
-                            "c": c_adjusted,
-                            "area_ha": area,
-                            "t0_min": self.t0_min,
-                        }
-                    elif tc_result.parameters:
-                        tc_params = dict(tc_result.parameters)
-
-                    # Agregar parámetros de escorrentía SCS si aplica
-                    if cn_adjusted is not None:
-                        tc_params["cn_adjusted"] = round(cn_adjusted, 1)
-                        tc_params["amc"] = self.amc
-                        tc_params["lambda"] = self.lambda_coef
-
-                    # Guardar analisis
-                    self.manager.add_analysis(
-                        session=self.session,
-                        tc_method=tc_result.method,
-                        tc_hr=tc_hr,
-                        storm_type=storm_code,
-                        return_period=tr,
-                        duration_hr=duration_hr,
-                        total_depth_mm=hyetograph.total_depth_mm,
-                        peak_intensity_mmhr=hyetograph.peak_intensity_mmhr,
-                        n_intervals=len(hyetograph.time_min),
-                        peak_flow_m3s=peak_flow,
-                        time_to_peak_hr=time_to_peak,
-                        volume_m3=volume_m3,
-                        runoff_mm=runoff_mm,
-                        x_factor=x if storm_code == "gz" else None,
-                        storm_time_min=list(hyetograph.time_min),
-                        storm_intensity_mmhr=list(hyetograph.intensity_mmhr),
-                        hydrograph_time_hr=[float(t) for t in hydrograph_time],
-                        hydrograph_flow_m3s=[float(q) for q in hydrograph_flow],
-                        **tc_params,
-                    )
-
-                    n_analyses += 1
+                        n_analyses += 1
 
                     # Solo un X para tormentas no-GZ
                     if storm_code != "gz":

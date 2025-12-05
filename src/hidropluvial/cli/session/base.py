@@ -424,3 +424,83 @@ def session_edit(
             typer.echo(f"  Usa 'hp session analyze {session.id}' para nuevos análisis\n")
         else:
             typer.echo("\n  No se realizaron cambios (valores iguales).\n")
+
+
+def session_clean(
+    pattern: Annotated[Optional[str], typer.Option("--pattern", "-p", help="Patrón en nombre (ej: 'test')")] = None,
+    empty: Annotated[bool, typer.Option("--empty", "-e", help="Eliminar sesiones sin análisis")] = False,
+    force: Annotated[bool, typer.Option("--force", "-f", help="No pedir confirmación")] = False,
+):
+    """
+    Limpia sesiones según criterios.
+
+    Ejemplos:
+        # Eliminar sesiones con "test" en el nombre
+        hp session clean --pattern test
+
+        # Eliminar sesiones vacías (sin análisis)
+        hp session clean --empty
+
+        # Combinar criterios (OR)
+        hp session clean --pattern prueba --empty
+    """
+    manager = get_session_manager()
+    sessions = manager.list_sessions()
+
+    to_delete = []
+
+    for s in sessions:
+        should_delete = False
+
+        if pattern and pattern.lower() in s["name"].lower():
+            should_delete = True
+
+        if empty and s["n_analyses"] == 0:
+            should_delete = True
+
+        if should_delete:
+            to_delete.append(s)
+
+    if not to_delete:
+        typer.echo("No hay sesiones que coincidan con los criterios.")
+        return
+
+    typer.echo(f"\nSesiones a eliminar ({len(to_delete)}):")
+    typer.echo(f"  {'ID':8} | {'Nombre':25} | {'Análisis':>8}")
+    typer.echo(f"  {'-'*50}")
+    for s in to_delete[:15]:
+        typer.echo(f"  {s['id']:8} | {s['name'][:25]:25} | {s['n_analyses']:>8}")
+    if len(to_delete) > 15:
+        typer.echo(f"  ... y {len(to_delete) - 15} más")
+
+    if not force:
+        confirm = typer.confirm(f"\n¿Eliminar {len(to_delete)} sesiones?")
+        if not confirm:
+            typer.echo("Cancelado.")
+            raise typer.Exit(0)
+
+    deleted = 0
+    for s in to_delete:
+        if manager.delete(s["id"]):
+            deleted += 1
+
+    typer.echo(f"\n{deleted} sesiones eliminadas.")
+
+
+def session_rename(
+    session_id: Annotated[str, typer.Argument(help="ID de sesión")],
+    new_name: Annotated[str, typer.Argument(help="Nuevo nombre")],
+):
+    """Renombra una sesión."""
+    manager = get_session_manager()
+    session = manager.get_session(session_id)
+
+    if not session:
+        typer.echo(f"Sesión no encontrada: {session_id}", err=True)
+        raise typer.Exit(1)
+
+    old_name = session.name
+    session.name = new_name
+    manager.save(session)
+
+    typer.echo(f"Sesión renombrada: '{old_name}' -> '{new_name}'")

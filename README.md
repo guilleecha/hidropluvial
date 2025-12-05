@@ -4,7 +4,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-709%20passed-green.svg)]()
+[![Tests](https://img.shields.io/badge/tests-724%20passed-green.svg)]()
 
 ---
 
@@ -15,9 +15,9 @@
 - **Tiempo de concentración** - Kirpich, Témez, Desbordes (DINAGUA)
 - **Escorrentía** - SCS Curve Number (con AMC y λ configurable), Método Racional
 - **Hidrogramas** - SCS triangular/curvilíneo, Triangular con factor X
-- **Sistema de Sesiones** - Flujo de trabajo integrado para análisis comparativos
+- **Gestión de Proyectos y Cuencas** - Organización jerárquica para estudios complejos
 - **Reportes LaTeX** - Memorias de cálculo con gráficos TikZ/PGFPlots
-- **Exportación** - Excel, CSV, figuras TikZ standalone
+- **Exportación** - Excel, CSV, fichas técnicas PDF
 
 ---
 
@@ -60,13 +60,29 @@ El wizard guía paso a paso para:
 5. Ejecutar análisis (tormentas, Tr, factor X)
 6. Exportar a Excel y/o generar reportes LaTeX
 
+### Menú Principal del Wizard
+
+```
++-------------------------------------------------------------+
+|         HIDROPLUVIAL - Asistente de Analisis                |
+|         Calculos hidrologicos para Uruguay                  |
++-------------------------------------------------------------+
+
+? Que deseas hacer?
+> 1. Nueva cuenca (analisis guiado)
+  2. Continuar proyecto/cuenca existente
+  3. Gestionar proyectos y cuencas
+  4. Ver comandos disponibles
+  5. Salir
+```
+
 ### Ejemplo de Flujo Completo
 
 ```bash
 # 1. Iniciar wizard
 hp wizard
 
-# 2. Seleccionar "Nuevo análisis completo"
+# 2. Seleccionar "Nueva cuenca (analisis guiado)"
 # 3. Ingresar datos:
 #    - Nombre: Cuenca Las Piedras
 #    - Área: 62 ha
@@ -95,13 +111,13 @@ hp idf uruguay 78 3 --tr 25
 hp idf departamentos
 ```
 
-### Gestión de Sesiones
+### Gestión de Proyectos y Cuencas
 
 ```bash
-# Listar sesiones guardadas
+# Listar cuencas guardadas
 hp session list
 
-# Ver detalles de una sesión
+# Ver detalles de una cuenca
 hp session show <id>
 
 # Exportar a Excel
@@ -110,6 +126,8 @@ hp session export <id> --format xlsx
 # Generar reporte LaTeX
 hp session report <id> --output memoria --author "Ing. García"
 ```
+
+> **Nota**: HidroPluvial organiza el trabajo en **Proyectos** (estudios) que contienen **Cuencas** (áreas de análisis). El wizard facilita la gestión de esta jerarquía.
 
 ### Cálculos Individuales
 
@@ -171,7 +189,7 @@ El wizard permite configurar:
 pytest tests/ -v
 ```
 
-**Estado:** 709 tests pasando ✅
+**Estado:** 724 tests pasando
 
 ---
 

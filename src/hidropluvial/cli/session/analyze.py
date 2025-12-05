@@ -101,6 +101,10 @@ def session_analyze(
     # PASO 4: Generar hidrograma
     dt_hr = dt / 60
 
+    # Calcular tp del hidrograma unitario SCS: Tp = ΔD/2 + 0.6×Tc
+    from hidropluvial.core import scs_time_to_peak
+    tp_unit_hr = scs_time_to_peak(tc_hr, dt_hr)
+
     if storm_type == "gz" or session.cuenca.c:
         # Usar hidrograma triangular con X
         uh_time, uh_flow = triangular_uh_x(session.cuenca.area_ha, tc_hr, dt_hr, x_factor)
@@ -136,6 +140,7 @@ def session_analyze(
         volume_m3=volume_m3,
         runoff_mm=runoff_mm,
         x_factor=x_factor if storm_type == "gz" else None,
+        tp_unit_hr=tp_unit_hr,
         # Series temporales para gráficos
         storm_time_min=list(hyetograph.time_min),
         storm_intensity_mmhr=list(hyetograph.intensity_mmhr),
@@ -153,16 +158,27 @@ def session_analyze(
     typer.echo(f"  Método Tc:         {tc_method:>15}")
     typer.echo(f"  Tipo tormenta:     {storm_type:>15}")
     typer.echo(f"  Período retorno:   {return_period:>15} años")
+
+    # Calcular tb (tiempo base) = 2.67 × tp
+    tb_hr = 2.67 * tp_unit_hr
+    from hidropluvial.cli.formatters import format_flow, format_volume_hm3
+
+    typer.echo(f"\n  HIDROGRAMA UNITARIO:")
+    typer.echo(f"  {'-'*45}")
+    typer.echo(f"  Tc:                {tc_hr*60:>12.1f} min")
+    typer.echo(f"  tp:                {tp_unit_hr*60:>12.1f} min")
     if storm_type == "gz":
-        typer.echo(f"  Factor X:          {x_factor:>15.2f}")
+        typer.echo(f"  X:                 {x_factor:>12.2f}")
+    typer.echo(f"  tb:                {tb_hr*60:>12.1f} min")
+
+    typer.echo(f"\n  TORMENTA:")
+    typer.echo(f"  {'-'*45}")
+    typer.echo(f"  P:                 {hyetograph.total_depth_mm:>12.1f} mm")
+    typer.echo(f"  Pe:                {runoff_mm:>12.1f} mm")
 
     typer.echo(f"\n  RESULTADOS:")
     typer.echo(f"  {'-'*45}")
-    typer.echo(f"  Tc:                {tc_hr:>12.2f} hr ({tc_hr*60:.1f} min)")
-    typer.echo(f"  Precipitación:     {hyetograph.total_depth_mm:>12.2f} mm")
-    typer.echo(f"  Escorrentía:       {runoff_mm:>12.2f} mm")
-    typer.echo(f"  {'-'*45}")
-    typer.echo(f"  CAUDAL PICO:       {peak_flow:>12.3f} m³/s")
-    typer.echo(f"  TIEMPO AL PICO:    {time_to_peak:>12.2f} hr ({time_to_peak*60:.1f} min)")
-    typer.echo(f"  VOLUMEN:           {volume_m3:>12.0f} m³")
+    typer.echo(f"  Qp:                {format_flow(peak_flow):>12} m³/s")
+    typer.echo(f"  Tp:                {time_to_peak*60:>12.1f} min")
+    typer.echo(f"  Vol:               {format_volume_hm3(volume_m3):>12} hm³")
     typer.echo(f"{'='*60}\n")

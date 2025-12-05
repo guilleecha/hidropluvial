@@ -170,6 +170,10 @@ def session_batch(
                     dt_hr = storm_dt / 60
                     x_val = x if x else 1.0
 
+                    # Calcular tp del hidrograma unitario SCS: Tp = ΔD/2 + 0.6×Tc
+                    from hidropluvial.core import scs_time_to_peak
+                    tp_unit_hr = scs_time_to_peak(tc_hr, dt_hr)
+
                     if storm_type == "gz" or session.cuenca.c:
                         uh_time, uh_flow = triangular_uh_x(session.cuenca.area_ha, tc_hr, dt_hr, x_val)
                     else:
@@ -200,6 +204,7 @@ def session_batch(
                         volume_m3=volume_m3,
                         runoff_mm=runoff_mm,
                         x_factor=x if storm_type == "gz" else None,
+                        tp_unit_hr=tp_unit_hr,
                         # Series temporales para gráficos
                         storm_time_min=list(hyetograph.time_min),
                         storm_intensity_mmhr=list(hyetograph.intensity_mmhr),

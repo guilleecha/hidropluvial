@@ -239,31 +239,35 @@ def session_summary(
         typer.echo("Usa 'session analyze' para ejecutar análisis.\n")
         return
 
+    from hidropluvial.cli.formatters import format_flow, format_volume_hm3
+
     rows = manager.get_summary_table(session)
 
-    typer.echo(f"\n{'='*100}")
+    typer.echo(f"\n{'='*115}")
     typer.echo(f"  RESUMEN COMPARATIVO - {session.name}")
-    typer.echo(f"{'='*100}")
-    typer.echo(f"  {'ID':8} | {'Tc':12} | {'Tc(min)':>8} | {'Tormenta':10} | {'Tr':>4} | {'X':>5} | {'P(mm)':>7} | {'Q(mm)':>7} | {'Qp(m³/s)':>9} | {'Tp(min)':>8}")
-    typer.echo(f"  {'-'*96}")
+    typer.echo(f"{'='*115}")
+    typer.echo(f"  {'ID':8} | {'Tc':12} | {'Tc(min)':>8} | {'tp(min)':>8} | {'X':>5} | {'tb(min)':>8} | {'Tormenta':10} | {'Tr':>4} | {'Qp(m³/s)':>9} | {'Tp(min)':>8} | {'Vol(hm³)':>10}")
+    typer.echo(f"  {'-'*111}")
 
     for r in rows:
         x_str = f"{r['x']:.2f}" if r['x'] else "-"
+        tp_str = f"{r['tp_min']:.1f}" if r['tp_min'] else "-"
+        tb_str = f"{r['tb_min']:.1f}" if r['tb_min'] else "-"
+        Tp_str = f"{r['Tp_min']:.1f}" if r['Tp_min'] else "-"
         typer.echo(
-            f"  {r['id']:8} | {r['tc_method']:12} | {r['tc_min']:>8.1f} | {r['storm']:10} | "
-            f"{r['tr']:>4} | {x_str:>5} | {r['depth_mm']:>7.1f} | {r['runoff_mm']:>7.1f} | "
-            f"{r['qpeak_m3s']:>9.3f} | {r['tp_min']:>8.1f}"
+            f"  {r['id']:8} | {r['tc_method']:12} | {r['tc_min']:>8.1f} | {tp_str:>8} | {x_str:>5} | {tb_str:>8} | {r['storm']:10} | "
+            f"{r['tr']:>4} | {format_flow(r['qpeak_m3s']):>9} | {Tp_str:>8} | {format_volume_hm3(r['vol_m3']):>10}"
         )
 
-    typer.echo(f"{'='*100}\n")
+    typer.echo(f"{'='*115}\n")
 
     # Mostrar máximos/mínimos
     if len(rows) > 1:
         max_q = max(rows, key=lambda x: x['qpeak_m3s'])
         min_q = min(rows, key=lambda x: x['qpeak_m3s'])
 
-        typer.echo(f"  Caudal máximo: {max_q['qpeak_m3s']:.3f} m³/s ({max_q['tc_method']} + {max_q['storm']} Tr{max_q['tr']})")
-        typer.echo(f"  Caudal mínimo: {min_q['qpeak_m3s']:.3f} m³/s ({min_q['tc_method']} + {min_q['storm']} Tr{min_q['tr']})")
+        typer.echo(f"  Caudal máximo: {format_flow(max_q['qpeak_m3s'])} m³/s ({max_q['tc_method']} + {max_q['storm']} Tr{max_q['tr']})")
+        typer.echo(f"  Caudal mínimo: {format_flow(min_q['qpeak_m3s'])} m³/s ({min_q['tc_method']} + {min_q['storm']} Tr{min_q['tr']})")
         typer.echo(f"  Variación: {(max_q['qpeak_m3s'] - min_q['qpeak_m3s']) / min_q['qpeak_m3s'] * 100:.1f}%\n")
 
 

@@ -2,7 +2,7 @@
 AnalysisRunner - Ejecuta analisis hidrologicos.
 """
 
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 import typer
@@ -24,8 +24,12 @@ from hidropluvial.core import (
     adjust_cn_for_amc,
     recalculate_weighted_c_for_tr,
 )
+from hidropluvial.core.temporal import huff_distribution, scs_distribution
+from hidropluvial.core.idf import dinagua_depth
+from hidropluvial.config import StormMethod
 from hidropluvial.core.coefficients import get_c_for_tr_from_table
 from hidropluvial.session import Session, CoverageItem
+from hidropluvial.project import Project, Basin, get_project_manager
 
 
 def _get_amc_enum(amc_str: str) -> AntecedentMoistureCondition:
@@ -91,13 +95,30 @@ def _get_c_for_tr_from_session(session: Session, c_base: float, tr: int) -> floa
 class AnalysisRunner:
     """Ejecuta analisis hidrologicos basados en WizardConfig."""
 
-    def __init__(self, config: WizardConfig):
+    def __init__(self, config: WizardConfig, project_id: Optional[str] = None):
+        """
+        Inicializa el runner.
+
+        Args:
+            config: Configuración del wizard
+            project_id: ID del proyecto existente (opcional).
+                       Si no se especifica, se crea un proyecto por defecto.
+        """
         self.config = config
         self.manager = get_session_manager()
+        self.project_manager = get_project_manager()
         self.session: Optional[Session] = None
+        self.project: Optional[Project] = None
+        self.basin: Optional[Basin] = None
+        self.project_id = project_id
 
-    def run(self) -> Session:
-        """Ejecuta el analisis completo y retorna la sesion."""
+    def run(self) -> Tuple[Project, Basin]:
+        """
+        Ejecuta el analisis completo y retorna (project, basin).
+
+        Siempre crea o usa un proyecto y guarda la cuenca tanto como
+        Session (compatibilidad) como Basin en el proyecto.
+        """
         self._create_session()
         self._calculate_tc()
         self._run_analyses()
@@ -106,7 +127,30 @@ class AnalysisRunner:
             self._generate_report()
 
         self._print_summary()
-        return self.session
+
+        # Crear/obtener proyecto y convertir session a basin
+        self._create_project_and_basin()
+
+        return self.project, self.basin
+
+    def _create_project_and_basin(self) -> None:
+        """Crea o obtiene el proyecto y convierte la session a basin."""
+        # Si hay project_id, usar ese proyecto
+        if self.project_id:
+            self.project = self.project_manager.get_project(self.project_id)
+
+        # Si no hay proyecto o no se encontró, crear uno por defecto
+        if not self.project:
+            self.project = self.project_manager.create_project(
+                name=f"Proyecto - {self.config.nombre}",
+                description=f"Proyecto creado automaticamente para la cuenca {self.config.nombre}",
+            )
+            typer.echo(f"  + Proyecto creado: {self.project.id}")
+
+        # Convertir session a basin y agregar al proyecto
+        self.basin = Basin.from_session(self.session)
+        self.project.add_basin(self.basin)
+        self.project_manager.save_project(self.project)
 
     def _create_session(self) -> None:
         """Crea la sesion."""
@@ -232,9 +276,12 @@ class AnalysisRunner:
         if storm_code == "gz":
             duration_hr = 6.0
             dt = 5.0
-        elif storm_code == "blocks24":
+        elif storm_code == "blocks24" or storm_code == "scs_ii":
             duration_hr = 24.0
             dt = 10.0
+        elif storm_code.startswith("huff"):
+            duration_hr = max(tc_hr * 2, 2.0)  # Duración 2x Tc o mínimo 2 horas
+            dt = 5.0
         else:
             duration_hr = max(tc_hr, 1.0)
             dt = 5.0
@@ -247,6 +294,14 @@ class AnalysisRunner:
             )
         elif storm_code == "bimodal":
             hyetograph = bimodal_dinagua(p3_10, tr, duration_hr, dt)
+        elif storm_code.startswith("huff"):
+            # Extraer cuartil (ej: huff_q2 -> 2)
+            quartile = int(storm_code.split("_q")[1]) if "_q" in storm_code else 2
+            total_depth = dinagua_depth(p3_10, tr, duration_hr, None)
+            hyetograph = huff_distribution(total_depth, duration_hr, dt, quartile=quartile)
+        elif storm_code == "scs_ii":
+            total_depth = dinagua_depth(p3_10, tr, duration_hr, None)
+            hyetograph = scs_distribution(total_depth, duration_hr, dt, StormMethod.SCS_TYPE_II)
         else:
             hyetograph = alternating_blocks_dinagua(
                 p3_10, tr, duration_hr, dt, None
@@ -277,6 +332,10 @@ class AnalysisRunner:
         # Hidrograma unitario
         dt_hr = dt / 60
         x_val = x if storm_code == "gz" else 1.0
+
+        # Calcular tp del hidrograma unitario SCS: Tp = ΔD/2 + 0.6×Tc
+        from hidropluvial.core import scs_time_to_peak
+        tp_unit_hr = scs_time_to_peak(tc_hr, dt_hr)
 
         if runoff_method == "racional" or storm_code == "gz":
             # Hidrograma triangular con factor X para método racional o tormenta GZ
@@ -334,6 +393,7 @@ class AnalysisRunner:
             volume_m3=volume_m3,
             runoff_mm=runoff_mm,
             x_factor=x if storm_code == "gz" else None,
+            tp_unit_hr=tp_unit_hr,
             storm_time_min=list(hyetograph.time_min),
             storm_intensity_mmhr=list(hyetograph.intensity_mmhr),
             hydrograph_time_hr=[float(t) for t in hydrograph_time],
@@ -436,9 +496,12 @@ class AdditionalAnalysisRunner:
                         if storm_code == "gz":
                             duration_hr = 6.0
                             dt = 5.0
-                        elif storm_code == "blocks24":
+                        elif storm_code == "blocks24" or storm_code == "scs_ii":
                             duration_hr = 24.0
                             dt = 10.0
+                        elif storm_code.startswith("huff"):
+                            duration_hr = max(tc_hr * 2, 2.0)
+                            dt = 5.0
                         else:
                             duration_hr = max(tc_hr, 1.0)
                             dt = 5.0
@@ -451,6 +514,13 @@ class AdditionalAnalysisRunner:
                             )
                         elif storm_code == "bimodal":
                             hyetograph = bimodal_dinagua(p3_10, tr, duration_hr, dt)
+                        elif storm_code.startswith("huff"):
+                            quartile = int(storm_code.split("_q")[1]) if "_q" in storm_code else 2
+                            total_depth = dinagua_depth(p3_10, tr, duration_hr, None)
+                            hyetograph = huff_distribution(total_depth, duration_hr, dt, quartile=quartile)
+                        elif storm_code == "scs_ii":
+                            total_depth = dinagua_depth(p3_10, tr, duration_hr, None)
+                            hyetograph = scs_distribution(total_depth, duration_hr, dt, StormMethod.SCS_TYPE_II)
                         else:
                             hyetograph = alternating_blocks_dinagua(
                                 p3_10, tr, duration_hr, dt, None
@@ -478,6 +548,10 @@ class AdditionalAnalysisRunner:
                         # Hidrograma unitario
                         dt_hr = dt / 60
                         x_val = x if storm_code == "gz" else 1.0
+
+                        # Calcular tp del hidrograma unitario SCS: Tp = ΔD/2 + 0.6×Tc
+                        from hidropluvial.core import scs_time_to_peak
+                        tp_unit_hr = scs_time_to_peak(tc_hr, dt_hr)
 
                         if r_method == "racional" or storm_code == "gz":
                             uh_time, uh_flow = triangular_uh_x(area, tc_hr, dt_hr, x_val)
@@ -533,6 +607,7 @@ class AdditionalAnalysisRunner:
                             volume_m3=volume_m3,
                             runoff_mm=runoff_mm,
                             x_factor=x if storm_code == "gz" else None,
+                            tp_unit_hr=tp_unit_hr,
                             storm_time_min=list(hyetograph.time_min),
                             storm_intensity_mmhr=list(hyetograph.intensity_mmhr),
                             hydrograph_time_hr=[float(t) for t in hydrograph_time],

@@ -207,19 +207,33 @@ class ExportMenu(SessionMenu):
 
         rows = []
         for a in analyses:
+            # Determinar método de escorrentía
+            runoff_method = "-"
+            if a.tc.parameters and "runoff_method" in a.tc.parameters:
+                rm = a.tc.parameters["runoff_method"]
+                runoff_method = "Racional" if rm == "racional" else "SCS-CN"
+            elif a.tc.parameters:
+                if "cn_adjusted" in a.tc.parameters:
+                    runoff_method = "SCS-CN"
+                elif "c" in a.tc.parameters:
+                    runoff_method = "Racional"
+
             row = {
                 "ID": a.id,
                 "Metodo Tc": a.tc.method.capitalize(),
                 "Tc (min)": round(a.tc.tc_min, 1),
+                "tp (min)": round(a.hydrograph.tp_unit_min, 1) if a.hydrograph.tp_unit_min else None,
+                "tb (min)": round(a.hydrograph.tb_min, 1) if a.hydrograph.tb_min else None,
+                "Metodo Pe": runoff_method,
                 "Tormenta": a.storm.type.upper(),
                 "Tr (anos)": a.storm.return_period,
                 "Duracion (hr)": round(a.storm.duration_hr, 2),
                 "P total (mm)": round(a.storm.total_depth_mm, 1),
                 "i pico (mm/hr)": round(a.storm.peak_intensity_mmhr, 1),
-                "Escorrentia (mm)": round(a.hydrograph.runoff_mm, 1),
-                "Q pico (m3/s)": round(a.hydrograph.peak_flow_m3s, 3),
-                "t pico (min)": round(a.hydrograph.time_to_peak_min, 1),
-                "Volumen (m3)": round(a.hydrograph.volume_m3, 0),
+                "Pe (mm)": round(a.hydrograph.runoff_mm, 1),
+                "Qp (m3/s)": round(a.hydrograph.peak_flow_m3s, 2),
+                "Tp (min)": round(a.hydrograph.time_to_peak_min, 1),
+                "Vol (hm3)": round(a.hydrograph.volume_m3 / 1_000_000, 4),
             }
 
             # Agregar C si el metodo de Tc depende de C
@@ -258,9 +272,23 @@ class ExportMenu(SessionMenu):
 
         rows = []
         for a in analyses:
+            # Construir etiqueta del método
             method_label = a.tc.method
+
+            # Agregar método de escorrentía
+            if a.tc.parameters and "runoff_method" in a.tc.parameters:
+                rm = a.tc.parameters["runoff_method"]
+                esc_label = "C" if rm == "racional" else "CN"
+                method_label = f"{method_label}+{esc_label}"
+            elif a.tc.parameters:
+                if "cn_adjusted" in a.tc.parameters:
+                    method_label = f"{method_label}+CN"
+                elif "c" in a.tc.parameters:
+                    method_label = f"{method_label}+C"
+
+            # Agregar factor X
             if a.hydrograph.x_factor:
-                method_label = f"{a.tc.method} X={a.hydrograph.x_factor:.2f}"
+                method_label = f"{method_label} X={a.hydrograph.x_factor:.2f}"
 
             rows.append({
                 "Metodo": method_label,
@@ -283,8 +311,8 @@ class ExportMenu(SessionMenu):
         return None
 
 
-class ExportSessionSelector(BaseMenu):
-    """Menu para seleccionar sesion y exportar desde gestion de sesiones."""
+class ExportBasinSelector(BaseMenu):
+    """Menu para seleccionar cuenca y exportar desde gestion de proyectos."""
 
     def show(self) -> None:
         """Muestra selector de sesion para exportar."""
@@ -321,3 +349,7 @@ class ExportSessionSelector(BaseMenu):
         if session:
             export_menu = ExportMenu(session)
             export_menu.show()
+
+
+# Alias para compatibilidad
+ExportSessionSelector = ExportBasinSelector

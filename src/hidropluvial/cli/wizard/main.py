@@ -10,8 +10,8 @@ from hidropluvial.cli.wizard.config import WizardConfig
 from hidropluvial.cli.wizard.runner import AnalysisRunner
 from hidropluvial.cli.wizard.menus import (
     PostExecutionMenu,
-    continue_session_menu,
-    manage_sessions_menu,
+    continue_project_menu,
+    manage_projects_menu,
 )
 
 
@@ -31,9 +31,9 @@ def wizard_main() -> None:
         choice = questionary.select(
             "Que deseas hacer?",
             choices=[
-                "1. Nuevo analisis completo (guiado)",
-                "2. Continuar sesion existente",
-                "3. Gestionar sesiones (ver, eliminar, renombrar)",
+                "1. Nueva cuenca (analisis guiado)",
+                "2. Continuar proyecto/cuenca existente",
+                "3. Gestionar proyectos y cuencas",
                 "4. Ver comandos disponibles",
                 "5. Salir",
             ],
@@ -46,11 +46,11 @@ def wizard_main() -> None:
 
         try:
             if "1." in choice:
-                _new_analysis()
+                _new_basin()
             elif "2." in choice:
-                continue_session_menu()
+                continue_project_menu()
             elif "3." in choice:
-                manage_sessions_menu()
+                manage_projects_menu()
             elif "4." in choice:
                 from hidropluvial.cli.commands import show_commands
                 show_commands()
@@ -59,8 +59,8 @@ def wizard_main() -> None:
             pass
 
 
-def _new_analysis() -> None:
-    """Ejecuta el flujo de nuevo analisis."""
+def _new_basin() -> None:
+    """Ejecuta el flujo de nueva cuenca."""
     # Recolectar configuracion
     config = WizardConfig.from_wizard()
     if config is None:
@@ -85,8 +85,8 @@ def _new_analysis() -> None:
     typer.echo("=" * 60 + "\n")
 
     runner = AnalysisRunner(config)
-    session = runner.run()
+    project, basin = runner.run()
 
     # Menu post-ejecucion
-    menu = PostExecutionMenu(session, config.c, config.cn, config.length_m)
+    menu = PostExecutionMenu(project, basin, config.c, config.cn, config.length_m)
     menu.show()

@@ -324,6 +324,9 @@ Método & $T_c$ (hr) & $T_c$ (min) \\\\
 """
 
     # --- sec_resultados.tex: Tabla de resultados ---
+    # Determinar si hay múltiples métodos de escorrentía
+    has_multiple_runoff = _has_multiple_runoff_methods(session)
+
     results_content = f"""% Sección: Resultados de Análisis
 % Generado automáticamente por HidroPluvial
 
@@ -334,23 +337,48 @@ Se realizaron {len(rows)} combinaciones de análisis variando:
     \\item Métodos de tiempo de concentración
     \\item Tipos de tormenta de diseño
     \\item Períodos de retorno
-    \\item Factor morfológico X (para tormentas GZ)
+"""
+    if has_multiple_runoff:
+        results_content += "    \\item Métodos de precipitación efectiva ($P_e$): Racional (C) y SCS-CN\n"
+    results_content += """    \\item Factor morfológico X (para tormentas GZ)
 \\end{{itemize}}
 
 \\begin{{table}}[H]
 \\centering
 \\footnotesize
-\\begin{{tabular}}{{lccccccc}}
+"""
+    if has_multiple_runoff:
+        results_content += """\\begin{tabular}{lclcccccccc}
 \\toprule
-Método $T_c$ & Tormenta & $T_r$ & X & P (mm) & Q (mm) & $Q_p$ (m$^3$/s) & Vol (m$^3$) \\\\
+Método $T_c$ & $P_e$ & Tormenta & $T_r$ & $t_p$ (min) & X & $t_b$ (min) & P (mm) & $P_e$ (mm) & $Q_p$ (m$^3$/s) \\\\
 \\midrule
 """
-    for r in rows:
+    else:
+        results_content += """\\begin{tabular}{lcccccccccc}
+\\toprule
+Método $T_c$ & Tormenta & $T_r$ & $t_p$ (min) & X & $t_b$ (min) & P (mm) & $P_e$ (mm) & $Q_p$ (m$^3$/s) & $T_p$ (min) & Vol (hm$^3$) \\\\
+\\midrule
+"""
+    for i, r in enumerate(rows):
         x_str = f"{r['x']:.2f}" if r['x'] else "-"
-        results_content += (
-            f"{r['tc_method']} & {r['storm']} & {r['tr']} & {x_str} & "
-            f"{r['depth_mm']:.1f} & {r['runoff_mm']:.1f} & {r['qpeak_m3s']:.3f} & {r['vol_m3']:.0f} \\\\\n"
-        )
+        tp_str = f"{r['tp_min']:.1f}" if r['tp_min'] else "-"
+        tb_str = f"{r['tb_min']:.1f}" if r['tb_min'] else "-"
+        Tp_str = f"{r['Tp_min']:.1f}" if r['Tp_min'] else "-"
+        vol_hm3 = r['vol_m3'] / 1_000_000
+        # Obtener método de escorrentía del análisis
+        analysis = session.analyses[i] if i < len(session.analyses) else None
+        runoff_label = _get_runoff_label(analysis) if analysis else "-"
+
+        if has_multiple_runoff:
+            results_content += (
+                f"{r['tc_method']} & {runoff_label} & {r['storm']} & {r['tr']} & {tp_str} & {x_str} & {tb_str} & "
+                f"{r['depth_mm']:.1f} & {r['runoff_mm']:.1f} & {r['qpeak_m3s']:.2f} \\\\\n"
+            )
+        else:
+            results_content += (
+                f"{r['tc_method']} & {r['storm']} & {r['tr']} & {tp_str} & {x_str} & {tb_str} & "
+                f"{r['depth_mm']:.1f} & {r['runoff_mm']:.1f} & {r['qpeak_m3s']:.2f} & {Tp_str} & {vol_hm3:.4f} \\\\\n"
+            )
 
     results_content += """\\bottomrule
 \\end{tabular}
@@ -379,9 +407,9 @@ Método $T_c$ & Tormenta & $T_r$ & X & P (mm) & Q (mm) & $Q_p$ (m$^3$/s) & Vol (
 Estadístico & Valor \\\\
 \\midrule
 Número de análisis & {len(rows)} \\\\
-Caudal pico máximo & {max_q['qpeak_m3s']:.3f} m$^3$/s ({max_q['tc_method']} + {max_q['storm']} $T_r$={max_q['tr']}) \\\\
-Caudal pico mínimo & {min_q['qpeak_m3s']:.3f} m$^3$/s ({min_q['tc_method']} + {min_q['storm']} $T_r$={min_q['tr']}) \\\\
-Caudal pico promedio & {avg_q:.3f} m$^3$/s \\\\
+Caudal pico máximo & {max_q['qpeak_m3s']:.2f} m$^3$/s ({max_q['tc_method']} + {max_q['storm']} $T_r$={max_q['tr']}) \\\\
+Caudal pico mínimo & {min_q['qpeak_m3s']:.2f} m$^3$/s ({min_q['tc_method']} + {min_q['storm']} $T_r$={min_q['tr']}) \\\\
+Caudal pico promedio & {avg_q:.2f} m$^3$/s \\\\
 Variación máx/mín & {variation:.1f}\\% \\\\
 \\bottomrule
 \\end{{tabular}}
@@ -427,6 +455,23 @@ Variación máx/mín & {variation:.1f}\\% \\\\
             area_km2 = session.cuenca.area_ha / 100
             qp_unit = 0.278 * area_km2 / tp_hu_hr * 2 / (1 + x)
 
+            # Determinar método de precipitación efectiva
+            pe_method = "-"
+            if analysis.tc.parameters and "runoff_method" in analysis.tc.parameters:
+                rm = analysis.tc.parameters["runoff_method"]
+                pe_method = "Racional (C)" if rm == "racional" else "SCS-CN"
+            elif analysis.tc.parameters:
+                if "cn_adjusted" in analysis.tc.parameters:
+                    pe_method = "SCS-CN"
+                elif "c" in analysis.tc.parameters:
+                    pe_method = "Racional (C)"
+
+            # Usar valores del modelo si existen, sino calcular
+            tp_hu_min = analysis.hydrograph.tp_unit_min if analysis.hydrograph.tp_unit_min else tp_hu_hr * 60
+            tb_hu_min = analysis.hydrograph.tb_min if analysis.hydrograph.tb_min else tb_hu_hr * 60
+            vol_hm3 = analysis.hydrograph.volume_m3 / 1_000_000
+            Tp_min = analysis.hydrograph.time_to_peak_min
+
             fichas_content += f"""\\subsection{{{ficha_titulo}}}
 
 % Tabla de parámetros del análisis
@@ -437,16 +482,12 @@ Variación máx/mín & {variation:.1f}\\% \\\\
 \\toprule
 \\multicolumn{{2}}{{c|}}{{\\textbf{{Tormenta}}}} & \\multicolumn{{2}}{{c|}}{{\\textbf{{Hidrograma Unitario}}}} & \\multicolumn{{2}}{{c}}{{\\textbf{{Resultados}}}} \\\\
 \\midrule
-$T_c$ ({analysis.tc.method.title()}) & {analysis.tc.tc_min:.1f} min & $T_p$ (HU) & {tp_hu_min:.1f} min & Precipitación & {analysis.storm.total_depth_mm:.1f} mm \\\\
-Tipo & {analysis.storm.type.upper()} & $T_b$ (HU) & {tb_hu_min:.1f} min & Escorrentía & {analysis.hydrograph.runoff_mm:.1f} mm \\\\
-$T_r$ & {analysis.storm.return_period} años & $q_p$ (HU) & {qp_unit:.3f} m$^3$/s/mm & $Q_p$ & \\textbf{{{analysis.hydrograph.peak_flow_m3s:.3f} m$^3$/s}} \\\\
-"""
-            if analysis.hydrograph.x_factor:
-                fichas_content += f"Duración & {analysis.storm.duration_hr:.1f} hr & Factor X & {x:.2f} & Volumen & {analysis.hydrograph.volume_m3:.0f} m$^3$ \\\\\n"
-            else:
-                fichas_content += f"Duración & {analysis.storm.duration_hr:.1f} hr & & & Volumen & {analysis.hydrograph.volume_m3:.0f} m$^3$ \\\\\n"
-
-            fichas_content += f"""\\bottomrule
+$T_c$ ({analysis.tc.method.title()}) & {analysis.tc.tc_min:.1f} min & $t_p$ & {tp_hu_min:.1f} min & $P$ (total) & {analysis.storm.total_depth_mm:.1f} mm \\\\
+Tipo & {analysis.storm.type.upper()} & X & {x:.2f} & $P_e$ ({pe_method}) & {analysis.hydrograph.runoff_mm:.1f} mm \\\\
+$T_r$ & {analysis.storm.return_period} años & $t_b$ & {tb_hu_min:.1f} min & $Q_p$ & \\textbf{{{analysis.hydrograph.peak_flow_m3s:.2f} m$^3$/s}} \\\\
+Duración & {analysis.storm.duration_hr:.1f} hr & $q_p$ (HU) & {qp_unit:.2f} m$^3$/s/mm & $T_p$ & {Tp_min:.1f} min \\\\
+& & & & Volumen & {vol_hm3:.4f} hm$^3$ \\\\
+\\bottomrule
 \\end{{tabular}}
 \\caption{{Ficha técnica: {ficha_titulo}}}
 \\end{{table}}
@@ -476,6 +517,11 @@ $T_r$ & {analysis.storm.return_period} años & $q_p$ (HU) & {qp_unit:.3f} m$^3$/
 
 """
 
+    # --- sec_comparacion.tex: Comparación de metodologías (si hay ambos métodos) ---
+    comparison_content = ""
+    if _has_multiple_runoff_methods(session):
+        comparison_content = _generate_comparison_section(session)
+
     # Diccionario de secciones
     sections = {
         "sec_cuenca.tex": cuenca_content,
@@ -484,6 +530,8 @@ $T_r$ & {analysis.storm.return_period} años & $q_p$ (HU) & {qp_unit:.3f} m$^3$/
     }
     if stats_content:
         sections["sec_estadisticas.tex"] = stats_content
+    if comparison_content:
+        sections["sec_comparacion.tex"] = comparison_content
     if fichas_content:
         sections["sec_fichas.tex"] = fichas_content
 
@@ -532,6 +580,7 @@ def _generate_template_document(session, author, template_dir, output_dir, secti
         "sec_tc.tex",
         "sec_resultados.tex",
         "sec_estadisticas.tex",
+        "sec_comparacion.tex",  # Comparación de metodologías C vs CN
         "sec_fichas.tex",  # Fichas técnicas por análisis
     ]
     for sec in section_order:
@@ -617,3 +666,156 @@ def _generate_template_document(session, author, template_dir, output_dir, secti
 """
 
     return doc
+
+
+def _has_multiple_runoff_methods(session) -> bool:
+    """Verifica si la sesión tiene análisis con diferentes métodos de escorrentía."""
+    methods = set()
+    for a in session.analyses:
+        if a.tc.parameters and "runoff_method" in a.tc.parameters:
+            methods.add(a.tc.parameters["runoff_method"])
+        elif a.tc.parameters:
+            if "cn_adjusted" in a.tc.parameters:
+                methods.add("scs-cn")
+            elif "c" in a.tc.parameters:
+                methods.add("racional")
+    return len(methods) > 1
+
+
+def _get_runoff_label(analysis) -> str:
+    """Obtiene la etiqueta del método de escorrentía para un análisis."""
+    if analysis.tc.parameters and "runoff_method" in analysis.tc.parameters:
+        rm = analysis.tc.parameters["runoff_method"]
+        return "C" if rm == "racional" else "CN"
+    elif analysis.tc.parameters:
+        if "cn_adjusted" in analysis.tc.parameters:
+            return "CN"
+        elif "c" in analysis.tc.parameters:
+            return "C"
+    return "-"
+
+
+def _generate_comparison_section(session) -> str:
+    """Genera sección de comparación de metodologías C vs CN."""
+    # Agrupar análisis por Tr y método de escorrentía
+    comparison_data = {}
+
+    for a in session.analyses:
+        tr = a.storm.return_period
+        runoff_method = None
+
+        if a.tc.parameters and "runoff_method" in a.tc.parameters:
+            runoff_method = a.tc.parameters["runoff_method"]
+        elif a.tc.parameters:
+            if "cn_adjusted" in a.tc.parameters:
+                runoff_method = "scs-cn"
+            elif "c" in a.tc.parameters:
+                runoff_method = "racional"
+
+        if runoff_method is None:
+            continue
+
+        key = (tr, a.tc.method, a.hydrograph.x_factor)
+        if key not in comparison_data:
+            comparison_data[key] = {}
+        comparison_data[key][runoff_method] = {
+            "qp": a.hydrograph.peak_flow_m3s,
+            "runoff_mm": a.hydrograph.runoff_mm,
+            "volume_m3": a.hydrograph.volume_m3,
+            "p_total_mm": a.storm.total_depth_mm,
+            "tc_min": a.tc.tc_min,
+        }
+
+    # Solo generar si hay comparaciones válidas (ambos métodos para al menos un caso)
+    valid_comparisons = [k for k, v in comparison_data.items() if len(v) == 2]
+    if not valid_comparisons:
+        return ""
+
+    content = """% Sección: Comparación de Metodologías
+% Generado automáticamente por HidroPluvial
+
+\\section{Comparación de Metodologías de Precipitación Efectiva}
+
+Se presenta la comparación entre los métodos de cálculo de precipitación efectiva ($P_e$):
+\\begin{itemize}
+    \\item \\textbf{Método Racional}: $P_e = C \\times P$ (coeficiente de escorrentía)
+    \\item \\textbf{Método SCS-CN}: $P_e = \\frac{(P - I_a)^2}{P - I_a + S}$ (Curve Number)
+\\end{itemize}
+
+Ambos métodos transforman la precipitación total ($P$) en precipitación efectiva ($P_e$),
+que es la porción de lluvia que se convierte en escorrentía superficial.
+
+\\begin{table}[H]
+\\centering
+\\small
+\\begin{tabular}{llccccccc}
+\\toprule
+ & & & \\multicolumn{2}{c}{$P_e$ (mm)} & \\multicolumn{2}{c}{$Q_p$ (m$^3$/s)} & \\multicolumn{2}{c}{Diferencia $Q_p$} \\\\
+\\cmidrule(lr){4-5} \\cmidrule(lr){6-7} \\cmidrule(lr){8-9}
+Método $T_c$ & $T_r$ & $P$ (mm) & C & CN & C & CN & Abs. & \\% \\\\
+\\midrule
+"""
+
+    for key in sorted(valid_comparisons, key=lambda x: (x[0], x[1])):
+        tr, tc_method, x_factor = key
+        data = comparison_data[key]
+
+        qp_c = data["racional"]["qp"]
+        qp_cn = data["scs-cn"]["qp"]
+        pe_c = data["racional"]["runoff_mm"]  # Pe = escorrentía = precipitación efectiva
+        pe_cn = data["scs-cn"]["runoff_mm"]
+        p_total = data["racional"]["p_total_mm"]  # P total es igual para ambos
+
+        diff_abs = qp_c - qp_cn
+        diff_pct = (diff_abs / qp_cn * 100) if qp_cn > 0 else 0
+
+        x_str = f" X={x_factor:.2f}" if x_factor else ""
+        content += (
+            f"{tc_method.title()}{x_str} & {tr} & {p_total:.1f} & "
+            f"{pe_c:.1f} & {pe_cn:.1f} & "
+            f"{qp_c:.3f} & {qp_cn:.3f} & "
+            f"{diff_abs:+.3f} & {diff_pct:+.1f}\\% \\\\\n"
+        )
+
+    content += """\\bottomrule
+\\end{tabular}
+\\caption{Comparación de métodos de precipitación efectiva: Racional (C) vs SCS-CN}
+\\label{tab:comparison}
+\\end{table}
+
+\\textbf{Nomenclatura:}
+\\begin{itemize}
+    \\item $P$ = Precipitación total de la tormenta de diseño
+    \\item $P_e$ = Precipitación efectiva (escorrentía en mm)
+    \\item $Q_p$ = Caudal pico del hidrograma
+    \\item Diferencia positiva indica que el método Racional produce mayor caudal pico
+\\end{itemize}
+
+\\textbf{Observaciones:}
+\\begin{itemize}
+    \\item El método Racional asume una relación lineal entre $P$ y $P_e$ mediante el coeficiente $C$.
+    \\item El método SCS-CN considera abstracciones iniciales ($I_a$) y retención potencial ($S$).
+    \\item Las diferencias reflejan los distintos modelos de infiltración y abstracción inicial.
+\\end{itemize}
+"""
+
+    # Agregar gráfico comparativo si hay datos de hidrogramas
+    from hidropluvial.reports.charts import generate_c_vs_cn_comparison_tikz
+
+    chart_tex = generate_c_vs_cn_comparison_tikz(
+        session.analyses,
+        caption="Comparación de hidrogramas: Método Racional vs SCS-CN",
+        label="fig:c_vs_cn_comparacion",
+    )
+
+    if chart_tex:
+        content += """
+\\subsection{Comparación Gráfica}
+
+La siguiente figura muestra la superposición de los hidrogramas generados
+por cada metodología para el mismo escenario de análisis.
+
+"""
+        content += chart_tex
+
+    return content

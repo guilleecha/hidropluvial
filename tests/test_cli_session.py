@@ -353,7 +353,7 @@ class TestSessionSummary:
         captured = capsys.readouterr()
         assert "RESUMEN COMPARATIVO" in captured.out
         assert "desbordes" in captured.out
-        assert "5.000" in captured.out  # peak flow
+        assert "5.00" in captured.out  # peak flow (2 significant figures)
 
     def test_summary_multiple_analyses(self, mock_manager, sample_session, capsys):
         """Test resumen con múltiples análisis muestra max/min."""

@@ -153,6 +153,7 @@ def plot_hydrograph_comparison_terminal(
     analyses: list[dict],
     width: int = 70,
     height: int = 18,
+    show_legend: bool = True,
 ) -> None:
     """
     Grafica multiples hidrogramas superpuestos para comparacion.
@@ -161,11 +162,16 @@ def plot_hydrograph_comparison_terminal(
         analyses: Lista de diccionarios con 'time_hr', 'flow_m3s', 'label'
         width: Ancho en caracteres
         height: Alto en caracteres
+        show_legend: Si mostrar leyenda debajo del grafico
     """
     plt.clear_figure()
     plt.plot_size(width, height)
 
+    # Colores y simbolos para leyenda
     colors = ["blue", "red", "green", "yellow", "cyan", "magenta"]
+    symbols = ["─", "═", "~", "-", "┄", "╌"]  # Símbolos para la leyenda
+
+    legend_items = []
 
     for i, analysis in enumerate(analyses):
         color = colors[i % len(colors)]
@@ -179,12 +185,49 @@ def plot_hydrograph_comparison_terminal(
             marker="braille"
         )
 
+        # Guardar para leyenda manual
+        legend_items.append((symbols[i % len(symbols)], color, label))
+
     plt.title("Comparacion de Hidrogramas")
     plt.xlabel("Tiempo (h)")
     plt.ylabel("Q (m3/s)")
 
     plt.theme("clear")
     plt.show()
+
+    # Mostrar leyenda manual debajo del grafico
+    if show_legend and legend_items:
+        _print_legend(legend_items)
+
+
+def _print_legend(items: list[tuple[str, str, str]]) -> None:
+    """
+    Imprime leyenda para el grafico de comparacion.
+
+    Args:
+        items: Lista de (simbolo, color, etiqueta)
+    """
+    # Mapeo de colores a códigos ANSI
+    color_codes = {
+        "blue": "\033[34m",
+        "red": "\033[31m",
+        "green": "\033[32m",
+        "yellow": "\033[33m",
+        "cyan": "\033[36m",
+        "magenta": "\033[35m",
+    }
+    reset = "\033[0m"
+
+    print("\n  Leyenda:")
+    print("  " + "-" * 60)
+
+    for symbol, color, label in items:
+        color_code = color_codes.get(color, "")
+        # Usar línea coloreada como indicador
+        line_indicator = f"{color_code}{'━' * 3}{reset}"
+        print(f"  {line_indicator}  {label}")
+
+    print("")
 
 
 def print_hyetograph_bars(

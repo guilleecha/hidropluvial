@@ -2,11 +2,18 @@
 Menu para continuar con una sesion existente.
 """
 
+from typing import Optional
+
 from hidropluvial.cli.wizard.menus.base import BaseMenu
+from hidropluvial.session import Session
 
 
 class ContinueSessionMenu(BaseMenu):
     """Menu para continuar trabajando con una sesion existente."""
+
+    def __init__(self):
+        super().__init__()
+        self.session: Optional[Session] = None
 
     def show(self) -> None:
         """Muestra el menu para continuar una sesion."""
@@ -22,73 +29,283 @@ class ContinueSessionMenu(BaseMenu):
         if not session_id:
             return
 
-        # Seleccionar accion
-        action = self._select_action()
-        if not action:
+        self.session = self.manager.get_session(session_id)
+        if not self.session:
+            self.echo(f"\n  Error: No se pudo cargar la sesion {session_id}\n")
             return
 
-        # Ejecutar accion
-        self._execute_action(action, session_id)
+        # Mostrar menu de acciones en loop
+        self._show_session_menu()
 
-    def _select_session(self, sessions: list[dict]) -> str:
+    def _select_session(self, sessions: list[dict]) -> Optional[str]:
         """Permite seleccionar una sesion."""
         choices = []
         for s in sessions:
             n_analyses = s["n_analyses"]
             choices.append(f"{s['id']} - {s['name']} ({n_analyses} analisis)")
+        choices.append("← Volver al menu principal")
 
         choice = self.select("Selecciona una sesion:", choices)
 
-        if choice is None:
+        if choice is None or "Volver" in choice:
             return None
 
         return choice.split(" - ")[0]
 
-    def _select_action(self) -> str:
-        """Permite seleccionar la accion a realizar."""
-        return self.select(
-            "Que deseas hacer?",
+    def _show_session_menu(self) -> None:
+        """Muestra el menu de acciones para la sesion seleccionada."""
+        while True:
+            # Recargar sesion para tener datos actualizados
+            self.session = self.manager.get_session(self.session.id)
+
+            self._show_session_header()
+
+            action = self.select(
+                "Que deseas hacer?",
+                choices=[
+                    "Ver tabla resumen",
+                    "Ver hidrogramas (navegacion interactiva)",
+                    "Comparar hidrogramas",
+                    "Ver hietograma",
+                    "Agregar mas analisis",
+                    "Filtrar resultados",
+                    "Exportar (Excel/LaTeX)",
+                    "Editar datos de la cuenca",
+                    "Agregar/editar notas",
+                    "Eliminar sesion",
+                    "← Volver (elegir otra sesion)",
+                    "← Salir al menu principal",
+                ],
+            )
+
+            if action is None or "Salir" in action:
+                return
+            elif "otra sesion" in action.lower():
+                # Volver a seleccionar sesion
+                sessions = self.manager.list_sessions()
+                session_id = self._select_session(sessions)
+                if session_id:
+                    self.session = self.manager.get_session(session_id)
+                    if not self.session:
+                        return
+                else:
+                    return
+            else:
+                self._handle_action(action)
+
+    def _show_session_header(self) -> None:
+        """Muestra encabezado con info de la sesion."""
+        self.echo(f"\n{'='*60}")
+        self.echo(f"  SESION: {self.session.name} [{self.session.id}]")
+        self.echo(f"{'='*60}")
+        self.echo(f"  Cuenca: {self.session.cuenca.area_ha} ha, S={self.session.cuenca.slope_pct}%")
+        self.echo(f"  Analisis: {len(self.session.analyses)}")
+        if self.session.analyses:
+            trs = sorted(set(a.storm.return_period for a in self.session.analyses))
+            self.echo(f"  Periodos de retorno: {trs}")
+        self.echo(f"{'='*60}\n")
+
+    def _handle_action(self, action: str) -> None:
+        """Maneja la accion seleccionada."""
+        if "tabla" in action.lower():
+            self._show_table()
+        elif "navegacion" in action.lower():
+            self._show_interactive_viewer()
+        elif "Comparar" in action:
+            self._compare_hydrographs()
+        elif "hietograma" in action.lower():
+            self._show_hyetograph()
+        elif "Agregar" in action and "analisis" in action.lower():
+            self._add_analysis()
+        elif "Filtrar" in action:
+            self._filter_results()
+        elif "Exportar" in action:
+            self._export()
+        elif "Editar" in action:
+            self._edit_cuenca()
+        elif "notas" in action.lower():
+            self._manage_notes()
+        elif "Eliminar" in action:
+            if self._delete_session():
+                return  # Salir del menu si se elimino
+
+    def _safe_call(self, func, *args, **kwargs) -> None:
+        """Ejecuta una funcion capturando typer.Exit."""
+        try:
+            func(*args, **kwargs)
+        except SystemExit:
+            pass
+
+    def _show_table(self) -> None:
+        """Muestra tabla con sparklines."""
+        from hidropluvial.cli.session.preview import session_preview
+        self._safe_call(session_preview, self.session.id, analysis_idx=None, compare=False)
+
+    def _show_interactive_viewer(self) -> None:
+        """Muestra visor interactivo de hidrogramas."""
+        if not self.session.analyses:
+            self.echo("  No hay analisis disponibles.")
+            return
+
+        from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
+        interactive_hydrograph_viewer(self.session.analyses, self.session.name)
+
+    def _compare_hydrographs(self) -> None:
+        """Compara hidrogramas con opcion de seleccionar cuales."""
+        if not self.session.analyses:
+            self.echo("  No hay analisis disponibles.")
+            return
+
+        n = len(self.session.analyses)
+        if n > 2:
+            mode = self.select(
+                "Que hidrogramas comparar?",
+                choices=[
+                    "Todos",
+                    "Seleccionar cuales",
+                    "Cancelar",
+                ],
+            )
+
+            if mode is None or "Cancelar" in mode:
+                return
+
+            if "Seleccionar" in mode:
+                selected = self._select_analyses_to_compare()
+                if selected:
+                    from hidropluvial.cli.session.preview import session_preview
+                    self._safe_call(
+                        session_preview,
+                        self.session.id,
+                        compare=True,
+                        select=selected,
+                    )
+                return
+
+        from hidropluvial.cli.session.preview import session_preview
+        self._safe_call(session_preview, self.session.id, compare=True)
+
+    def _select_analyses_to_compare(self) -> Optional[str]:
+        """Permite seleccionar analisis para comparar."""
+        import questionary
+
+        choices = []
+        for i, a in enumerate(self.session.analyses):
+            hydro = a.hydrograph
+            storm = a.storm
+            x_str = f" X={hydro.x_factor:.2f}" if hydro.x_factor else ""
+            label = f"[{i}] {hydro.tc_method} {storm.type} Tr{storm.return_period}{x_str} Qp={hydro.peak_flow_m3s:.2f}"
+            choices.append(questionary.Choice(label, checked=True))
+
+        selected = self.checkbox("Selecciona analisis a comparar:", choices)
+
+        if not selected:
+            return None
+
+        # Extraer indices
+        indices = []
+        for sel in selected:
+            idx = int(sel.split("]")[0].replace("[", ""))
+            indices.append(str(idx))
+
+        return ",".join(indices)
+
+    def _show_hyetograph(self) -> None:
+        """Muestra hietograma de un analisis."""
+        if not self.session.analyses:
+            self.echo("  No hay analisis disponibles.")
+            return
+
+        # Seleccionar cual
+        choices = []
+        for i, a in enumerate(self.session.analyses):
+            storm = a.storm
+            choices.append(f"{i}: {storm.type} Tr{storm.return_period} P={storm.total_depth_mm:.1f}mm")
+
+        selected = self.select("Selecciona analisis:", choices)
+        if selected:
+            idx = int(selected.split(":")[0])
+            from hidropluvial.cli.session.preview import session_preview
+            self._safe_call(session_preview, self.session.id, analysis_idx=idx, hyetograph=True)
+
+    def _add_analysis(self) -> None:
+        """Agrega mas analisis a la sesion."""
+        from hidropluvial.cli.wizard.menus.add_analysis import AddAnalysisMenu
+
+        c = self.session.cuenca.c
+        cn = self.session.cuenca.cn
+        length = self.session.cuenca.length_m
+
+        menu = AddAnalysisMenu(self.session, c, cn, length)
+        menu.show()
+
+    def _filter_results(self) -> None:
+        """Filtra y muestra resultados."""
+        if not self.session.analyses:
+            self.echo("  No hay analisis disponibles.")
+            return
+
+        # Obtener valores disponibles
+        tr_values = sorted(set(a.storm.return_period for a in self.session.analyses))
+        tc_methods = sorted(set(a.hydrograph.tc_method for a in self.session.analyses))
+
+        filter_type = self.select(
+            "Filtrar por:",
             choices=[
-                "Ver resumen",
-                "Agregar analisis",
-                "Generar reporte",
-                "Eliminar sesion",
+                f"Periodo de retorno: {tr_values}",
+                f"Metodo Tc: {tc_methods}",
+                "Cancelar",
             ],
         )
 
-    def _execute_action(self, action: str, session_id: str) -> None:
-        """Ejecuta la accion seleccionada."""
-        if "resumen" in action.lower():
-            self._show_summary(session_id)
-        elif "Agregar" in action:
-            self._add_analysis(session_id)
-        elif "reporte" in action.lower():
-            self._generate_report(session_id)
-        elif "Eliminar" in action:
-            self._delete_session(session_id)
+        if filter_type is None or "Cancelar" in filter_type:
+            return
 
-    def _show_summary(self, session_id: str) -> None:
-        """Muestra resumen de la sesion."""
-        from hidropluvial.cli.session.base import session_summary
-        session_summary(session_id)
+        if "retorno" in filter_type.lower():
+            tr_choice = self.select("Selecciona Tr:", [str(t) for t in tr_values])
+            if tr_choice:
+                from hidropluvial.cli.session.preview import session_preview
+                self._safe_call(session_preview, self.session.id, compare=True, tr=tr_choice)
+        elif "Metodo" in filter_type:
+            tc_choice = self.select("Selecciona metodo:", tc_methods)
+            if tc_choice:
+                from hidropluvial.cli.session.preview import session_preview
+                self._safe_call(session_preview, self.session.id, compare=True, tc=tc_choice)
 
-    def _add_analysis(self, session_id: str) -> None:
-        """Abre el menu para agregar analisis."""
-        session = self.manager.get_session(session_id)
-        if session:
-            from hidropluvial.cli.wizard.menus.post_execution import PostExecutionMenu
-            menu = PostExecutionMenu(session)
-            menu.show()
+    def _export(self) -> None:
+        """Exporta resultados."""
+        from hidropluvial.cli.wizard.menus.export_menu import ExportMenu
+        export_menu = ExportMenu(self.session)
+        export_menu.show()
 
-    def _generate_report(self, session_id: str) -> None:
-        """Genera reporte LaTeX."""
-        output = self.text("Nombre del archivo (sin extension):")
-        if output:
-            from hidropluvial.cli.session.report import session_report
-            session_report(session_id, output, author=None, template_dir=None)
+    def _edit_cuenca(self) -> None:
+        """Edita datos de la cuenca."""
+        from hidropluvial.cli.wizard.menus.cuenca_editor import CuencaEditor
+        editor = CuencaEditor(self.session, self.manager)
+        result = editor.edit()
 
-    def _delete_session(self, session_id: str) -> None:
-        """Elimina la sesion."""
-        if self.confirm(f"Seguro que deseas eliminar la sesion {session_id}?", default=False):
-            from hidropluvial.cli.session.base import session_delete
-            session_delete(session_id, force=True)
+        if result == "modified":
+            # Recargar sesion
+            self.session = self.manager.get_session(self.session.id)
+
+    def _manage_notes(self) -> None:
+        """Gestiona notas de la sesion."""
+        current = self.session.notes or ""
+
+        self.echo(f"\n  Notas actuales: {current if current else '(sin notas)'}\n")
+
+        new_notes = self.text("Nuevas notas (vacio para eliminar):", default=current)
+
+        if new_notes is not None:
+            self.manager.set_session_notes(self.session, new_notes)
+            self.echo("  Notas guardadas." if new_notes else "  Notas eliminadas.")
+
+    def _delete_session(self) -> bool:
+        """Elimina la sesion. Retorna True si se elimino."""
+        if self.confirm(f"Seguro que deseas eliminar la sesion {self.session.id}?", default=False):
+            if self.manager.delete(self.session.id):
+                self.echo(f"\n  Sesion {self.session.id} eliminada.\n")
+                return True
+            else:
+                self.echo("\n  Error al eliminar sesion.\n")
+        return False

@@ -9,6 +9,7 @@ import questionary
 
 from hidropluvial.cli.wizard.menus.base import SessionMenu
 from hidropluvial.session import Session
+from hidropluvial.project import Project, Basin
 
 
 class PostExecutionMenu(SessionMenu):
@@ -16,71 +17,94 @@ class PostExecutionMenu(SessionMenu):
 
     def __init__(
         self,
-        session: Session,
+        project: Project,
+        basin: Basin,
         c: Optional[float] = None,
         cn: Optional[int] = None,
         length: Optional[float] = None,
     ):
+        # Convertir basin a session para compatibilidad con SessionMenu
+        session = basin.to_session()
         super().__init__(session)
-        # Usar valores de la sesion si no se pasan explicitamente
-        self.c = c if c is not None else session.cuenca.c
-        self.cn = cn if cn is not None else session.cuenca.cn
-        self.length = length if length is not None else session.cuenca.length_m
+
+        self.project = project
+        self.basin = basin
+
+        # Usar valores de la cuenca si no se pasan explicitamente
+        self.c = c if c is not None else basin.c
+        self.cn = cn if cn is not None else basin.cn
+        self.length = length if length is not None else basin.length_m
 
     def show(self) -> None:
         """Muestra el menu post-ejecucion en un loop."""
         while True:
-            self.echo("")
+            # Recargar sesion para tener datos actualizados
+            self.reload_session()
+
+            self._show_session_header()
+
             action = self.select(
                 "Que deseas hacer ahora?",
                 choices=[
-                    "Ver tabla con sparklines",
-                    "Ver hidrogramas (grafico)",
+                    "Ver tabla resumen",
+                    "Ver hidrogramas (navegacion interactiva)",
                     "Comparar hidrogramas",
+                    "Ver hietograma",
                     "Filtrar resultados",
                     "Agregar mas analisis",
                     "Definir CN por ponderacion (tablas NRCS)",
                     "Editar datos de la cuenca",
                     "Agregar/editar notas",
                     "Exportar (Excel/LaTeX)",
-                    "Salir",
+                    "← Salir al menu principal",
                 ],
             )
 
             if action is None or "Salir" in action:
-                self.echo(f"\n  Sesion guardada: {self.session.id}")
+                self.echo(f"\n  Cuenca guardada: {self.basin.id}")
+                self.echo(f"  Proyecto: {self.project.name} [{self.project.id}]")
                 self.echo(f"  Usa 'hp session summary {self.session.id}' para ver resultados.\n")
                 break
 
             self._handle_action(action)
 
+    def _show_session_header(self) -> None:
+        """Muestra encabezado con info de la sesion/cuenca."""
+        self.echo(f"\n{'='*60}")
+        self.echo(f"  CUENCA: {self.basin.name} [{self.basin.id}]")
+        self.echo(f"  Proyecto: {self.project.name}")
+        self.echo(f"{'='*60}")
+        self.echo(f"  Area: {self.basin.area_ha} ha, S={self.basin.slope_pct}%")
+        self.echo(f"  Analisis: {len(self.basin.analyses)}")
+        if self.basin.analyses:
+            trs = sorted(set(a.storm.return_period for a in self.basin.analyses))
+            self.echo(f"  Periodos de retorno: {trs}")
+        self.echo(f"{'='*60}\n")
+
     def _handle_action(self, action: str) -> None:
         """Maneja la accion seleccionada."""
         if "tabla" in action.lower():
             self._show_table()
+        elif "navegacion" in action.lower():
+            self._show_interactive_viewer()
         elif "Comparar" in action:
             self._compare_hydrographs()
-        elif "grafico" in action.lower():
-            self._show_single_hydrograph()
+        elif "hietograma" in action.lower():
+            self._show_hyetograph()
         elif "Filtrar" in action:
             self._filter_results()
         elif "ponderacion" in action.lower():
             self._define_weighted_cn()
-            self.reload_session()
         elif "Editar" in action:
             result = self._edit_cuenca()
             if result == "new_session":
                 return  # Salir del menu
-            elif result == "modified":
-                self.reload_session()
         elif "notas" in action.lower():
             self._manage_notes()
-            self.reload_session()
         elif "Exportar" in action:
             self._export()
         elif "Agregar" in action:
             self._add_analysis()
-            self.reload_session()
 
     def _safe_call(self, func, *args, **kwargs) -> None:
         """Ejecuta una funcion capturando typer.Exit para no salir del wizard."""
@@ -96,29 +120,89 @@ class PostExecutionMenu(SessionMenu):
         self._safe_call(session_preview, self.session.id, analysis_idx=None, compare=False)
 
     def _compare_hydrographs(self) -> None:
-        """Compara todos los hidrogramas."""
-        from hidropluvial.cli.session.preview import session_preview
-        self._safe_call(session_preview, self.session.id, analysis_idx=None, compare=True)
-
-    def _show_single_hydrograph(self) -> None:
-        """Muestra un hidrograma individual."""
-        n_analyses = len(self.session.analyses)
-        if n_analyses == 0:
+        """Compara hidrogramas con opcion de seleccionar cuales."""
+        if not self.session.analyses:
             self.echo("  No hay analisis disponibles.")
             return
 
+        n = len(self.session.analyses)
+        if n > 2:
+            mode = self.select(
+                "Que hidrogramas comparar?",
+                choices=[
+                    "Todos",
+                    "Seleccionar cuales",
+                    "Cancelar",
+                ],
+            )
+
+            if mode is None or "Cancelar" in mode:
+                return
+
+            if "Seleccionar" in mode:
+                selected = self._select_analyses_to_compare()
+                if selected:
+                    from hidropluvial.cli.session.preview import session_preview
+                    self._safe_call(
+                        session_preview,
+                        self.session.id,
+                        compare=True,
+                        select=selected,
+                    )
+                return
+
+        from hidropluvial.cli.session.preview import session_preview
+        self._safe_call(session_preview, self.session.id, analysis_idx=None, compare=True)
+
+    def _select_analyses_to_compare(self) -> str:
+        """Permite seleccionar analisis para comparar."""
         choices = []
         for i, a in enumerate(self.session.analyses):
             hydro = a.hydrograph
             storm = a.storm
             x_str = f" X={hydro.x_factor:.2f}" if hydro.x_factor else ""
-            choices.append(f"{i}: {hydro.tc_method} + {storm.type} Tr{storm.return_period}{x_str}")
+            label = f"[{i}] {hydro.tc_method} {storm.type} Tr{storm.return_period}{x_str} Qp={hydro.peak_flow_m3s:.2f}"
+            choices.append(questionary.Choice(label, checked=True))
+
+        selected = self.checkbox("Selecciona analisis a comparar:", choices)
+
+        if not selected:
+            return None
+
+        # Extraer indices
+        indices = []
+        for sel in selected:
+            idx = int(sel.split("]")[0].replace("[", ""))
+            indices.append(str(idx))
+
+        return ",".join(indices)
+
+    def _show_interactive_viewer(self) -> None:
+        """Muestra visor interactivo de hidrogramas."""
+        if not self.session.analyses:
+            self.echo("  No hay analisis disponibles.")
+            return
+
+        from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
+        interactive_hydrograph_viewer(self.session.analyses, self.session.name)
+
+    def _show_hyetograph(self) -> None:
+        """Muestra hietograma de un analisis."""
+        if not self.session.analyses:
+            self.echo("  No hay analisis disponibles.")
+            return
+
+        # Seleccionar cual
+        choices = []
+        for i, a in enumerate(self.session.analyses):
+            storm = a.storm
+            choices.append(f"{i}: {storm.type} Tr{storm.return_period} P={storm.total_depth_mm:.1f}mm")
 
         selected = self.select("Selecciona analisis:", choices)
         if selected:
             idx = int(selected.split(":")[0])
             from hidropluvial.cli.session.preview import session_preview
-            self._safe_call(session_preview, self.session.id, analysis_idx=idx, compare=False)
+            self._safe_call(session_preview, self.session.id, analysis_idx=idx, hyetograph=True)
 
     def _export(self) -> None:
         """Exporta los resultados a Excel o LaTeX con opciones de filtrado."""
@@ -195,7 +279,22 @@ class PostExecutionMenu(SessionMenu):
         tc_methods = sorted(set(a.hydrograph.tc_method for a in self.session.analyses))
         storm_types = sorted(set(a.storm.type for a in self.session.analyses))
 
+        # Obtener métodos de escorrentía disponibles
+        runoff_methods = set()
+        for a in self.session.analyses:
+            if a.tc.parameters and "runoff_method" in a.tc.parameters:
+                runoff_methods.add(a.tc.parameters["runoff_method"])
+            elif a.tc.parameters:
+                # Inferir de parámetros existentes para análisis antiguos
+                if "cn_adjusted" in a.tc.parameters:
+                    runoff_methods.add("scs-cn")
+                elif "c" in a.tc.parameters:
+                    runoff_methods.add("racional")
+        runoff_methods = sorted(runoff_methods)
+
         x_choice = f"Factor X: {x_values}" if x_values else "Factor X: (no disponible)"
+        runoff_choice = f"Metodo escorrentia: {runoff_methods}" if runoff_methods else "Metodo escorrentia: (no disponible)"
+
         filter_type = self.select(
             "Filtrar por:",
             choices=[
@@ -203,6 +302,7 @@ class PostExecutionMenu(SessionMenu):
                 x_choice,
                 f"Metodo Tc: {tc_methods}",
                 f"Tipo de tormenta: {storm_types}",
+                runoff_choice,
                 "Combinacion personalizada",
                 "Cancelar",
             ],
@@ -211,7 +311,7 @@ class PostExecutionMenu(SessionMenu):
         if filter_type is None or "Cancelar" in filter_type:
             return
 
-        filters = self._collect_filters(filter_type, tr_values, x_values, tc_methods, storm_types)
+        filters = self._collect_filters(filter_type, tr_values, x_values, tc_methods, storm_types, runoff_methods)
         self._show_filtered_results(**filters)
 
     def _collect_filters(
@@ -221,12 +321,14 @@ class PostExecutionMenu(SessionMenu):
         x_values: list,
         tc_methods: list,
         storm_types: list,
+        runoff_methods: list,
     ) -> dict:
         """Recolecta los filtros segun el tipo seleccionado."""
         tr_filter = None
         x_filter = None
         tc_filter = None
         storm_filter = None
+        runoff_filter = None
 
         if "Periodo de retorno" in filter_type:
             tr_choices = [questionary.Choice(str(v), checked=False) for v in tr_values]
@@ -246,15 +348,29 @@ class PostExecutionMenu(SessionMenu):
             if selected:
                 tc_filter = ",".join(selected)
 
-        elif "tormenta" in filter_type:
+        elif "tormenta" in filter_type.lower():
             storm_choices = [questionary.Choice(v, checked=False) for v in storm_types]
             selected = self.checkbox("Selecciona tipo de tormenta:", storm_choices)
             if selected:
                 storm_filter = ",".join(selected)
 
+        elif "escorrentia" in filter_type.lower() and runoff_methods:
+            # Mostrar etiquetas amigables
+            runoff_labels = {
+                "racional": "Racional (C)",
+                "scs-cn": "SCS-CN (CN)",
+            }
+            runoff_choices = [
+                questionary.Choice(runoff_labels.get(v, v), value=v, checked=False)
+                for v in runoff_methods
+            ]
+            selected = self.checkbox("Selecciona metodo de escorrentia:", runoff_choices)
+            if selected:
+                runoff_filter = ",".join(selected)
+
         elif "Combinacion" in filter_type:
-            tr_filter, x_filter, tc_filter = self._collect_combined_filters(
-                tr_values, x_values, tc_methods
+            tr_filter, x_filter, tc_filter, runoff_filter = self._collect_combined_filters(
+                tr_values, x_values, tc_methods, runoff_methods
             )
 
         return {
@@ -262,6 +378,7 @@ class PostExecutionMenu(SessionMenu):
             "x_filter": x_filter,
             "tc_filter": tc_filter,
             "storm_filter": storm_filter,
+            "runoff_filter": runoff_filter,
         }
 
     def _collect_combined_filters(
@@ -269,11 +386,13 @@ class PostExecutionMenu(SessionMenu):
         tr_values: list,
         x_values: list,
         tc_methods: list,
+        runoff_methods: list,
     ) -> tuple:
         """Recolecta filtros combinados."""
         tr_filter = None
         x_filter = None
         tc_filter = None
+        runoff_filter = None
 
         tr_choices = [questionary.Choice(str(v), checked=False) for v in tr_values]
         tr_selected = self.checkbox("Periodos de retorno (Enter para todos):", tr_choices)
@@ -291,7 +410,20 @@ class PostExecutionMenu(SessionMenu):
         if tc_selected:
             tc_filter = ",".join(tc_selected)
 
-        return tr_filter, x_filter, tc_filter
+        if runoff_methods:
+            runoff_labels = {
+                "racional": "Racional (C)",
+                "scs-cn": "SCS-CN (CN)",
+            }
+            runoff_choices = [
+                questionary.Choice(runoff_labels.get(v, v), value=v, checked=False)
+                for v in runoff_methods
+            ]
+            runoff_selected = self.checkbox("Metodos escorrentia (Enter para todos):", runoff_choices)
+            if runoff_selected:
+                runoff_filter = ",".join(runoff_selected)
+
+        return tr_filter, x_filter, tc_filter, runoff_filter
 
     def _show_filtered_results(
         self,
@@ -299,6 +431,7 @@ class PostExecutionMenu(SessionMenu):
         x_filter: Optional[str],
         tc_filter: Optional[str],
         storm_filter: Optional[str],
+        runoff_filter: Optional[str] = None,
     ) -> None:
         """Muestra resultados filtrados."""
         from hidropluvial.cli.session.preview import session_preview
@@ -312,6 +445,7 @@ class PostExecutionMenu(SessionMenu):
             x=x_filter,
             tc=tc_filter,
             storm=storm_filter,
+            runoff=runoff_filter,
         )
 
         # Ofrecer comparar filtrados
@@ -325,6 +459,7 @@ class PostExecutionMenu(SessionMenu):
                 x=x_filter,
                 tc=tc_filter,
                 storm=storm_filter,
+                runoff=runoff_filter,
             )
 
     def _edit_cuenca(self) -> str:

@@ -29,31 +29,37 @@ class AddAnalysisMenu(SessionMenu):
 
     def show(self) -> None:
         """Muestra menu de opciones para agregar analisis."""
-        self.echo("\n-- Agregar Analisis --\n")
+        while True:
+            self.echo("\n-- Agregar Analisis --\n")
+            self.echo(f"  Sesion: {self.session.name} ({len(self.session.analyses)} analisis)\n")
 
-        que_agregar = self.select(
-            "Que tipo de analisis quieres agregar?",
-            choices=[
-                "Otra tormenta (Bloques, Bimodal, etc.)",
-                "Otros periodos de retorno",
-                "Otros valores de X",
-                "Otro metodo de Tc",
-            ],
-        )
+            que_agregar = self.select(
+                "Que tipo de analisis quieres agregar?",
+                choices=[
+                    "Otra tormenta (Bloques, Bimodal, etc.)",
+                    "Otros periodos de retorno",
+                    "Otros valores de X",
+                    "Otro metodo de Tc",
+                    "← Volver",
+                ],
+            )
 
-        if que_agregar is None:
-            return
+            if que_agregar is None or "Volver" in que_agregar:
+                return
 
-        tc_existentes = [tc.method for tc in self.session.tc_results]
+            tc_existentes = [tc.method for tc in self.session.tc_results]
 
-        if "tormenta" in que_agregar.lower():
-            self._add_storm(tc_existentes)
-        elif "retorno" in que_agregar.lower():
-            self._add_return_periods(tc_existentes)
-        elif "X" in que_agregar:
-            self._add_x_factors(tc_existentes)
-        elif "Tc" in que_agregar:
-            self._add_tc_method(tc_existentes)
+            if "tormenta" in que_agregar.lower():
+                self._add_storm(tc_existentes)
+            elif "retorno" in que_agregar.lower():
+                self._add_return_periods(tc_existentes)
+            elif "X" in que_agregar:
+                self._add_x_factors(tc_existentes)
+            elif "Tc" in que_agregar:
+                self._add_tc_method(tc_existentes)
+
+            # Recargar sesion para mostrar contador actualizado
+            self.reload_session()
 
     def _add_storm(self, tc_existentes: list[str]) -> None:
         """Agrega analisis con nueva tormenta."""

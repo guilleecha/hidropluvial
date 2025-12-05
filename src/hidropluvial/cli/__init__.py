@@ -9,7 +9,8 @@ Este módulo organiza los comandos CLI en sub-aplicaciones temáticas:
 - hydrograph: Generación de hidrogramas
 - report: Generación de reportes LaTeX
 - export: Exportación de datos
-- session: Gestión de sesiones de análisis
+- session: Gestión de sesiones de análisis (legacy)
+- project: Gestión de proyectos con múltiples cuencas
 - wizard: Asistente interactivo
 - commands: Lista de comandos disponibles
 """
@@ -22,6 +23,7 @@ from hidropluvial.cli.idf import idf_app
 from hidropluvial.cli.report import report_app
 from hidropluvial.cli.runoff import runoff_app
 from hidropluvial.cli.session import session_app  # Importa desde subpaquete
+from hidropluvial.cli.project import project_app  # Nuevo: proyectos con múltiples cuencas
 from hidropluvial.cli.storm import storm_app
 from hidropluvial.cli.tc import tc_app
 
@@ -41,6 +43,7 @@ app.add_typer(hydrograph_app, name="hydrograph")
 app.add_typer(report_app, name="report")
 app.add_typer(export_app, name="export")
 app.add_typer(session_app, name="session")
+app.add_typer(project_app, name="project")
 
 
 @app.command()
@@ -79,4 +82,5 @@ __all__ = [
     "report_app",
     "export_app",
     "session_app",
+    "project_app",
 ]

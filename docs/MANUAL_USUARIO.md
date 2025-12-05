@@ -8,13 +8,14 @@
 
 1. [Introducción](#introducción)
 2. [Instalación](#instalación)
-3. [Ejemplo 1: Análisis Básico con Método Racional](#ejemplo-1-análisis-básico-con-método-racional)
-4. [Ejemplo 2: Análisis con SCS-CN](#ejemplo-2-análisis-con-scs-cn)
-5. [Ejemplo 3: Comparación de Metodologías](#ejemplo-3-comparación-de-metodologías)
-6. [Ejemplo 4: Parámetros Avanzados](#ejemplo-4-parámetros-avanzados)
-7. [Exportación y Reportes](#exportación-y-reportes)
-8. [Organización de Salidas](#organización-de-salidas)
-9. [Referencia Rápida](#referencia-rápida)
+3. [Conceptos: Proyectos y Cuencas](#conceptos-proyectos-y-cuencas)
+4. [Ejemplo 1: Análisis Básico con Método Racional](#ejemplo-1-análisis-básico-con-método-racional)
+5. [Ejemplo 2: Análisis con SCS-CN](#ejemplo-2-análisis-con-scs-cn)
+6. [Ejemplo 3: Comparación de Metodologías](#ejemplo-3-comparación-de-metodologías)
+7. [Ejemplo 4: Parámetros Avanzados](#ejemplo-4-parámetros-avanzados)
+8. [Exportación y Reportes](#exportación-y-reportes)
+9. [Organización de Salidas](#organización-de-salidas)
+10. [Referencia Rápida](#referencia-rápida)
 
 ---
 
@@ -57,6 +58,44 @@ hp --help
 
 ---
 
+## Conceptos: Proyectos y Cuencas
+
+HidroPluvial organiza el trabajo en una estructura jerárquica:
+
+### Proyecto
+Un **Proyecto** representa un estudio o trabajo completo, por ejemplo:
+- "Estudio de Drenaje Pluvial Barrio Norte"
+- "Análisis Hidrológico Ruta 5 km 120-125"
+
+Cada proyecto puede contener múltiples cuencas y tiene metadatos como autor, descripción y ubicación.
+
+### Cuenca (Basin)
+Una **Cuenca** es el área de análisis con sus propiedades físicas:
+- Área (ha), Pendiente (%), P₃,₁₀ (mm)
+- Coeficientes de escorrentía (C y/o CN)
+- Resultados de Tc y análisis de crecidas
+
+### Flujo de Trabajo
+
+```
+1. Crear nueva cuenca → Se crea automáticamente un proyecto
+2. Agregar más cuencas al proyecto → Desde "Gestionar proyectos"
+3. Continuar trabajo → "Continuar proyecto/cuenca existente"
+```
+
+### Parámetros de Resultados
+
+| Símbolo | Descripción | Unidad |
+|---------|-------------|--------|
+| Tc | Tiempo de concentración | min |
+| tp | Tiempo pico del hidrograma unitario | min |
+| tb | Tiempo base del hidrograma unitario (2.67×tp) | min |
+| Tp | Tiempo al pico del hidrograma resultante | min |
+| Qp | Caudal pico | m³/s |
+| Vol | Volumen de escorrentía | hm³ |
+
+---
+
 ## Ejemplo 1: Análisis Básico con Método Racional
 
 ### Descripción del Problema
@@ -74,7 +113,7 @@ hp --help
 hp wizard
 ```
 
-1. Seleccionar "Nuevo análisis completo (guiado)"
+1. Seleccionar "Nueva cuenca (analisis guiado)"
 2. Ingresar datos de la cuenca:
    - Nombre: Cuenca Las Piedras
    - Área: 62
@@ -111,14 +150,16 @@ hp session show <session_id>
 
 ### Resultados Esperados
 
-| Método Tc | Tr | X | Qp (m³/s) |
-|-----------|-----|-----|-----------|
-| Kirpich | 2 | 1.00 | 7.85 |
-| Kirpich | 10 | 1.00 | 12.13 |
-| Kirpich | 25 | 1.00 | 14.98 |
-| Desbordes | 2 | 1.00 | 6.75 |
-| Desbordes | 10 | 1.00 | 10.43 |
-| Desbordes | 25 | 1.00 | 12.89 |
+| Método Tc | Tr | X | Tc | tp | tb | Qp | Vol |
+|-----------|-----|------|-----|-----|-----|------|------|
+| Kirpich | 2 | 1.00 | 12 | 21 | 56 | 7.9 | 0.021 |
+| Kirpich | 10 | 1.00 | 12 | 21 | 56 | 12 | 0.033 |
+| Kirpich | 25 | 1.00 | 12 | 21 | 56 | 15 | 0.041 |
+| Desbordes | 2 | 1.00 | 23 | 29 | 77 | 6.8 | 0.021 |
+| Desbordes | 10 | 1.00 | 23 | 29 | 77 | 10 | 0.033 |
+| Desbordes | 25 | 1.00 | 23 | 29 | 77 | 13 | 0.041 |
+
+*Tiempos en min, Qp en m³/s, Vol en hm³*
 
 ---
 
@@ -211,16 +252,17 @@ Para cada método de Tc, se generan análisis con:
 
 ```
 ============================================================
-  COMPARACION DE METODOLOGIAS
+  COMPARACION DE METODOLOGIAS - Tr=10, Tormenta GZ
 ============================================================
-  Tr=10, Tormenta GZ
 
-  Método       | Tc (min) | P (mm) | Q (mm) | Qp (m³/s)
-  -------------+----------+--------+--------+-----------
-  Kirpich + C  |    12.3  |  105.9 |   65.7 |    10.43
-  Kirpich + CN |    12.3  |  105.9 |   58.4 |     9.27
-  Desbordes + C|    22.6  |  105.9 |   65.7 |     8.91
-  Desbordes + CN|   22.6  |  105.9 |   58.4 |     7.92
+  Método       | Tc  | tp  | tb  | P(mm)| Pe(mm)| Qp    | Vol
+  -------------+-----+-----+-----+------+-------+-------+------
+  Kirpich + C  |  12 |  21 |  56 | 106  |  65.7 | 10    | 0.033
+  Kirpich + CN |  12 |  21 |  56 | 106  |  58.4 |  9.3  | 0.030
+  Desbordes + C|  23 |  29 |  77 | 106  |  65.7 |  8.9  | 0.033
+  Desbordes+CN |  23 |  29 |  77 | 106  |  58.4 |  7.9  | 0.030
+
+  Tiempos en min, Qp en m³/s, Vol en hm³
 ============================================================
 ```
 
@@ -422,4 +464,55 @@ hp <comando> --help
 
 ---
 
-*Manual de Usuario - HidroPluvial v1.0*
+---
+
+## Gestión de Proyectos
+
+### Continuar Proyecto Existente
+
+Desde el wizard, selecciona "Continuar proyecto/cuenca existente":
+
+```
+? Selecciona un proyecto o cuenca:
+> [Proyecto] abc123 - Estudio Drenaje Norte (3 cuencas, 45 analisis)
+  [Proyecto] def456 - Ruta 5 km 120 (1 cuenca, 12 analisis)
+  [Cuenca] ghi789 - Cuenca Antigua (8 analisis)  <-- Session legacy
+  ← Volver al menu principal
+```
+
+### Opciones de Proyecto
+
+Una vez seleccionado un proyecto:
+
+```
+? Que deseas hacer?
+> Ver cuencas del proyecto
+  Seleccionar cuenca para trabajar
+  Agregar nueva cuenca al proyecto
+  Editar metadatos del proyecto
+  Eliminar proyecto
+  ← Volver (elegir otro proyecto)
+  ← Salir al menu principal
+```
+
+### Opciones de Cuenca
+
+Una vez seleccionada una cuenca:
+
+```
+? Que deseas hacer?
+> Ver tabla resumen
+  Ver hidrogramas (navegacion interactiva)
+  Comparar hidrogramas
+  Ver hietograma
+  Agregar mas analisis
+  Filtrar resultados
+  Exportar (Excel/LaTeX)
+  Editar datos de la cuenca
+  Agregar/editar notas
+  Eliminar cuenca
+```
+
+---
+
+*Manual de Usuario - HidroPluvial v1.1*

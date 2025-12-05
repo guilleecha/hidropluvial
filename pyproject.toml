@@ -13,6 +13,12 @@ authors = [
     { name = "HidroPluvial Team" }
 ]
 keywords = ["hydrology", "IDF", "runoff", "hydrograph", "SCS", "LaTeX"]
+
+[project.urls]
+Homepage = "https://github.com/guilleecha/hidropluvial"
+Documentation = "https://github.com/guilleecha/hidropluvial#readme"
+Repository = "https://github.com/guilleecha/hidropluvial.git"
+Issues = "https://github.com/guilleecha/hidropluvial/issues"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",

@@ -263,37 +263,61 @@ class SessionManagementMenu(BaseMenu):
         params_str = str(params_to_edit)
 
         if "Area" in params_str:
-            val = self.text(f"Nueva area [actual: {cuenca.area_ha}]:", default=str(cuenca.area_ha))
-            if val:
-                new_values['area_ha'] = float(val)
+            current = cuenca.area_ha
+            val = self.text(f"Nueva area [actual: {current}]:", default=str(current))
+            if val and val.strip() != str(current):
+                try:
+                    new_values['area_ha'] = float(val)
+                except ValueError:
+                    self.echo(f"  Valor invalido, se mantiene {current}")
 
         if "Pendiente" in params_str:
-            val = self.text(f"Nueva pendiente [actual: {cuenca.slope_pct}]:", default=str(cuenca.slope_pct))
-            if val:
-                new_values['slope_pct'] = float(val)
+            current = cuenca.slope_pct
+            val = self.text(f"Nueva pendiente [actual: {current}]:", default=str(current))
+            if val and val.strip() != str(current):
+                try:
+                    new_values['slope_pct'] = float(val)
+                except ValueError:
+                    self.echo(f"  Valor invalido, se mantiene {current}")
 
         if "P3,10" in params_str:
-            val = self.text(f"Nuevo P3,10 [actual: {cuenca.p3_10}]:", default=str(cuenca.p3_10))
-            if val:
-                new_values['p3_10'] = float(val)
+            current = cuenca.p3_10
+            val = self.text(f"Nuevo P3,10 [actual: {current}]:", default=str(current))
+            if val and val.strip() != str(current):
+                try:
+                    new_values['p3_10'] = float(val)
+                except ValueError:
+                    self.echo(f"  Valor invalido, se mantiene {current}")
 
         if "Coeficiente C" in params_str:
             current = cuenca.c if cuenca.c else 0.5
-            val = self.text(f"Nuevo coef. C [actual: {cuenca.c}]:", default=str(current))
-            if val:
-                new_values['c'] = float(val)
+            default_str = str(current)
+            val = self.text(f"Nuevo coef. C [actual: {cuenca.c}]:", default=default_str)
+            if val and val.strip() != default_str:
+                try:
+                    new_values['c'] = float(val)
+                except ValueError:
+                    self.echo(f"  Valor invalido, se mantiene {cuenca.c}")
 
         if "Curve Number" in params_str:
             current = cuenca.cn if cuenca.cn else 75
-            val = self.text(f"Nuevo CN [actual: {cuenca.cn}]:", default=str(current))
-            if val:
-                new_values['cn'] = int(val)
+            default_str = str(current)
+            val = self.text(f"Nuevo CN [actual: {cuenca.cn}]:", default=default_str)
+            if val and val.strip() != default_str:
+                try:
+                    new_values['cn'] = int(val)
+                except ValueError:
+                    self.echo(f"  Valor invalido, se mantiene {cuenca.cn}")
 
         if "Longitud" in params_str:
             current = cuenca.length_m if cuenca.length_m else 1000
-            val = self.text(f"Nueva longitud [actual: {cuenca.length_m}]:", default=str(current))
-            if val:
-                new_values['length_m'] = float(val)
+            default_str = str(current)
+            val = self.text(f"Nueva longitud [actual: {cuenca.length_m}]:", default=default_str)
+            if val and val.strip() != default_str:
+                try:
+                    new_values['length_m'] = float(val)
+                except ValueError:
+                    self.echo(f"  Valor invalido, se mantiene {cuenca.length_m}")
 
         return new_values
 

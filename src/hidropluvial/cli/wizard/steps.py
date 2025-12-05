@@ -279,7 +279,69 @@ class StepMetodoEscorrentia(WizardStep):
             self.echo("  Error: Debes ingresar al menos C o CN")
             return self.execute()
 
+        # Validar consistencia C vs CN si ambos fueron ingresados
+        if self.state.c is not None and self.state.cn is not None:
+            self._validate_c_cn_consistency()
+
         return StepResult.NEXT
+
+    def _validate_c_cn_consistency(self) -> None:
+        """Valida y advierte sobre inconsistencias entre C y CN."""
+        c = self.state.c
+        cn = self.state.cn
+
+        # Aproximar el C equivalente desde el CN usando relaciones empíricas
+        # Relación aproximada: C ≈ (CN - 40) / 60 para CN entre 40 y 98
+        # Esta es una aproximación muy general para fines de advertencia
+        if cn >= 40:
+            c_approx = (cn - 40) / 60
+            c_approx = max(0.1, min(0.95, c_approx))  # Limitar a rango válido
+
+            # Diferencia significativa si es mayor al 30%
+            diff = abs(c - c_approx) / c_approx if c_approx > 0 else 0
+
+            if diff > 0.30:
+                self.echo("")
+                self.echo("  ┌─────────────────────────────────────────────────────────┐")
+                self.echo("  │  ⚠  ADVERTENCIA: Posible inconsistencia C vs CN        │")
+                self.echo("  └─────────────────────────────────────────────────────────┘")
+                self.echo("")
+                self.echo(f"    Valor de C ingresado: {c:.2f}")
+                self.echo(f"    Valor de CN ingresado: {cn}")
+                self.echo(f"    C aproximado desde CN: {c_approx:.2f}")
+                self.echo("")
+
+                if c > c_approx:
+                    self.echo("    El coeficiente C parece alto respecto al CN.")
+                    self.echo("    Esto puede indicar:")
+                    self.echo("      - El CN es bajo (suelo permeable) pero C es alto (impermeabilizado)")
+                    self.echo("      - Diferentes condiciones de uso de suelo para cada método")
+                else:
+                    self.echo("    El coeficiente C parece bajo respecto al CN.")
+                    self.echo("    Esto puede indicar:")
+                    self.echo("      - El CN es alto (suelo impermeable) pero C es bajo (permeable)")
+                    self.echo("      - Diferentes condiciones de uso de suelo para cada método")
+
+                self.echo("")
+                self.echo("    Los valores se usarán tal como fueron ingresados.")
+                self.echo("    Revisa los resultados con cuidado.")
+                self.echo("")
+
+        # Advertir sobre combinaciones extremas
+        extreme_warning = False
+        if c >= 0.8 and cn <= 60:
+            extreme_warning = True
+            self.echo("")
+            self.echo("  ⚠ ADVERTENCIA: C muy alto ({:.2f}) con CN bajo ({})".format(c, cn))
+            self.echo("    Esto producirá resultados muy diferentes entre métodos.")
+        elif c <= 0.3 and cn >= 85:
+            extreme_warning = True
+            self.echo("")
+            self.echo("  ⚠ ADVERTENCIA: C muy bajo ({:.2f}) con CN alto ({})".format(c, cn))
+            self.echo("    Esto producirá resultados muy diferentes entre métodos.")
+
+        if extreme_warning:
+            self.echo("")
 
     def _collect_c(self) -> StepResult:
         """Recolecta coeficiente C."""
@@ -855,6 +917,9 @@ class StepTormenta(WizardStep):
             questionary.Choice("GZ (6 horas) - recomendado drenaje urbano", checked=True),
             questionary.Choice("Bloques alternantes - duración según Tc", checked=False),
             questionary.Choice("Bloques 24 horas - obras mayores", checked=False),
+            questionary.Choice("Bimodal - tormentas doble pico", checked=False),
+            questionary.Choice("Huff (cuartil 2) - basado en datos históricos", checked=False),
+            questionary.Choice("SCS Tipo II - distribución SCS 24h", checked=False),
         ]
 
         res, storm_types = self.checkbox("Tipos de tormenta a analizar:", storm_choices)
@@ -875,6 +940,12 @@ class StepTormenta(WizardStep):
                 self.state.storm_codes.append("blocks")
             elif "24 horas" in storm_type:
                 self.state.storm_codes.append("blocks24")
+            elif "Bimodal" in storm_type:
+                self.state.storm_codes.append("bimodal")
+            elif "Huff" in storm_type:
+                self.state.storm_codes.append("huff_q2")
+            elif "SCS Tipo II" in storm_type:
+                self.state.storm_codes.append("scs_ii")
 
         # Períodos de retorno
         tr_choices = [

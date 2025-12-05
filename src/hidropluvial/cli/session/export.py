@@ -152,19 +152,34 @@ def _get_summary_dataframe(session: Session) -> pd.DataFrame:
     """Genera DataFrame con resumen de todos los análisis."""
     rows = []
     for a in session.analyses:
+        # Determinar método de escorrentía
+        runoff_method = "-"
+        if a.tc.parameters and "runoff_method" in a.tc.parameters:
+            rm = a.tc.parameters["runoff_method"]
+            runoff_method = "Racional" if rm == "racional" else "SCS-CN"
+        elif a.tc.parameters:
+            # Inferir de parámetros existentes para análisis antiguos
+            if "cn_adjusted" in a.tc.parameters:
+                runoff_method = "SCS-CN"
+            elif "c" in a.tc.parameters:
+                runoff_method = "Racional"
+
         row = {
             "ID": a.id,
             "Método Tc": a.tc.method.capitalize(),
             "Tc (min)": round(a.tc.tc_min, 1),
+            "tp (min)": round(a.hydrograph.tp_unit_min, 1) if a.hydrograph.tp_unit_min else None,
+            "tb (min)": round(a.hydrograph.tb_min, 1) if a.hydrograph.tb_min else None,
+            "Método Pe": runoff_method,
             "Tormenta": a.storm.type.upper(),
             "Tr (años)": a.storm.return_period,
             "Duración (hr)": round(a.storm.duration_hr, 2),
             "P total (mm)": round(a.storm.total_depth_mm, 1),
             "i pico (mm/hr)": round(a.storm.peak_intensity_mmhr, 1),
-            "Escorrentía (mm)": round(a.hydrograph.runoff_mm, 1),
-            "Q pico (m³/s)": round(a.hydrograph.peak_flow_m3s, 3),
-            "t pico (min)": round(a.hydrograph.time_to_peak_min, 1),
-            "Volumen (m³)": round(a.hydrograph.volume_m3, 0),
+            "Pe (mm)": round(a.hydrograph.runoff_mm, 1),
+            "Qp (m³/s)": round(a.hydrograph.peak_flow_m3s, 2),
+            "Tp (min)": round(a.hydrograph.time_to_peak_min, 1),
+            "Vol (hm³)": round(a.hydrograph.volume_m3 / 1_000_000, 4),
         }
 
         # Agregar C si el método de Tc depende de C (desbordes, faa)
@@ -204,8 +219,27 @@ def _get_pivot_dataframe(session: Session) -> Optional[pd.DataFrame]:
 
     rows = []
     for a in session.analyses:
+        # Construir etiqueta del método
+        method_label = a.tc.method
+
+        # Agregar método de escorrentía si está disponible
+        if a.tc.parameters and "runoff_method" in a.tc.parameters:
+            rm = a.tc.parameters["runoff_method"]
+            esc_label = "C" if rm == "racional" else "CN"
+            method_label = f"{method_label}+{esc_label}"
+        elif a.tc.parameters:
+            # Inferir para análisis antiguos
+            if "cn_adjusted" in a.tc.parameters:
+                method_label = f"{method_label}+CN"
+            elif "c" in a.tc.parameters:
+                method_label = f"{method_label}+C"
+
+        # Agregar factor X si existe
+        if a.hydrograph.x_factor:
+            method_label = f"{method_label} X={a.hydrograph.x_factor:.2f}"
+
         rows.append({
-            "Método": f"{a.tc.method} X={a.hydrograph.x_factor:.2f}" if a.hydrograph.x_factor else a.tc.method,
+            "Método": method_label,
             "Tr": a.storm.return_period,
             "Q pico (m³/s)": round(a.hydrograph.peak_flow_m3s, 3),
         })

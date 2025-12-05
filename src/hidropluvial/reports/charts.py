@@ -454,3 +454,201 @@ def hyetograph_result_to_tikz(
         title=title,
         **kwargs,
     )
+
+
+# ============================================================================
+# Comparación de metodologías C vs CN
+# ============================================================================
+
+# Colores para múltiples series
+SERIES_COLORS = [
+    "black", "red", "blue", "green!60!black", "orange", "purple",
+    "brown", "cyan", "magenta", "olive"
+]
+
+SERIES_STYLES = [
+    "solid", "dashed", "dotted", "dashdotted", "solid",
+    "dashed", "dotted", "dashdotted", "solid", "dashed"
+]
+
+
+def generate_methodology_comparison_tikz(
+    analyses: list,
+    tr: int,
+    caption: str = "",
+    label: str = "",
+    **kwargs,
+) -> str:
+    """
+    Genera gráfico comparativo de hidrogramas por método de escorrentía.
+
+    Compara hidrogramas del mismo Tr pero con diferentes métodos (C vs CN).
+
+    Args:
+        analyses: Lista de objetos AnalysisRun
+        tr: Período de retorno a comparar
+        caption: Título de la figura
+        label: Etiqueta para referencias
+        **kwargs: Argumentos adicionales
+
+    Returns:
+        Código LaTeX/TikZ
+    """
+    # Filtrar análisis por Tr
+    filtered = [a for a in analyses if a.storm.return_period == tr]
+
+    if len(filtered) < 2:
+        return ""
+
+    series = []
+    for i, a in enumerate(filtered):
+        # Determinar método de escorrentía
+        runoff_label = ""
+        if a.tc.parameters and "runoff_method" in a.tc.parameters:
+            rm = a.tc.parameters["runoff_method"]
+            runoff_label = " (C)" if rm == "racional" else " (CN)"
+        elif a.tc.parameters:
+            if "cn_adjusted" in a.tc.parameters:
+                runoff_label = " (CN)"
+            elif "c" in a.tc.parameters:
+                runoff_label = " (C)"
+
+        # Construir etiqueta
+        label_text = f"{a.tc.method.capitalize()}{runoff_label}"
+        if a.hydrograph.x_factor:
+            label_text += f" X={a.hydrograph.x_factor:.2f}"
+
+        # Convertir tiempo
+        time_min = [t * 60 for t in a.hydrograph.time_hr] if a.hydrograph.time_hr else []
+        flow = a.hydrograph.flow_m3s or []
+
+        if time_min and flow:
+            series.append(HydrographSeries(
+                time_min=time_min,
+                flow_m3s=flow,
+                label=label_text,
+                color=SERIES_COLORS[i % len(SERIES_COLORS)],
+                style=SERIES_STYLES[i % len(SERIES_STYLES)],
+            ))
+
+    if len(series) < 2:
+        return ""
+
+    return generate_hydrograph_tikz(
+        series,
+        caption=caption or f"Comparación de metodologías - Tr={tr} años",
+        label=label or f"fig:comparacion_tr{tr}",
+        **kwargs
+    )
+
+
+def generate_c_vs_cn_comparison_tikz(
+    analyses: list,
+    caption: str = "Comparación de métodos de escorrentía: Racional (C) vs SCS-CN",
+    label: str = "fig:c_vs_cn_comparacion",
+    **kwargs,
+) -> str:
+    """
+    Genera gráfico comparativo específico C vs CN.
+
+    Selecciona el mejor par de análisis para comparar:
+    - Mismo método Tc
+    - Mismo Tr
+    - Diferente método de escorrentía
+
+    Args:
+        analyses: Lista de objetos AnalysisRun
+        caption: Título de la figura
+        label: Etiqueta para referencias
+        **kwargs: Argumentos adicionales
+
+    Returns:
+        Código LaTeX/TikZ
+    """
+    # Clasificar análisis por método de escorrentía
+    c_analyses = []
+    cn_analyses = []
+
+    for a in analyses:
+        runoff_method = None
+        if a.tc.parameters and "runoff_method" in a.tc.parameters:
+            runoff_method = a.tc.parameters["runoff_method"]
+        elif a.tc.parameters:
+            if "cn_adjusted" in a.tc.parameters:
+                runoff_method = "scs-cn"
+            elif "c" in a.tc.parameters:
+                runoff_method = "racional"
+
+        if runoff_method == "racional":
+            c_analyses.append(a)
+        elif runoff_method == "scs-cn":
+            cn_analyses.append(a)
+
+    if not c_analyses or not cn_analyses:
+        return ""
+
+    # Encontrar el mejor par (mismo Tc method, mismo Tr)
+    best_pair = None
+    for c_a in c_analyses:
+        for cn_a in cn_analyses:
+            if (c_a.tc.method == cn_a.tc.method and
+                c_a.storm.return_period == cn_a.storm.return_period):
+                # Preferir Tr mayores para comparaciones más significativas
+                if best_pair is None or c_a.storm.return_period > best_pair[0].storm.return_period:
+                    best_pair = (c_a, cn_a)
+
+    if best_pair is None:
+        # Usar cualquier par con el mismo Tr
+        for c_a in c_analyses:
+            for cn_a in cn_analyses:
+                if c_a.storm.return_period == cn_a.storm.return_period:
+                    best_pair = (c_a, cn_a)
+                    break
+            if best_pair:
+                break
+
+    if best_pair is None:
+        return ""
+
+    c_a, cn_a = best_pair
+
+    # Construir etiquetas
+    c_label = f"Racional (C={c_a.tc.parameters.get('c', '?'):.2f})"
+    cn_label = f"SCS-CN (CN={cn_a.tc.parameters.get('cn_adjusted', '?'):.0f})"
+
+    # Datos
+    time_min_c = [t * 60 for t in c_a.hydrograph.time_hr] if c_a.hydrograph.time_hr else []
+    flow_c = c_a.hydrograph.flow_m3s or []
+
+    time_min_cn = [t * 60 for t in cn_a.hydrograph.time_hr] if cn_a.hydrograph.time_hr else []
+    flow_cn = cn_a.hydrograph.flow_m3s or []
+
+    if not time_min_c or not flow_c or not time_min_cn or not flow_cn:
+        return ""
+
+    series = [
+        HydrographSeries(
+            time_min=time_min_c,
+            flow_m3s=flow_c,
+            label=c_label,
+            color="red",
+            style="dashed",
+        ),
+        HydrographSeries(
+            time_min=time_min_cn,
+            flow_m3s=flow_cn,
+            label=cn_label,
+            color="blue",
+            style="solid",
+        ),
+    ]
+
+    tr = c_a.storm.return_period
+    tc_method = c_a.tc.method.capitalize()
+
+    return generate_hydrograph_tikz(
+        series,
+        caption=caption + f" - {tc_method} Tr={tr} años",
+        label=label,
+        **kwargs
+    )

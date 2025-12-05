@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from hidropluvial.session import Session, SessionManager, CuencaConfig, TcResult
+from hidropluvial.project import Project, Basin, get_project_manager
 from hidropluvial.cli.wizard.menus import PostExecutionMenu, continue_session_menu
 from hidropluvial.cli.wizard.runner import AdditionalAnalysisRunner
 
@@ -68,13 +69,33 @@ def sample_session_cn(manager):
     return session
 
 
+@pytest.fixture
+def sample_project_and_basin(sample_session):
+    """Proyecto y cuenca de ejemplo."""
+    basin = Basin.from_session(sample_session)
+    project = Project(name="Test Project")
+    project.add_basin(basin)
+    return project, basin
+
+
+@pytest.fixture
+def sample_project_and_basin_cn(sample_session_cn):
+    """Proyecto y cuenca de ejemplo con CN."""
+    basin = Basin.from_session(sample_session_cn)
+    project = Project(name="Test Project CN")
+    project.add_basin(basin)
+    return project, basin
+
+
 class TestPostExecutionMenu:
     """Tests para PostExecutionMenu."""
 
-    def test_init_with_explicit_values(self, sample_session):
+    def test_init_with_explicit_values(self, sample_project_and_basin):
         """Test inicialización con valores explícitos."""
+        project, basin = sample_project_and_basin
         menu = PostExecutionMenu(
-            session=sample_session,
+            project=project,
+            basin=basin,
             c=0.6,
             cn=80,
             length=1500.0,
@@ -84,45 +105,51 @@ class TestPostExecutionMenu:
         assert menu.cn == 80
         assert menu.length == 1500.0
 
-    def test_init_fallback_to_session_values(self, sample_session):
-        """Test que usa valores de sesión cuando no se pasan."""
-        menu = PostExecutionMenu(session=sample_session)
+    def test_init_fallback_to_basin_values(self, sample_project_and_basin):
+        """Test que usa valores de cuenca cuando no se pasan."""
+        project, basin = sample_project_and_basin
+        menu = PostExecutionMenu(project=project, basin=basin)
 
-        assert menu.c == sample_session.cuenca.c
-        assert menu.cn == sample_session.cuenca.cn
-        assert menu.length == sample_session.cuenca.length_m
+        assert menu.c == basin.c
+        assert menu.cn == basin.cn
+        assert menu.length == basin.length_m
 
-    def test_init_with_c_session(self, sample_session):
-        """Test con sesión que tiene coeficiente C."""
-        menu = PostExecutionMenu(session=sample_session)
+    def test_init_with_c_basin(self, sample_project_and_basin):
+        """Test con cuenca que tiene coeficiente C."""
+        project, basin = sample_project_and_basin
+        menu = PostExecutionMenu(project=project, basin=basin)
 
         assert menu.c == 0.5
         assert menu.cn is None
         assert menu.length == 1000.0
 
-    def test_init_with_cn_session(self, sample_session_cn):
-        """Test con sesión que tiene Curve Number."""
-        menu = PostExecutionMenu(session=sample_session_cn)
+    def test_init_with_cn_basin(self, sample_project_and_basin_cn):
+        """Test con cuenca que tiene Curve Number."""
+        project, basin = sample_project_and_basin_cn
+        menu = PostExecutionMenu(project=project, basin=basin)
 
         assert menu.c is None
         assert menu.cn == 75
         assert menu.length == 800.0
 
-    def test_init_partial_override(self, sample_session):
+    def test_init_partial_override(self, sample_project_and_basin):
         """Test override parcial de valores."""
+        project, basin = sample_project_and_basin
         menu = PostExecutionMenu(
-            session=sample_session,
+            project=project,
+            basin=basin,
             c=0.7,  # Override
-            # cn y length no se pasan, deben venir de la sesión
+            # cn y length no se pasan, deben venir de la cuenca
         )
 
         assert menu.c == 0.7  # Override
-        assert menu.cn is None  # De sesión
-        assert menu.length == 1000.0  # De sesión
+        assert menu.cn is None  # De cuenca
+        assert menu.length == 1000.0  # De cuenca
 
-    def test_manager_initialized(self, sample_session):
+    def test_manager_initialized(self, sample_project_and_basin):
         """Test que el manager se inicializa."""
-        menu = PostExecutionMenu(session=sample_session)
+        project, basin = sample_project_and_basin
+        menu = PostExecutionMenu(project=project, basin=basin)
 
         assert menu.manager is not None
         assert isinstance(menu.manager, SessionManager)
@@ -308,10 +335,10 @@ class TestAdditionalAnalysisRunner:
 
 
 class TestContinueSessionMenu:
-    """Tests para continue_session_menu."""
+    """Tests para continue_session_menu (ahora continue_project_menu)."""
 
     def test_no_sessions_shows_message(self, manager, capsys):
-        """Test mensaje cuando no hay sesiones."""
+        """Test mensaje cuando no hay sesiones ni proyectos."""
         with patch(
             "hidropluvial.cli.wizard.menus.base.get_session_manager",
             return_value=manager,
@@ -319,7 +346,8 @@ class TestContinueSessionMenu:
             continue_session_menu()
 
         captured = capsys.readouterr()
-        assert "No hay sesiones guardadas" in captured.out
+        # El mensaje cambió a "No hay proyectos ni cuencas guardadas"
+        assert "No hay proyectos ni cuencas guardadas" in captured.out
 
     def test_sessions_listed_correctly(self, manager, sample_session):
         """Test que las sesiones se listan como diccionarios."""
@@ -381,10 +409,15 @@ class TestIntegrationFlow:
             length_m=1200.0,
         )
 
-        # Simular "continuar sesión" - crear PostExecutionMenu sin pasar valores
-        menu = PostExecutionMenu(session=session)
+        # Convertir a project/basin para el nuevo API
+        basin = Basin.from_session(session)
+        project = Project(name="Test Project")
+        project.add_basin(basin)
 
-        # Verificar que los valores vienen de la sesión
+        # Simular "continuar sesión" - crear PostExecutionMenu sin pasar valores
+        menu = PostExecutionMenu(project=project, basin=basin)
+
+        # Verificar que los valores vienen de la cuenca
         assert menu.c == 0.62
         assert menu.cn is None
         assert menu.length == 1200.0

@@ -81,8 +81,12 @@ class HydrographResult(BaseModel):
     return_period: int
     x_factor: Optional[float] = None
     peak_flow_m3s: float
-    time_to_peak_hr: float
+    time_to_peak_hr: float  # Tp - tiempo pico del hidrograma resultante
     time_to_peak_min: float
+    tp_unit_hr: Optional[float] = None  # tp - tiempo pico del hidrograma unitario (ΔD/2 + 0.6×Tc)
+    tp_unit_min: Optional[float] = None
+    tb_hr: Optional[float] = None  # tb - tiempo base del hidrograma unitario (2.67×tp)
+    tb_min: Optional[float] = None
     volume_m3: float
     total_depth_mm: float
     runoff_mm: float
@@ -454,6 +458,7 @@ class SessionManager:
         volume_m3: float,
         runoff_mm: float,
         x_factor: Optional[float] = None,
+        tp_unit_hr: Optional[float] = None,
         storm_time_min: Optional[list[float]] = None,
         storm_intensity_mmhr: Optional[list[float]] = None,
         hydrograph_time_hr: Optional[list[float]] = None,
@@ -479,6 +484,9 @@ class SessionManager:
             intensity_mmhr=storm_intensity_mmhr or [],
         )
 
+        # Calcular tb (tiempo base) = 2.67 × tp
+        tb_hr = 2.67 * tp_unit_hr if tp_unit_hr else None
+
         hydrograph = HydrographResult(
             tc_method=tc_method,
             tc_min=tc_hr * 60,
@@ -488,6 +496,10 @@ class SessionManager:
             peak_flow_m3s=peak_flow_m3s,
             time_to_peak_hr=time_to_peak_hr,
             time_to_peak_min=time_to_peak_hr * 60,
+            tp_unit_hr=tp_unit_hr,
+            tp_unit_min=tp_unit_hr * 60 if tp_unit_hr else None,
+            tb_hr=tb_hr,
+            tb_min=tb_hr * 60 if tb_hr else None,
             volume_m3=volume_m3,
             total_depth_mm=total_depth_mm,
             runoff_mm=runoff_mm,
@@ -509,14 +521,17 @@ class SessionManager:
                 "id": a.id,
                 "tc_method": a.tc.method,
                 "tc_min": a.tc.tc_min,
+                "tp_min": a.hydrograph.tp_unit_min,  # tp del hidrograma unitario
+                "tb_min": a.hydrograph.tb_min,  # tb del hidrograma unitario
                 "storm": a.storm.type,
                 "tr": a.storm.return_period,
                 "x": a.hydrograph.x_factor,
                 "depth_mm": a.storm.total_depth_mm,
                 "runoff_mm": a.hydrograph.runoff_mm,
                 "qpeak_m3s": a.hydrograph.peak_flow_m3s,
-                "tp_min": a.hydrograph.time_to_peak_min,
+                "Tp_min": a.hydrograph.time_to_peak_min,  # Tp del hidrograma resultante
                 "vol_m3": a.hydrograph.volume_m3,
+                "vol_hm3": a.hydrograph.volume_m3 / 1_000_000,  # Volumen en hm³
             })
         return rows
 

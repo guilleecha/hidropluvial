@@ -67,7 +67,16 @@ def wizard_main() -> None:
 
 def _new_basin() -> None:
     """Ejecuta el flujo de nueva cuenca."""
-    # Recolectar configuracion
+    project_manager = get_project_manager()
+
+    # Primero preguntar sobre el proyecto
+    project = _select_or_create_project_for_basin()
+    if project is None:
+        raise typer.Exit()
+
+    typer.echo(f"\n  Proyecto seleccionado: {project.name} [{project.id}]\n")
+
+    # Recolectar configuracion de la cuenca
     config = WizardConfig.from_wizard()
     if config is None:
         raise typer.Exit()
@@ -85,17 +94,107 @@ def _new_basin() -> None:
         typer.echo("\nOperacion cancelada.\n")
         raise typer.Exit()
 
-    # Ejecutar
+    # Ejecutar con el proyecto seleccionado
     typer.echo("\n" + "=" * 60)
     typer.echo("  EJECUTANDO ANALISIS")
     typer.echo("=" * 60 + "\n")
 
-    runner = AnalysisRunner(config)
+    runner = AnalysisRunner(config, project_id=project.id)
     project, basin = runner.run()
 
     # Menu post-ejecucion
     menu = PostExecutionMenu(project, basin, config.c, config.cn, config.length_m)
     menu.show()
+
+
+def _select_or_create_project_for_basin() -> Optional[Project]:
+    """Permite seleccionar un proyecto existente o crear uno nuevo para la cuenca."""
+    project_manager = get_project_manager()
+    projects = project_manager.list_projects()
+
+    # Construir opciones
+    choices = ["Crear nuevo proyecto"]
+
+    if projects:
+        choices.append("--- Proyectos existentes ---")
+        for p in projects:
+            choices.append(f"{p['id']} - {p['name']} ({p['n_basins']} cuencas)")
+
+    choices.append("Cancelar")
+
+    choice = questionary.select(
+        "Donde deseas crear la cuenca?",
+        choices=choices,
+        style=WIZARD_STYLE,
+    ).ask()
+
+    if choice is None or "Cancelar" in choice:
+        return None
+
+    if "Crear nuevo proyecto" in choice:
+        return _create_project_quick()
+    elif choice.startswith("---"):
+        # Separador, volver a preguntar
+        return _select_or_create_project_for_basin()
+    else:
+        # Proyecto existente seleccionado
+        project_id = choice.split(" - ")[0]
+        return project_manager.get_project(project_id)
+
+
+def _create_project_quick() -> Optional[Project]:
+    """Crea un proyecto de forma rápida (solo nombre obligatorio)."""
+    typer.echo("\n  -- Nuevo Proyecto --\n")
+
+    name = questionary.text(
+        "Nombre del proyecto:",
+        validate=lambda x: len(x.strip()) > 0 or "El nombre no puede estar vacio",
+        style=WIZARD_STYLE,
+    ).ask()
+
+    if name is None:
+        return None
+
+    # Preguntar si quiere agregar más detalles
+    add_details = questionary.confirm(
+        "Agregar descripcion, autor y ubicacion?",
+        default=False,
+        style=WIZARD_STYLE,
+    ).ask()
+
+    description = ""
+    author = ""
+    location = ""
+
+    if add_details:
+        description = questionary.text(
+            "Descripcion (opcional):",
+            default="",
+            style=WIZARD_STYLE,
+        ).ask() or ""
+
+        author = questionary.text(
+            "Autor (opcional):",
+            default="",
+            style=WIZARD_STYLE,
+        ).ask() or ""
+
+        location = questionary.text(
+            "Ubicacion (opcional):",
+            default="",
+            style=WIZARD_STYLE,
+        ).ask() or ""
+
+    project_manager = get_project_manager()
+    project = project_manager.create_project(
+        name=name,
+        description=description,
+        author=author,
+        location=location,
+    )
+
+    typer.echo(f"\n  Proyecto creado: {project.name} [{project.id}]")
+    return project
 
 
 def _create_project() -> None:

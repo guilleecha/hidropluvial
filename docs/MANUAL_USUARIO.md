@@ -78,17 +78,19 @@ Una **Cuenca** es el área de análisis con sus propiedades físicas:
 ### Flujo de Trabajo
 
 ```
-Opción 1: Crear cuenca directamente
-  1. Nueva cuenca (analisis guiado) → Se crea proyecto automáticamente
+Opción 1: Nueva cuenca (analisis guiado)
+  → Donde deseas crear la cuenca?
+    > Crear nuevo proyecto
+    > [Proyectos existentes...]
+    > Cancelar
+  → Configurar cuenca y ejecutar análisis
 
-Opción 2: Crear proyecto primero
-  2. Crear nuevo proyecto → Ingresar datos del proyecto
-     → Agregar nueva cuenca al proyecto
-     → Importar cuenca desde otro proyecto
-     → Volver (proyecto guardado sin cuencas)
+Opción 2: Crear nuevo proyecto (vacío)
+  → Ingresar datos del proyecto
+  → Agregar nueva cuenca / Importar cuenca / Volver
 
-Opción 3: Continuar trabajo existente
-  3. Continuar proyecto/cuenca existente → Seleccionar y trabajar
+Opción 3: Continuar proyecto/cuenca existente
+  → Seleccionar proyecto o cuenca y trabajar
 ```
 
 ### Parámetros de Resultados

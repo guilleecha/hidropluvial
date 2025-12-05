@@ -111,7 +111,7 @@ def hydrograph_scs(
     peak_idx = np.argmax(hydrograph_flow)
     peak_flow = float(hydrograph_flow[peak_idx])
     time_to_peak = float(hydrograph_time[peak_idx])
-    volume_m3 = float(np.trapz(hydrograph_flow, hydrograph_time * 3600))
+    volume_m3 = float(np.trapezoid(hydrograph_flow, hydrograph_time * 3600))
 
     # Mostrar resultados
     typer.echo(f"\n{'='*60}")
@@ -221,7 +221,7 @@ def hydrograph_gz(
     peak_idx = np.argmax(hydrograph_flow)
     peak_flow = float(hydrograph_flow[peak_idx])
     time_to_peak = float(hydrograph_time[peak_idx])
-    volume_m3 = float(np.trapz(hydrograph_flow, hydrograph_time * 3600))
+    volume_m3 = float(np.trapezoid(hydrograph_flow, hydrograph_time * 3600))
 
     # Calcular Tp y Tb teóricos
     tp_teorico = 0.5 * dt_hr + 0.6 * tc_hr

@@ -183,7 +183,7 @@ def session_batch(
                     peak_idx = np.argmax(hydrograph_flow)
                     peak_flow = float(hydrograph_flow[peak_idx])
                     time_to_peak = float(hydrograph_time[peak_idx])
-                    volume_m3 = float(np.trapz(hydrograph_flow, hydrograph_time * 3600))
+                    volume_m3 = float(np.trapezoid(hydrograph_flow, hydrograph_time * 3600))
 
                     manager.add_analysis(
                         session=session,

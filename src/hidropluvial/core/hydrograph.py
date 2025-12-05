@@ -670,7 +670,7 @@ def generate_hydrograph(
     time_to_peak = float(time[peak_idx])
 
     # Calcular volumen (integral trapezoidal)
-    volume_m3 = float(np.trapz(hydrograph, time * 3600))  # m³
+    volume_m3 = float(np.trapezoid(hydrograph, time * 3600))  # m³
 
     return HydrographResult(
         time_hr=time.tolist(),

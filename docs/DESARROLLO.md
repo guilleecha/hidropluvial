@@ -8,17 +8,11 @@ HidroPluvial es una herramienta Python para cálculos hidrológicos orientada a 
 
 ## Estado Actual (Diciembre 2024)
 
-### Tests: 142 pasando
+### Tests: 709 pasando
 
-| Archivo | Tests | Cobertura |
-|---------|-------|-----------|
-| test_idf.py | 11 | IDF Sherman, conversiones |
-| test_idf_uruguay.py | 20 | DINAGUA CT, CA, intensidad, tabla |
-| test_runoff.py | 20 | SCS-CN, AMC, Racional |
-| test_temporal_dinagua.py | 23 | Bloques alternantes, bimodal |
-| test_charts.py | 24 | Gráficos TikZ hidrogramas/hietogramas |
-| test_session.py | 24 | SessionManager CRUD, modelos |
-| test_wizard.py | 20 | Wizard menus, runner, integración |
+```bash
+pytest tests/ -v
+```
 
 ---
 
@@ -47,7 +41,6 @@ hidropluvial/
 │   │   ├── tc.py               # Comandos Tc
 │   │   ├── runoff.py           # Comandos escorrentía
 │   │   ├── hydrograph.py       # Comandos hidrograma
-│   │   ├── report.py           # Comandos reporte
 │   │   ├── export.py           # Comandos exportación
 │   │   ├── session/            # Subpaquete sesiones
 │   │   │   ├── __init__.py
@@ -55,114 +48,31 @@ hidropluvial/
 │   │   │   ├── analyze.py      # analyze
 │   │   │   ├── batch.py        # batch
 │   │   │   ├── report.py       # report
+│   │   │   ├── export.py       # export Excel
 │   │   │   └── preview.py      # preview con sparklines
 │   │   └── wizard/             # Subpaquete wizard interactivo
 │   │       ├── __init__.py
 │   │       ├── main.py         # Menú principal
-│   │       ├── menus.py        # PostExecutionMenu, continue_session
-│   │       └── runner.py       # AnalysisRunner, AdditionalAnalysisRunner
+│   │       ├── config.py       # WizardConfig
+│   │       ├── runner.py       # AnalysisRunner
+│   │       └── menus/          # Submenús modulares
 │   └── reports/
 │       ├── __init__.py
 │       ├── charts.py           # Gráficos TikZ/PGFPlots
 │       ├── generator.py        # Generador de reportes
 │       └── templates/          # Templates Jinja2
 ├── tests/
-│   ├── conftest.py
-│   ├── test_idf.py
-│   ├── test_idf_uruguay.py
-│   ├── test_runoff.py
-│   ├── test_temporal_dinagua.py
-│   ├── test_charts.py
-│   ├── test_session.py
-│   └── test_wizard.py
 ├── docs/
 │   ├── SPEC.md                 # Especificación técnica
-│   ├── CLI.md                  # Referencia CLI
-│   ├── WIZARD.md               # Guía wizard interactivo
-│   ├── SESIONES.md             # Sistema de sesiones
 │   ├── COEFICIENTES.md         # Tablas C y CN
-│   └── guia_graficos.md        # Gráficos TikZ
-├── examples/
-│   ├── cuenca_ejemplo.yaml     # Ejemplo batch
-│   ├── template.tex            # Template LaTeX
-│   └── reporte_fichas/         # Ejemplo reporte
+│   ├── guia_graficos.md        # Gráficos TikZ
+│   ├── MANUAL_USUARIO.md       # Manual práctico
+│   ├── METODOLOGIAS.md         # Fundamentos teóricos
+│   └── INSTALACION.md          # Guía de instalación
 ├── pyproject.toml
 ├── README.md
 └── CLAUDE.md
 ```
-
----
-
-## CLI Implementado
-
-### Comandos principales
-
-```bash
-# Wizard interactivo
-hp wizard
-
-# Sesiones
-hp session create <nombre> --area <ha> --slope <pct> --p3_10 <mm> --c <val>
-hp session list
-hp session show <id>
-hp session tc <id> --methods "kirpich,desbordes"
-hp session analyze <id> --tc <metodo> --storm <tipo> --tr <periodo>
-hp session preview <id>
-hp session summary <id>
-hp session edit <id> --area <nuevo_valor>
-hp session batch <archivo.yaml>
-hp session report <id> -o <archivo.tex>
-hp session delete <id>
-
-# IDF
-hp idf uruguay <P3_10> <duracion> --tr <periodo>
-hp idf tabla-uy <P3_10>
-hp idf departamentos
-
-# Tormentas
-hp storm uruguay <P3_10> <duracion> --tr <periodo>
-hp storm bimodal-uy <P3_10> --tr <periodo>
-hp storm gz <P3_10> --tr <periodo>
-
-# Tiempo de concentración
-hp tc kirpich <longitud> <pendiente>
-hp tc desbordes <area> <pendiente> <c>
-
-# Escorrentía
-hp runoff cn <precipitacion> <cn>
-hp runoff rational <c> <i> <area>
-hp runoff weighted-c --area <ha>
-hp runoff weighted-cn --area <ha> --soil <grupo>
-
-# Hidrogramas
-hp hydrograph scs --area <km2> --cn <val> --tr <periodo>
-hp hydrograph gz --area <ha> --c <val> --tr <periodo>
-
-# Reportes y exportación
-hp report idf <P3_10> -o <archivo.tex>
-hp export idf-csv <P3_10> -o <archivo.csv>
-```
-
----
-
-## Funcionalidades Recientes
-
-### Wizard Interactivo
-- Menú principal con opciones: nuevo análisis, continuar sesión, consultar IDF, ponderadores
-- PostExecutionMenu con preview sparklines, filtros, edición de cuenca
-- Ponderadores C y CN con selección interactiva de coberturas
-
-### Sistema de Sesiones
-- Persistencia JSON en `~/.hidropluvial/sessions/`
-- Edición de parámetros de cuenca con advertencia de invalidación
-- Clonación de sesiones para análisis de sensibilidad
-- Preview con sparklines en terminal (plotext)
-- Filtrado por Tr, X, método Tc, tipo de tormenta
-
-### Reportes LaTeX
-- Fichas técnicas por análisis (tabla + hietograma + hidrograma)
-- Templates Jinja2 personalizables
-- Gráficos TikZ/PGFPlots integrados
 
 ---
 
@@ -180,9 +90,16 @@ pip install -e .
 pytest tests/ -v
 
 # CLI
-python -m hidropluvial --help
 hp --help
+hp wizard
 ```
+
+---
+
+## Branches de GitHub
+
+- **`master`**: Versión estable, solo para releases
+- **`develop`**: Desarrollo activo, nuevas funcionalidades
 
 ---
 
@@ -198,6 +115,8 @@ pyyaml>=6.0
 questionary>=2.0.0
 plotext>=5.2.0
 rich>=13.0.0
+pandas>=2.0.0
+openpyxl>=3.1.0
 ```
 
 ---

@@ -801,26 +801,52 @@ class StepLongitud(WizardStep):
         return StepResult.NEXT
 
 
-class StepParametrosAvanzados(WizardStep):
-    """Paso: Parámetro t0 para método Desbordes.
-
-    Nota: AMC y Lambda ahora se configuran en el paso de CN (StepCoeficientes).
-    Este paso solo pregunta por t0 si se usa el coeficiente C (método Desbordes).
-    """
+class StepMetodosTc(WizardStep):
+    """Paso: Métodos de tiempo de concentración."""
 
     @property
     def title(self) -> str:
-        return "Parámetro t0 (Desbordes)"
+        return "Tiempo de Concentración"
 
     def execute(self) -> StepResult:
-        # Solo preguntar por t0 si se usa C (para método Desbordes)
-        if not self.state.c:
-            # Sin C no se usa Desbordes, t0 no aplica
-            self.state.t0_min = 5.0  # Valor por defecto por si acaso
-            return StepResult.NEXT
-
         self.echo(f"\n-- {self.title} --\n")
-        self.echo("  El método Desbordes usa un tiempo de entrada inicial (t0).")
+
+        tc_choices = []
+        if self.state.c:
+            tc_choices.append(questionary.Choice("Desbordes (recomendado cuencas urbanas)", checked=True))
+        if self.state.length_m:
+            tc_choices.append(questionary.Choice("Kirpich (cuencas rurales)", checked=self.state.c is None))
+            tc_choices.append(questionary.Choice("Temez", checked=False))
+
+        if not tc_choices:
+            self.echo("  Se necesita longitud de cauce o coeficiente C para calcular Tc")
+            return StepResult.BACK
+
+        res, tc_methods = self.checkbox("Métodos de Tc a calcular:", tc_choices)
+
+        if res != StepResult.NEXT:
+            return res
+
+        if not tc_methods:
+            self.echo("  Debes seleccionar al menos un método de Tc")
+            return self.execute()
+
+        self.state.tc_methods = tc_methods
+
+        # Si se seleccionó Desbordes, preguntar por t0
+        uses_desbordes = any("Desbordes" in m for m in tc_methods)
+        if uses_desbordes:
+            res = self._configure_t0()
+            if res != StepResult.NEXT:
+                return res
+        else:
+            self.state.t0_min = 5.0  # Valor por defecto (no se usará)
+
+        return StepResult.NEXT
+
+    def _configure_t0(self) -> StepResult:
+        """Configura el tiempo de entrada inicial t0 para método Desbordes."""
+        self.echo("\n  El método Desbordes usa un tiempo de entrada inicial (t0).")
 
         res, configurar = self.confirm(
             "¿Configurar t0? (default: 5 min)",
@@ -835,11 +861,7 @@ class StepParametrosAvanzados(WizardStep):
             self.echo("  Usando t0 = 5 min (valor por defecto)")
             return StepResult.NEXT
 
-        return self._configure_t0()
-
-    def _configure_t0(self) -> StepResult:
-        """Configura el tiempo de entrada inicial t0."""
-        self.echo("\n  Tiempo de entrada inicial (t0) para método Desbordes:")
+        self.echo("\n  Tiempo de entrada inicial (t0):")
         self.echo("    t0 = 5 min - Valor típico (default)")
         self.echo("    t0 < 5 min - Cuencas muy urbanizadas")
         self.echo("    t0 > 5 min - Cuencas rurales")
@@ -875,40 +897,6 @@ class StepParametrosAvanzados(WizardStep):
                     self.state.t0_min = float(val)
 
         self.echo(f"\n  Configurado: t0 = {self.state.t0_min} min")
-        return StepResult.NEXT
-
-
-class StepMetodosTc(WizardStep):
-    """Paso: Métodos de tiempo de concentración."""
-
-    @property
-    def title(self) -> str:
-        return "Tiempo de Concentración"
-
-    def execute(self) -> StepResult:
-        self.echo(f"\n-- {self.title} --\n")
-
-        tc_choices = []
-        if self.state.c:
-            tc_choices.append(questionary.Choice("Desbordes (recomendado cuencas urbanas)", checked=True))
-        if self.state.length_m:
-            tc_choices.append(questionary.Choice("Kirpich (cuencas rurales)", checked=self.state.c is None))
-            tc_choices.append(questionary.Choice("Temez", checked=False))
-
-        if not tc_choices:
-            self.echo("  Se necesita longitud de cauce o coeficiente C para calcular Tc")
-            return StepResult.BACK
-
-        res, tc_methods = self.checkbox("Métodos de Tc a calcular:", tc_choices)
-
-        if res != StepResult.NEXT:
-            return res
-
-        if not tc_methods:
-            self.echo("  Debes seleccionar al menos un método de Tc")
-            return self.execute()
-
-        self.state.tc_methods = tc_methods
         return StepResult.NEXT
 
 
@@ -1057,7 +1045,6 @@ class WizardNavigator:
             StepDatosCuenca(self.state),
             StepMetodoEscorrentia(self.state),
             StepLongitud(self.state),
-            StepParametrosAvanzados(self.state),
             StepMetodosTc(self.state),
             StepTormenta(self.state),
             StepSalida(self.state),

@@ -58,6 +58,11 @@ from hidropluvial.core.runoff import (
     composite_c,
 )
 
+from hidropluvial.core.coefficients import (
+    adjust_c_for_tr,
+    recalculate_weighted_c_for_tr,
+)
+
 from hidropluvial.core.hydrograph import (
     scs_lag_time,
     scs_time_to_peak,
@@ -121,6 +126,9 @@ __all__ = [
     "rainfall_excess_series",
     "rational_peak_flow",
     "composite_c",
+    # Coefficients
+    "adjust_c_for_tr",
+    "recalculate_weighted_c_for_tr",
     # Hydrograph
     "scs_lag_time",
     "scs_time_to_peak",

@@ -14,7 +14,11 @@ from hidropluvial.cli.preview import (
     plot_hydrograph_comparison_terminal,
     print_hyetograph_bars,
 )
-from hidropluvial.cli.theme import print_analyses_summary_table, get_console
+from hidropluvial.cli.theme import (
+    print_analyses_summary_table,
+    print_comparison_table,
+    get_console,
+)
 
 
 def session_preview(
@@ -123,7 +127,7 @@ def session_preview(
             typer.echo(f"  Comparando {len(analyses_data)} hidrogramas{select_msg}\n")
 
             # Tabla de parametros caracteristicos
-            _print_comparison_table(analyses_to_compare, analyses)
+            print_comparison_table(analyses_to_compare, analyses)
 
             # Grafico de comparacion
             plot_hydrograph_comparison_terminal(analyses_data, width=width, height=height)
@@ -287,58 +291,6 @@ def _filter_analyses(
         result = filtered
 
     return result
-
-
-def _print_comparison_table(analyses_to_show: list, all_analyses: list) -> None:
-    """
-    Imprime tabla de parametros caracteristicos para comparacion.
-
-    Notacion:
-        - tp: tiempo pico del hidrograma unitario (minusculas)
-        - Tp: tiempo pico del hidrograma resultante (mayusculas)
-        - tb: tiempo base del hidrograma unitario
-
-    Args:
-        analyses_to_show: Lista de analisis a mostrar en la tabla
-        all_analyses: Lista completa de analisis (para obtener indice original)
-    """
-    from hidropluvial.cli.formatters import format_flow, format_volume_hm3
-
-    # Encabezado - orden: Tc, tp, X, tb, P, Pe, Qp, Tp, Vol
-    typer.echo(f"  {'Idx':<4} {'Metodo Tc':<12} {'Tormenta':<8} {'Tr':>4} "
-               f"{'Tc(min)':>8} {'tp(min)':>8} {'X':>5} {'tb(min)':>8} "
-               f"{'P(mm)':>7} {'Pe(mm)':>7} {'Qp(m3/s)':>9} {'Tp(min)':>8} {'Vol(hm3)':>9}")
-    typer.echo(f"  {'-'*115}")
-
-    for analysis in analyses_to_show:
-        # Obtener indice original
-        try:
-            orig_idx = all_analyses.index(analysis)
-        except ValueError:
-            orig_idx = 0
-
-        hydro = analysis.hydrograph
-        storm = analysis.storm
-        tc = analysis.tc
-
-        # Formatear valores
-        tc_min = f"{tc.tc_min:.1f}" if tc.tc_min else "-"
-        tp_unit = f"{hydro.tp_unit_min:.1f}" if hydro.tp_unit_min else "-"
-        x_str = f"{hydro.x_factor:.2f}" if hydro.x_factor else "-"
-        tb = f"{hydro.tb_min:.1f}" if hydro.tb_min else "-"
-        p_total = f"{storm.total_depth_mm:.1f}" if storm.total_depth_mm else "-"
-        pe = f"{hydro.runoff_mm:.1f}" if hydro.runoff_mm else "-"
-        qp = format_flow(hydro.peak_flow_m3s)
-        tp_result = f"{hydro.time_to_peak_min:.1f}" if hydro.time_to_peak_min else "-"
-        vol = format_volume_hm3(hydro.volume_m3)
-
-        typer.echo(
-            f"  [{orig_idx:<2}] {tc.method:<12} {storm.type.upper():<8} {storm.return_period:>4} "
-            f"{tc_min:>8} {tp_unit:>8} {x_str:>5} {tb:>8} "
-            f"{p_total:>7} {pe:>7} {qp:>9} {tp_result:>8} {vol:>9}"
-        )
-
-    typer.echo("")
 
 
 def _parse_select_indices(select_str: str, max_count: int) -> list[int]:

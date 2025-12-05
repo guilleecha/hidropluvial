@@ -73,6 +73,7 @@ from hidropluvial.cli.theme.tables import (
     print_basins_detail_table,
     print_sessions_table,
     print_analyses_summary_table,
+    print_comparison_table,
 )
 
 __all__ = [
@@ -126,4 +127,5 @@ __all__ = [
     "print_basins_detail_table",
     "print_sessions_table",
     "print_analyses_summary_table",
+    "print_comparison_table",
 ]

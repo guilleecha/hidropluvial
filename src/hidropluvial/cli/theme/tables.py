@@ -384,3 +384,114 @@ def print_analyses_summary_table(
     console.print(
         f"  [dim]Tc: min | P: mm | Pe: mm | Qp: m³/s | Tp: min | Vol: hm³[/dim]"
     )
+
+
+def print_comparison_table(
+    analyses_to_show: list,
+    all_analyses: list = None,
+    title: str = "COMPARACION DE ANALISIS",
+) -> None:
+    """
+    Imprime tabla de parametros caracteristicos para comparacion de hidrogramas.
+
+    Muestra columnas adicionales para comparacion detallada:
+    - tp: tiempo pico del hidrograma unitario (minusculas)
+    - Tp: tiempo pico del hidrograma resultante (mayusculas)
+    - tb: tiempo base del hidrograma unitario
+
+    Args:
+        analyses_to_show: Lista de analisis a mostrar en la tabla
+        all_analyses: Lista completa de analisis (para obtener indice original)
+        title: Titulo de la tabla
+    """
+    from hidropluvial.cli.formatters import format_flow, format_volume_hm3
+
+    console = get_console()
+    p = get_palette()
+
+    if not analyses_to_show:
+        console.print("  No hay analisis para comparar.", style=p.muted)
+        return
+
+    if all_analyses is None:
+        all_analyses = analyses_to_show
+
+    table = Table(
+        title=title,
+        title_style=f"bold {p.primary}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    # Columnas - orden similar al original pero mejor organizado
+    table.add_column("#", justify="right", style=p.muted, width=3)
+    table.add_column("Metodo Tc", justify="left")
+    table.add_column("Tormenta", justify="left")
+    table.add_column("Tr", justify="right", style=p.number)
+    table.add_column("Tc", justify="right", style=p.number)
+    table.add_column("tp", justify="right", style=p.muted)  # tiempo pico unitario
+    table.add_column("X", justify="right", style=p.number)
+    table.add_column("tb", justify="right", style=p.muted)  # tiempo base
+    table.add_column("P", justify="right", style=p.number)
+    table.add_column("Pe", justify="right", style=p.number)
+    table.add_column("Qp", justify="right")  # Estilo especial para destacar max
+    table.add_column("Tp", justify="right", style=p.number)
+    table.add_column("Vol", justify="right", style=p.number)
+
+    # Encontrar Qp maximo para destacar
+    max_qp = max(a.hydrograph.peak_flow_m3s for a in analyses_to_show)
+
+    for analysis in analyses_to_show:
+        # Obtener indice original
+        try:
+            orig_idx = all_analyses.index(analysis)
+        except ValueError:
+            orig_idx = 0
+
+        hydro = analysis.hydrograph
+        storm = analysis.storm
+        tc = analysis.tc
+
+        # Formatear valores
+        tc_min = f"{tc.tc_min:.0f}" if tc.tc_min else "-"
+        tp_unit = f"{hydro.tp_unit_min:.0f}" if hydro.tp_unit_min else "-"
+        x_str = f"{hydro.x_factor:.2f}" if hydro.x_factor else "-"
+        tb = f"{hydro.tb_min:.0f}" if hydro.tb_min else "-"
+        p_total = f"{storm.total_depth_mm:.1f}" if storm.total_depth_mm else "-"
+        pe = f"{hydro.runoff_mm:.1f}" if hydro.runoff_mm else "-"
+        tp_result = f"{hydro.time_to_peak_min:.0f}" if hydro.time_to_peak_min else "-"
+        vol = format_volume_hm3(hydro.volume_m3)
+
+        # Qp con formato especial - destacar el maximo
+        qp_val = hydro.peak_flow_m3s
+        qp_str = format_flow(qp_val)
+        if qp_val == max_qp:
+            qp_text = Text(qp_str, style=f"bold {p.accent}")
+        else:
+            qp_text = Text(qp_str, style=p.number)
+
+        table.add_row(
+            str(orig_idx),
+            tc.method[:12],
+            storm.type.upper()[:6],
+            str(storm.return_period),
+            tc_min,
+            tp_unit,
+            x_str,
+            tb,
+            p_total,
+            pe,
+            qp_text,
+            tp_result,
+            vol,
+        )
+
+    console.print(table)
+
+    # Leyenda de notacion
+    console.print(
+        f"  [dim]tp: pico HU | tb: base HU | Tc, Tp: min | P, Pe: mm | Qp: m³/s | Vol: hm³[/dim]"
+    )

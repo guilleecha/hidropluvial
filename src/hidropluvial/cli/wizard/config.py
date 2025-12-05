@@ -25,12 +25,15 @@ class WizardConfig:
     slope_pct: float = 0.0
     p3_10: float = 0.0
     c: Optional[float] = None
-    cn: Optional[float] = None
+    cn: Optional[int] = None
     length_m: Optional[float] = None
+
+    # Datos de ponderación (para recálculo por Tr)
+    c_weighted_data: Optional[dict] = None  # {table_key, items con table_index}
 
     # Parametros de analisis
     tc_methods: list[str] = field(default_factory=list)
-    storm_code: str = "gz"
+    storm_codes: list[str] = field(default_factory=lambda: ["gz"])
     return_periods: list[int] = field(default_factory=list)
     x_factors: list[float] = field(default_factory=lambda: [1.0])
 
@@ -183,24 +186,31 @@ class WizardConfig:
         """Recolecta parametros de tormenta."""
         typer.echo("\n-- Tormenta de Diseno --\n")
 
-        storm_type = questionary.select(
-            "Tipo de tormenta:",
-            choices=[
-                "GZ (6 horas) - recomendado drenaje urbano",
-                "Bloques alternantes - duracion segun Tc",
-                "Bloques 24 horas - obras mayores",
-            ],
+        storm_choices = [
+            questionary.Choice("GZ (6 horas) - recomendado drenaje urbano", checked=True),
+            questionary.Choice("Bloques alternantes - duracion segun Tc", checked=False),
+            questionary.Choice("Bloques 24 horas - obras mayores", checked=False),
+        ]
+
+        storm_types = questionary.checkbox(
+            "Tipos de tormenta a analizar:",
+            choices=storm_choices,
             style=WIZARD_STYLE,
         ).ask()
 
-        if storm_type is None:
+        if not storm_types:
+            typer.echo("  Debes seleccionar al menos un tipo de tormenta")
             return False
 
-        self.storm_code = "gz"
-        if "Bloques alternantes" in storm_type:
-            self.storm_code = "blocks"
-        elif "24 horas" in storm_type:
-            self.storm_code = "blocks24"
+        # Convertir a codigos
+        self.storm_codes = []
+        for storm_type in storm_types:
+            if "GZ" in storm_type:
+                self.storm_codes.append("gz")
+            elif "Bloques alternantes" in storm_type:
+                self.storm_codes.append("blocks")
+            elif "24 horas" in storm_type:
+                self.storm_codes.append("blocks24")
 
         # Periodos de retorno
         tr_choices = [
@@ -226,7 +236,7 @@ class WizardConfig:
         self.return_periods = [int(tr.split()[0]) for tr in return_periods]
 
         # Factor X morfologico para GZ
-        if self.storm_code == "gz":
+        if "gz" in self.storm_codes:
             typer.echo("\n  Factor X morfologico (forma del hidrograma triangular):")
             typer.echo("    X=1.00  Metodo racional (respuesta rapida)")
             typer.echo("    X=1.25  Areas urbanas con pendiente")
@@ -278,15 +288,20 @@ class WizardConfig:
         """Calcula numero total de combinaciones."""
         n_tc = len(self.tc_methods)
         n_tr = len(self.return_periods)
-        n_x = len(self.x_factors) if self.storm_code == "gz" else 1
-        return n_tc * n_tr * n_x
+        n_storms = len(self.storm_codes)
+        # X solo aplica para tormentas GZ
+        n_x = len(self.x_factors) if "gz" in self.storm_codes else 1
+        n_non_gz = len([s for s in self.storm_codes if s != "gz"])
+        n_gz = 1 if "gz" in self.storm_codes else 0
+        return n_tc * n_tr * (n_gz * n_x + n_non_gz)
 
     def print_summary(self) -> None:
         """Imprime resumen de configuracion."""
         n_total = self.get_n_combinations()
         n_tc = len(self.tc_methods)
         n_tr = len(self.return_periods)
-        n_x = len(self.x_factors) if self.storm_code == "gz" else 1
+        n_storms = len(self.storm_codes)
+        n_x = len(self.x_factors) if "gz" in self.storm_codes else 1
 
         typer.echo("\n-- Resumen --\n")
         typer.echo(f"  Cuenca:      {self.nombre}")
@@ -300,12 +315,12 @@ class WizardConfig:
         if self.length_m:
             typer.echo(f"  Longitud:    {self.length_m} m")
         typer.echo(f"  Metodos Tc:  {', '.join(self.tc_methods)}")
-        typer.echo(f"  Tormenta:    {self.storm_code}")
+        typer.echo(f"  Tormentas:   {', '.join(self.storm_codes)}")
         typer.echo(f"  Tr:          {', '.join(str(tr) for tr in self.return_periods)} anos")
-        if self.storm_code == "gz":
+        if "gz" in self.storm_codes:
             typer.echo(f"  Factor X:    {', '.join(f'{x:.2f}' for x in self.x_factors)}")
 
-        typer.echo(f"\n  => Se generaran {n_total} analisis ({n_tc} Tc x {n_tr} Tr x {n_x} X)")
+        typer.echo(f"\n  => Se generaran {n_total} analisis ({n_tc} Tc x {n_tr} Tr x {n_storms} tormentas)")
 
     def _collect_c_value(self) -> Optional[float]:
         """Recolecta coeficiente C (manual o ponderado)."""
@@ -347,43 +362,44 @@ class WizardConfig:
             return self._calculate_weighted_c(table_key)
 
     def _calculate_weighted_c(self, table_key: str) -> Optional[float]:
-        """Calcula C ponderado interactivamente."""
+        """Calcula C ponderado interactivamente y guarda datos para recálculo."""
         from hidropluvial.core.coefficients import (
             C_TABLES, ChowCEntry, FHWACEntry, format_c_table, weighted_c
         )
 
         table_name, table_data = C_TABLES[table_key]
         first_entry = table_data[0]
-        needs_tr = isinstance(first_entry, (ChowCEntry, FHWACEntry))
+        is_chow = isinstance(first_entry, ChowCEntry)
+        is_fhwa = isinstance(first_entry, FHWACEntry)
 
-        # Solicitar Tr si es necesario
-        tr = 10
-        if needs_tr:
-            tr_str = questionary.text(
-                "Periodo de retorno para C (anos):",
-                default="10",
-                validate=lambda x: x.isdigit() and int(x) > 0 or "Debe ser un numero positivo",
-                style=WIZARD_STYLE,
-            ).ask()
-            if tr_str:
-                tr = int(tr_str)
+        # Para tabla Ven Te Chow: SIEMPRE usar Tr=2 como base
+        # Para FHWA: usar Tr base (<=10)
+        tr = 2 if is_chow else 10
 
-        typer.echo(format_c_table(table_data, table_name, tr))
+        if is_chow:
+            # Mostrar tabla en modo selección (Tr2 seleccionable, otros referencia)
+            typer.echo(format_c_table(table_data, table_name, tr, selection_mode=True))
+        else:
+            typer.echo(format_c_table(table_data, table_name, tr))
+
         typer.echo(f"\n  Area de la cuenca: {self.area_ha} ha")
         typer.echo("  Asigna coberturas. Presiona Enter sin valor para terminar.\n")
 
-        areas = []
-        coefficients = []
+        # Guardamos áreas, coeficientes e índices de tabla
+        coverage_data = []  # Lista de {area, c_val, table_index, description}
         area_remaining = self.area_ha
 
         while area_remaining > 0.001:
             typer.echo(f"  Area restante: {area_remaining:.3f} ha ({area_remaining/self.area_ha*100:.1f}%)")
 
-            # Construir choices
+            # Construir choices - para Chow siempre mostrar C(Tr2)
             choices = []
             for i, e in enumerate(table_data):
-                if isinstance(e, (ChowCEntry, FHWACEntry)):
-                    c_val = e.get_c(tr)
+                if is_chow:
+                    c_val = e.c_tr2  # Siempre Tr2
+                    choices.append(f"{i+1}. {e.category} - {e.description} (C={c_val:.2f} para Tr2)")
+                elif is_fhwa:
+                    c_val = e.c_base  # C base
                     choices.append(f"{i+1}. {e.category} - {e.description} (C={c_val:.2f})")
                 else:
                     choices.append(f"{i+1}. {e.category} - {e.description} (C={e.c_recommended:.2f})")
@@ -403,8 +419,10 @@ class WizardConfig:
             if "Asignar area" in selection:
                 cov_choices = []
                 for i, e in enumerate(table_data):
-                    if isinstance(e, (ChowCEntry, FHWACEntry)):
-                        c_val = e.get_c(tr)
+                    if is_chow:
+                        c_val = e.c_tr2
+                    elif is_fhwa:
+                        c_val = e.c_base
                     else:
                         c_val = e.c_recommended
                     cov_choices.append(f"{i+1}. {e.category} - {e.description} (C={c_val:.2f})")
@@ -418,9 +436,18 @@ class WizardConfig:
                 if cov_selection:
                     idx = int(cov_selection.split(".")[0]) - 1
                     entry = table_data[idx]
-                    c_val = entry.get_c(tr) if isinstance(entry, (ChowCEntry, FHWACEntry)) else entry.c_recommended
-                    areas.append(area_remaining)
-                    coefficients.append(c_val)
+                    if is_chow:
+                        c_val = entry.c_tr2
+                    elif is_fhwa:
+                        c_val = entry.c_base
+                    else:
+                        c_val = entry.c_recommended
+                    coverage_data.append({
+                        "area": area_remaining,
+                        "c_val": c_val,
+                        "table_index": idx,
+                        "description": f"{entry.category}: {entry.description}",
+                    })
                     area_remaining = 0
                 break
 
@@ -439,21 +466,46 @@ class WizardConfig:
 
             area_val = float(area_str)
             if area_val > 0:
-                c_val = entry.get_c(tr) if isinstance(entry, (ChowCEntry, FHWACEntry)) else entry.c_recommended
-                areas.append(area_val)
-                coefficients.append(c_val)
+                if is_chow:
+                    c_val = entry.c_tr2
+                elif is_fhwa:
+                    c_val = entry.c_base
+                else:
+                    c_val = entry.c_recommended
+                coverage_data.append({
+                    "area": area_val,
+                    "c_val": c_val,
+                    "table_index": idx,
+                    "description": f"{entry.category}: {entry.description}",
+                })
                 area_remaining -= area_val
                 typer.echo(f"  + {area_val:.3f} ha con C={c_val:.2f}")
 
-        if not areas:
+        if not coverage_data:
             typer.echo("  No se asignaron coberturas.")
             return None
 
+        # Calcular C ponderado
+        areas = [d["area"] for d in coverage_data]
+        coefficients = [d["c_val"] for d in coverage_data]
         c_weighted = weighted_c(areas, coefficients)
-        typer.echo(f"\n  => C ponderado = {c_weighted:.3f}")
+
+        # Guardar datos de ponderación para recálculo por Tr
+        self.c_weighted_data = {
+            "table_key": table_key,
+            "base_tr": tr,
+            "items": coverage_data,
+        }
+
+        if is_chow:
+            typer.echo(f"\n  => C ponderado (Tr2) = {c_weighted:.3f}")
+            typer.echo("     Este valor se ajustara segun el Tr de cada analisis.")
+        else:
+            typer.echo(f"\n  => C ponderado = {c_weighted:.3f}")
+
         return c_weighted
 
-    def _collect_cn_value(self) -> Optional[float]:
+    def _collect_cn_value(self) -> Optional[int]:
         """Recolecta Curva Numero CN (manual o ponderada)."""
         typer.echo("\n-- Curva Numero CN --\n")
 
@@ -461,8 +513,7 @@ class WizardConfig:
             "Como deseas obtener CN?",
             choices=[
                 "Ingresar valor directamente",
-                "Calcular CN ponderado por coberturas (Urbano)",
-                "Calcular CN ponderado por coberturas (Agricola)",
+                "Calcular CN ponderado por coberturas (tablas NRCS)",
             ],
             style=WIZARD_STYLE,
         ).ask()
@@ -479,16 +530,13 @@ class WizardConfig:
             ).ask()
             if cn_value is None:
                 return None
-            return float(cn_value)
+            return int(round(float(cn_value)))
         else:
-            table_key = "urban" if "Urbano" in metodo else "agricultural"
-            return self._calculate_weighted_cn(table_key)
+            return self._calculate_weighted_cn()
 
-    def _calculate_weighted_cn(self, table_key: str) -> Optional[float]:
-        """Calcula CN ponderado interactivamente."""
+    def _calculate_weighted_cn(self) -> Optional[int]:
+        """Calcula CN ponderado interactivamente, permitiendo mezclar tablas."""
         from hidropluvial.core.coefficients import CN_TABLES, format_cn_table, weighted_cn
-
-        table_name, table_data = CN_TABLES[table_key]
 
         # Solicitar grupo de suelo
         soil = questionary.select(
@@ -507,37 +555,47 @@ class WizardConfig:
 
         soil_group = soil[0]  # Primera letra
 
-        typer.echo(format_cn_table(table_data, table_name))
         typer.echo(f"\n  Grupo de suelo: {soil_group}")
         typer.echo(f"  Area de la cuenca: {self.area_ha} ha")
-        typer.echo("  Asigna coberturas. Presiona Enter sin valor para terminar.\n")
+        typer.echo("  Puedes mezclar coberturas urbanas y agricolas.\n")
 
         areas = []
         cn_values = []
         area_remaining = self.area_ha
+        current_table = None
 
         while area_remaining > 0.001:
-            typer.echo(f"  Area restante: {area_remaining:.3f} ha ({area_remaining/self.area_ha*100:.1f}%)")
+            typer.echo(f"\n  Area restante: {area_remaining:.3f} ha ({area_remaining/self.area_ha*100:.1f}%)")
 
-            choices = []
-            for i, e in enumerate(table_data):
-                cn = e.get_cn(soil_group)
-                cond = f" ({e.condition})" if e.condition != "N/A" else ""
-                choices.append(f"{i+1}. {e.category} - {e.description}{cond} (CN={cn})")
-
-            choices.append("Asignar area restante a una cobertura")
-            choices.append("Terminar")
-
-            selection = questionary.select(
-                "Selecciona cobertura:",
-                choices=choices,
+            # Elegir tabla o accion
+            table_choice = questionary.select(
+                "Agregar cobertura de:",
+                choices=[
+                    "Tabla Urbana (residencial, comercial, industrial)",
+                    "Tabla Agricola (cultivos, pasturas, bosque)",
+                    "Asignar todo el area restante",
+                    "Terminar",
+                ],
                 style=WIZARD_STYLE,
             ).ask()
 
-            if selection is None or "Terminar" in selection:
+            if table_choice is None or "Terminar" in table_choice:
                 break
 
-            if "Asignar area" in selection:
+            if "Asignar todo" in table_choice:
+                # Elegir tabla para area restante
+                final_table = questionary.select(
+                    "De que tabla?",
+                    choices=["Urbana", "Agricola"],
+                    style=WIZARD_STYLE,
+                ).ask()
+
+                if final_table is None:
+                    break
+
+                table_key = "urban" if "Urbana" in final_table else "agricultural"
+                _, table_data = CN_TABLES[table_key]
+
                 cov_choices = []
                 for i, e in enumerate(table_data):
                     cn = e.get_cn(soil_group)
@@ -559,18 +617,49 @@ class WizardConfig:
                     area_remaining = 0
                 break
 
+            # Determinar tabla seleccionada
+            if "Urbana" in table_choice:
+                table_key = "urban"
+                table_name, table_data = CN_TABLES["urban"]
+            else:
+                table_key = "agricultural"
+                table_name, table_data = CN_TABLES["agricultural"]
+
+            # Mostrar tabla si cambio
+            if current_table != table_key:
+                typer.echo(format_cn_table(table_data, table_name))
+                current_table = table_key
+
+            # Seleccionar cobertura de la tabla elegida
+            choices = []
+            for i, e in enumerate(table_data):
+                cn = e.get_cn(soil_group)
+                cond = f" ({e.condition})" if e.condition != "N/A" else ""
+                choices.append(f"{i+1}. {e.category} - {e.description}{cond} (CN={cn})")
+
+            choices.append("Volver (elegir otra tabla)")
+
+            selection = questionary.select(
+                "Selecciona cobertura:",
+                choices=choices,
+                style=WIZARD_STYLE,
+            ).ask()
+
+            if selection is None or "Volver" in selection:
+                continue
+
             idx = int(selection.split(".")[0]) - 1
             entry = table_data[idx]
             cn = entry.get_cn(soil_group)
 
             area_str = questionary.text(
-                f"Area (ha, max {area_remaining:.3f}):",
+                f"Area para '{entry.description}' (ha, max {area_remaining:.3f}):",
                 validate=lambda x: self._validate_area_input(x, area_remaining),
                 style=WIZARD_STYLE,
             ).ask()
 
             if area_str is None or area_str.strip() == "":
-                break
+                continue
 
             area_val = float(area_str)
             if area_val > 0:
@@ -584,8 +673,9 @@ class WizardConfig:
             return None
 
         cn_weighted = weighted_cn(areas, cn_values)
-        typer.echo(f"\n  => CN ponderado = {cn_weighted:.1f}")
-        return cn_weighted
+        cn_rounded = int(round(cn_weighted))
+        typer.echo(f"\n  => CN ponderado = {cn_weighted:.1f} -> {cn_rounded}")
+        return cn_rounded
 
     def _validate_area_input(self, value: str, max_area: float) -> bool | str:
         """Valida entrada de area."""

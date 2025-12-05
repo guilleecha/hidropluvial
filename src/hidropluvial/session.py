@@ -18,6 +18,26 @@ from pydantic import BaseModel, Field
 # Modelos de Datos
 # ============================================================================
 
+class CoverageItem(BaseModel):
+    """Un ítem de cobertura para ponderación de C o CN."""
+    description: str           # Descripción de la cobertura
+    area_ha: float             # Área en hectáreas
+    value: float               # Valor de C o CN para esta cobertura (Tr base)
+    percentage: float = 0.0    # Porcentaje del área total
+    # Para recálculo por Tr (tabla Ven Te Chow)
+    table_index: Optional[int] = None  # Índice en la tabla original
+
+
+class WeightedCoefficient(BaseModel):
+    """Coeficiente ponderado (C o CN) con detalle de cálculo."""
+    type: str                  # "c" o "cn"
+    table_used: str = ""       # Tabla usada: "chow", "fhwa", "uruguay", "nrcs"
+    weighted_value: float      # Valor ponderado resultante (para Tr base)
+    items: list[CoverageItem] = Field(default_factory=list)
+    # Para tabla Ven Te Chow: permite recalcular C para cualquier Tr
+    base_tr: Optional[int] = None  # Tr base (2 para Ven Te Chow)
+
+
 class CuencaConfig(BaseModel):
     """Configuración de una cuenca hidrológica."""
     nombre: str = ""
@@ -27,6 +47,9 @@ class CuencaConfig(BaseModel):
     c: Optional[float] = None  # Coeficiente de escorrentía
     cn: Optional[int] = None   # Curve Number (SCS)
     p3_10: float               # Precipitación P3,10 en mm
+    # Detalle de ponderación (opcional)
+    c_weighted: Optional[WeightedCoefficient] = None
+    cn_weighted: Optional[WeightedCoefficient] = None
 
 
 class TcResult(BaseModel):
@@ -492,3 +515,24 @@ class SessionManager:
                 "vol_m3": a.hydrograph.volume_m3,
             })
         return rows
+
+    def set_weighted_coefficient(
+        self,
+        session: Session,
+        weighted_coef: "WeightedCoefficient",
+    ) -> None:
+        """
+        Actualiza el coeficiente ponderado (C o CN) de la cuenca.
+
+        Args:
+            session: Sesión a modificar
+            weighted_coef: Datos de ponderación
+        """
+        if weighted_coef.type == "cn":
+            session.cuenca.cn = int(round(weighted_coef.weighted_value))
+            session.cuenca.cn_weighted = weighted_coef
+        elif weighted_coef.type == "c":
+            session.cuenca.c = weighted_coef.weighted_value
+            session.cuenca.c_weighted = weighted_coef
+
+        self.save(session)

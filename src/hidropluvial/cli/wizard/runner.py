@@ -19,8 +19,62 @@ from hidropluvial.core import (
     scs_triangular_uh,
     triangular_uh_x,
     convolve_uh,
+    adjust_c_for_tr,
+    recalculate_weighted_c_for_tr,
 )
-from hidropluvial.session import Session
+from hidropluvial.core.coefficients import get_c_for_tr_from_table
+from hidropluvial.session import Session, CoverageItem
+
+
+def _get_c_for_tr(config: WizardConfig, tr: int) -> float:
+    """
+    Obtiene el coeficiente C ajustado para un período de retorno específico.
+
+    Si hay datos de ponderación (tabla Ven Te Chow), recalcula usando
+    los valores exactos de la tabla. Si no, usa el factor de ajuste promedio.
+    """
+    if config.c_weighted_data and config.c_weighted_data.get("table_key") == "chow":
+        # Recalcular usando los datos de la tabla original
+        table_key = config.c_weighted_data["table_key"]
+        items_data = config.c_weighted_data["items"]
+
+        # Convertir a objetos CoverageItem para la función
+        items = [
+            CoverageItem(
+                description=d["description"],
+                area_ha=d["area"],
+                value=d["c_val"],
+                table_index=d["table_index"],
+            )
+            for d in items_data
+        ]
+
+        return recalculate_weighted_c_for_tr(items, tr, table_key)
+    else:
+        # Sin datos de ponderación o tabla que no varía por Tr
+        # Usar factor de ajuste promedio (menos preciso)
+        return adjust_c_for_tr(config.c, tr, base_tr=2)
+
+
+def _get_c_for_tr_from_session(session: Session, c_base: float, tr: int) -> float:
+    """
+    Obtiene el coeficiente C ajustado para un Tr desde datos de sesión.
+
+    Si la sesión tiene datos de ponderación (c_weighted), recalcula exacto.
+    Si no, usa el factor de ajuste promedio.
+    """
+    c_weighted = session.cuenca.c_weighted
+
+    if c_weighted and c_weighted.table_used == "chow" and c_weighted.items:
+        # Verificar que los items tengan table_index
+        has_indices = all(item.table_index is not None for item in c_weighted.items)
+        if has_indices:
+            return recalculate_weighted_c_for_tr(
+                c_weighted.items, tr, c_weighted.table_used
+            )
+
+    # Sin datos de ponderación o sin índices - usar factor promedio
+    return adjust_c_for_tr(c_base, tr, base_tr=2)
 
 
 class AnalysisRunner:
@@ -45,6 +99,8 @@ class AnalysisRunner:
 
     def _create_session(self) -> None:
         """Crea la sesion."""
+        from hidropluvial.session import WeightedCoefficient
+
         self.session = self.manager.create(
             name=self.config.nombre,
             area_ha=self.config.area_ha,
@@ -55,6 +111,28 @@ class AnalysisRunner:
             length_m=self.config.length_m,
             cuenca_nombre=self.config.nombre,
         )
+
+        # Guardar datos de ponderación de C si existen
+        if self.config.c_weighted_data:
+            items = [
+                CoverageItem(
+                    description=d["description"],
+                    area_ha=d["area"],
+                    value=d["c_val"],
+                    table_index=d["table_index"],
+                    percentage=d["area"] / self.config.area_ha * 100,
+                )
+                for d in self.config.c_weighted_data["items"]
+            ]
+            weighted_coef = WeightedCoefficient(
+                type="c",
+                table_used=self.config.c_weighted_data["table_key"],
+                weighted_value=self.config.c,
+                items=items,
+                base_tr=self.config.c_weighted_data["base_tr"],
+            )
+            self.manager.set_weighted_coefficient(self.session, weighted_coef)
+
         typer.echo(f"  + Sesion creada: {self.session.id}")
 
     def _calculate_tc(self) -> None:
@@ -79,23 +157,35 @@ class AnalysisRunner:
         n_analyses = 0
 
         for tc_result in self.session.tc_results:
-            for tr in self.config.return_periods:
-                for x in self.config.x_factors:
-                    self._run_single_analysis(tc_result, tr, x)
-                    n_analyses += 1
-
-                    # Solo un X para tormentas no-GZ
-                    if self.config.storm_code != "gz":
-                        break
+            for storm_code in self.config.storm_codes:
+                for tr in self.config.return_periods:
+                    if storm_code == "gz":
+                        # Multiples valores de X para GZ
+                        for x in self.config.x_factors:
+                            self._run_single_analysis(tc_result, tr, x, storm_code)
+                            n_analyses += 1
+                    else:
+                        # Solo X=1.0 para tormentas no-GZ
+                        self._run_single_analysis(tc_result, tr, 1.0, storm_code)
+                        n_analyses += 1
 
         typer.echo(f"  + {n_analyses} analisis completados")
 
-    def _run_single_analysis(self, tc_result, tr: int, x: float) -> None:
+    def _run_single_analysis(self, tc_result, tr: int, x: float, storm_code: str) -> None:
         """Ejecuta un analisis individual."""
-        tc_hr = tc_result.tc_hr
-        storm_code = self.config.storm_code
         p3_10 = self.config.p3_10
         area = self.config.area_ha
+
+        # Obtener C ajustado para el Tr del análisis (si aplica)
+        c_adjusted = None
+        if self.config.c:
+            c_adjusted = _get_c_for_tr(self.config, tr)
+
+        # Recalcular Tc si es método Desbordes (depende de C)
+        if tc_result.method == "desbordes" and c_adjusted:
+            tc_hr = desbordes(area, self.config.slope_pct, c_adjusted)
+        else:
+            tc_hr = tc_result.tc_hr
 
         # Determinar duracion y dt
         if storm_code == "gz":
@@ -124,8 +214,8 @@ class AnalysisRunner:
         depths = np.array(hyetograph.depth_mm)
 
         # Escorrentia
-        if self.config.c:
-            excess_mm = self.config.c * depths
+        if c_adjusted:
+            excess_mm = c_adjusted * depths
             runoff_mm = float(np.sum(excess_mm))
         elif self.config.cn:
             cumulative = np.array(hyetograph.cumulative_mm)
@@ -225,7 +315,16 @@ class AdditionalAnalysisRunner:
 
             for tr in return_periods:
                 for x in x_factors:
-                    tc_hr = tc_result.tc_hr
+                    # Obtener C ajustado para el Tr del análisis (si aplica)
+                    c_adjusted = None
+                    if self.c:
+                        c_adjusted = _get_c_for_tr_from_session(self.session, self.c, tr)
+
+                    # Recalcular Tc si es método Desbordes (depende de C)
+                    if tc_result.method == "desbordes" and c_adjusted:
+                        tc_hr = desbordes(area, self.session.cuenca.slope_pct, c_adjusted)
+                    else:
+                        tc_hr = tc_result.tc_hr
 
                     # Determinar duracion
                     if storm_code == "gz":
@@ -254,8 +353,8 @@ class AdditionalAnalysisRunner:
                     depths = np.array(hyetograph.depth_mm)
 
                     # Escorrentia
-                    if self.c:
-                        excess_mm = self.c * depths
+                    if c_adjusted:
+                        excess_mm = c_adjusted * depths
                         runoff_mm = float(np.sum(excess_mm))
                     elif self.cn:
                         cumulative = np.array(hyetograph.cumulative_mm)

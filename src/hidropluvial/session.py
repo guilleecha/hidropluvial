@@ -98,6 +98,8 @@ class AnalysisRun(BaseModel):
     tc: TcResult
     storm: StormResult
     hydrograph: HydrographResult
+    # Comentario opcional para este análisis
+    note: Optional[str] = None
 
 
 class Session(BaseModel):
@@ -109,6 +111,8 @@ class Session(BaseModel):
     cuenca: CuencaConfig
     tc_results: list[TcResult] = Field(default_factory=list)
     analyses: list[AnalysisRun] = Field(default_factory=list)
+    # Notas generales de la sesión
+    notes: Optional[str] = None
 
 
 # ============================================================================
@@ -536,3 +540,50 @@ class SessionManager:
             session.cuenca.c_weighted = weighted_coef
 
         self.save(session)
+
+    def set_session_notes(self, session: Session, notes: Optional[str]) -> None:
+        """
+        Establece las notas generales de la sesión.
+
+        Args:
+            session: Sesión a modificar
+            notes: Notas (None o string vacío para eliminar)
+        """
+        session.notes = notes if notes and notes.strip() else None
+        self.save(session)
+
+    def set_analysis_note(
+        self,
+        session: Session,
+        analysis_id: str,
+        note: Optional[str],
+    ) -> bool:
+        """
+        Establece la nota de un análisis específico.
+
+        Args:
+            session: Sesión que contiene el análisis
+            analysis_id: ID del análisis
+            note: Nota (None o string vacío para eliminar)
+
+        Returns:
+            True si se encontró y actualizó el análisis
+        """
+        for analysis in session.analyses:
+            if analysis.id == analysis_id:
+                analysis.note = note if note and note.strip() else None
+                self.save(session)
+                return True
+        return False
+
+    def get_analyses_with_notes(self, session: Session) -> list[AnalysisRun]:
+        """
+        Retorna los análisis que tienen notas.
+
+        Args:
+            session: Sesión
+
+        Returns:
+            Lista de análisis con notas
+        """
+        return [a for a in session.analyses if a.note]

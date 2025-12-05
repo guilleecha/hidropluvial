@@ -41,6 +41,7 @@ class PostExecutionMenu(SessionMenu):
                     "Agregar mas analisis",
                     "Definir CN por ponderacion (tablas NRCS)",
                     "Editar datos de la cuenca",
+                    "Agregar/editar notas",
                     "Generar reporte LaTeX",
                     "Salir",
                 ],
@@ -74,6 +75,9 @@ class PostExecutionMenu(SessionMenu):
                 return  # Salir del menu
             elif result == "modified":
                 self.reload_session()
+        elif "notas" in action.lower():
+            self._manage_notes()
+            self.reload_session()
         elif "Agregar" in action:
             self._add_analysis()
             self.reload_session()
@@ -329,3 +333,123 @@ class PostExecutionMenu(SessionMenu):
         from hidropluvial.cli.wizard.menus.cuenca_editor import CuencaEditor
         editor = CuencaEditor(self.session, self.manager)
         return editor.edit()
+
+    def _manage_notes(self) -> None:
+        """Gestiona notas de la sesion y analisis."""
+        self.header("NOTAS Y COMENTARIOS")
+
+        # Mostrar notas actuales
+        if self.session.notes:
+            self.echo(f"\n  Notas de la sesion:")
+            self.echo(f"  {'-'*50}")
+            for line in self.session.notes.split('\n'):
+                self.echo(f"    {line}")
+            self.echo("")
+
+        # Contar analisis con notas
+        analyses_with_notes = [a for a in self.session.analyses if a.note]
+        if analyses_with_notes:
+            self.echo(f"  Analisis con notas: {len(analyses_with_notes)}")
+
+        # Menu de opciones
+        choices = [
+            "Editar notas de la sesion",
+            "Agregar nota a un analisis",
+        ]
+        if analyses_with_notes:
+            choices.append("Ver notas de analisis")
+        choices.append("Volver")
+
+        action = self.select("\nQue deseas hacer?", choices)
+
+        if action is None or "Volver" in action:
+            return
+
+        if "sesion" in action.lower():
+            self._edit_session_notes()
+        elif "Agregar" in action:
+            self._add_analysis_note()
+        elif "Ver" in action:
+            self._view_analysis_notes()
+
+    def _edit_session_notes(self) -> None:
+        """Edita las notas generales de la sesion."""
+        self.echo("\n  Notas de la sesion (Enter dos veces para terminar):")
+        self.echo("  (Dejar vacio para eliminar notas existentes)\n")
+
+        current = self.session.notes or ""
+
+        # Para notas multilinea, usamos un editor simple
+        new_notes = self.text(
+            "Notas:",
+            default=current,
+            back_option=False,
+        )
+
+        if new_notes is not None:
+            _, notes_val = new_notes
+            self.manager.set_session_notes(self.session, notes_val)
+            if notes_val:
+                self.echo("\n  Notas guardadas.")
+            else:
+                self.echo("\n  Notas eliminadas.")
+
+    def _add_analysis_note(self) -> None:
+        """Agrega una nota a un analisis especifico."""
+        if not self.session.analyses:
+            self.echo("\n  No hay analisis disponibles.")
+            return
+
+        # Mostrar lista de analisis
+        choices = []
+        for i, a in enumerate(self.session.analyses):
+            hydro = a.hydrograph
+            storm = a.storm
+            x_str = f" X={hydro.x_factor:.2f}" if hydro.x_factor else ""
+            note_indicator = " [nota]" if a.note else ""
+            choices.append(
+                f"{a.id}: {hydro.tc_method} Tr{storm.return_period}{x_str} "
+                f"Qp={hydro.peak_flow_m3s:.2f}m3/s{note_indicator}"
+            )
+
+        selected = self.select("Selecciona analisis:", choices)
+
+        if selected is None:
+            return
+
+        analysis_id = selected.split(":")[0]
+
+        # Buscar analisis y mostrar nota actual si existe
+        for a in self.session.analyses:
+            if a.id == analysis_id:
+                if a.note:
+                    self.echo(f"\n  Nota actual: {a.note}")
+
+                new_note = self.text(
+                    "Nueva nota (vacio para eliminar):",
+                    default=a.note or "",
+                    back_option=False,
+                )
+
+                if new_note is not None:
+                    _, note_val = new_note
+                    self.manager.set_analysis_note(self.session, analysis_id, note_val)
+                    if note_val:
+                        self.echo(f"\n  Nota guardada para analisis {analysis_id}.")
+                    else:
+                        self.echo(f"\n  Nota eliminada de analisis {analysis_id}.")
+                break
+
+    def _view_analysis_notes(self) -> None:
+        """Muestra las notas de todos los analisis."""
+        self.echo("\n  Notas de analisis:")
+        self.echo(f"  {'-'*50}")
+
+        for a in self.session.analyses:
+            if a.note:
+                hydro = a.hydrograph
+                storm = a.storm
+                x_str = f" X={hydro.x_factor:.2f}" if hydro.x_factor else ""
+                self.echo(f"\n  [{a.id}] {hydro.tc_method} Tr{storm.return_period}{x_str}")
+                self.echo(f"    Qp={hydro.peak_flow_m3s:.2f} m3/s")
+                self.echo(f"    Nota: {a.note}")

@@ -8,6 +8,14 @@ import typer
 import questionary
 
 from hidropluvial.cli.wizard.styles import WIZARD_STYLE
+from hidropluvial.cli.theme import (
+    print_header, print_section, print_info, print_warning,
+    print_success, print_error, get_console, get_palette,
+)
+from rich.panel import Panel
+from rich.text import Text
+from rich.table import Table
+from rich import box
 
 
 class CuencaEditor:
@@ -62,20 +70,61 @@ class CuencaEditor:
 
     def _show_current_values(self) -> None:
         """Muestra los valores actuales de la cuenca."""
-        self.echo(f"\n{'='*65}")
-        self.echo("  EDITAR DATOS DE LA CUENCA")
-        self.echo(f"{'='*65}")
-        self.echo(f"\n  Datos actuales:")
-        self.echo(f"  {'-'*40}")
-        self.echo(f"  Area:         {self.cuenca.area_ha:>12.2f} ha")
-        self.echo(f"  Pendiente:    {self.cuenca.slope_pct:>12.2f} %")
-        self.echo(f"  P3,10:        {self.cuenca.p3_10:>12.1f} mm")
+        console = get_console()
+        p = get_palette()
+
+        # Crear tabla con los valores actuales
+        table = Table(
+            show_header=False,
+            box=None,
+            padding=(0, 2),
+            expand=True,
+        )
+        table.add_column("Label", style=p.label, width=12)
+        table.add_column("Value")
+
+        # Área
+        area_text = Text()
+        area_text.append(f"{self.cuenca.area_ha:.2f}", style=f"bold {p.number}")
+        area_text.append(" ha", style=p.unit)
+        table.add_row("Área", area_text)
+
+        # Pendiente
+        slope_text = Text()
+        slope_text.append(f"{self.cuenca.slope_pct:.2f}", style=f"bold {p.number}")
+        slope_text.append(" %", style=p.unit)
+        table.add_row("Pendiente", slope_text)
+
+        # P3,10
+        p310_text = Text()
+        p310_text.append(f"{self.cuenca.p3_10:.1f}", style=f"bold {p.number}")
+        p310_text.append(" mm", style=p.unit)
+        table.add_row("P3,10", p310_text)
+
         if self.cuenca.c:
-            self.echo(f"  Coef. C:      {self.cuenca.c:>12.2f}")
+            table.add_row("Coef. C", Text(f"{self.cuenca.c:.2f}", style=f"bold {p.number}"))
+
         if self.cuenca.cn:
-            self.echo(f"  CN:           {self.cuenca.cn:>12}")
+            table.add_row("CN", Text(str(self.cuenca.cn), style=f"bold {p.number}"))
+
         if self.cuenca.length_m:
-            self.echo(f"  Longitud:     {self.cuenca.length_m:>12.0f} m")
+            len_text = Text()
+            len_text.append(f"{self.cuenca.length_m:.0f}", style=f"bold {p.number}")
+            len_text.append(" m", style=p.unit)
+            table.add_row("Longitud", len_text)
+
+        title = Text("Editar datos de la cuenca", style=f"bold {p.primary}")
+
+        console.print()
+        panel = Panel(
+            table,
+            title=title,
+            title_align="left",
+            border_style=p.primary,
+            box=box.ROUNDED,
+            padding=(1, 2),
+        )
+        console.print(panel)
 
     def _show_warnings(self) -> None:
         """Muestra advertencias si hay analisis existentes."""
@@ -83,9 +132,8 @@ class CuencaEditor:
         n_tc = len(self.session.tc_results)
 
         if n_analyses > 0 or n_tc > 0:
-            self.echo(f"\n  ADVERTENCIA:")
-            self.echo(f"      Esta sesion tiene {n_tc} calculos de Tc y {n_analyses} analisis.")
-            self.echo(f"      Los cambios INVALIDARAN estos resultados.")
+            print_warning(f"Esta sesión tiene {n_tc} cálculos de Tc y {n_analyses} análisis.")
+            print_warning("Los cambios INVALIDARÁN estos resultados.")
 
     def _ask_action(self) -> str:
         """Pregunta que accion tomar."""
@@ -300,11 +348,41 @@ class CuencaEditor:
         """
         new_area = new_values.get("area_ha", self.cuenca.area_ha)
 
-        self.echo(f"\n{'='*60}")
-        self.echo("  CONFIGURAR C y CN PARA NUEVA AREA")
-        self.echo(f"{'='*60}")
-        self.echo(f"  Area anterior: {self._original_area:.2f} ha")
-        self.echo(f"  Area nueva:    {new_area:.2f} ha\n")
+        console = get_console()
+        p = get_palette()
+
+        # Crear tabla con los valores
+        table = Table(
+            show_header=False,
+            box=None,
+            padding=(0, 2),
+            expand=True,
+        )
+        table.add_column("Label", style=p.label, width=14)
+        table.add_column("Value")
+
+        area_ant = Text()
+        area_ant.append(f"{self._original_area:.2f}", style=p.muted)
+        area_ant.append(" ha", style=p.unit)
+        table.add_row("Área anterior", area_ant)
+
+        area_new = Text()
+        area_new.append(f"{new_area:.2f}", style=f"bold {p.number}")
+        area_new.append(" ha", style=p.unit)
+        table.add_row("Área nueva", area_new)
+
+        title = Text("Configurar C y CN para nueva área", style=f"bold {p.secondary}")
+
+        console.print()
+        panel = Panel(
+            table,
+            title=title,
+            title_align="left",
+            border_style=p.secondary,
+            box=box.ROUNDED,
+            padding=(1, 2),
+        )
+        console.print(panel)
 
         # Preguntar que hacer con C (si existia)
         if self.cuenca.c:
@@ -408,16 +486,19 @@ class CuencaEditor:
     def _recalculate_c(self, new_area: float) -> Optional[float]:
         """Recalcula C usando tablas de coberturas."""
         from hidropluvial.core.coefficients import (
-            C_TABLES, ChowCEntry, FHWACEntry, format_c_table, weighted_c
+            C_TABLES, ChowCEntry, FHWACEntry, weighted_c
+        )
+        from hidropluvial.cli.theme import (
+            print_c_table_chow, print_c_table_fhwa, print_c_table_simple
         )
 
-        self.echo(f"\n  Calculando C ponderado para area de {new_area:.2f} ha")
+        print_info(f"Calculando C ponderado para área de {new_area:.2f} ha")
 
         # Seleccionar tabla
         table_choice = questionary.select(
             "Selecciona tabla de coeficientes:",
             choices=[
-                "Ven Te Chow (C según pendiente)",
+                "Ven Te Chow (C según cobertura y Tr)",
                 "FHWA (C único por uso)",
                 "Tabla Uruguay",
             ],
@@ -435,16 +516,18 @@ class CuencaEditor:
             table_key = "uruguay"
 
         table_name, table_data = C_TABLES[table_key]
-        self.echo(format_c_table(table_data, table_name))
+        first_entry = table_data[0]
 
-        # Seleccionar categoria de pendiente si es Chow
-        slope_cat = None
-        if table_key == "chow":
-            slope_cat = questionary.select(
-                "Categoria de pendiente:",
-                choices=["flat", "rolling", "hilly"],
-                style=WIZARD_STYLE,
-            ).ask()
+        # Mostrar tabla estilizada según tipo
+        if isinstance(first_entry, ChowCEntry):
+            print_c_table_chow(table_data, table_name, selection_mode=True)
+        elif isinstance(first_entry, FHWACEntry):
+            print_c_table_fhwa(table_data, table_name, tr=10)
+        else:
+            print_c_table_simple(table_data, table_name)
+
+        # Para tabla Chow siempre se usa Tr=2 como base
+        is_chow = table_key == "chow"
 
         areas = []
         coefficients = []
@@ -456,7 +539,7 @@ class CuencaEditor:
             choices = []
             for i, entry in enumerate(table_data):
                 if isinstance(entry, ChowCEntry):
-                    c_val = entry.get_c(slope_cat)
+                    c_val = entry.c_tr2  # Siempre Tr=2 para Chow
                 elif isinstance(entry, FHWACEntry):
                     c_val = entry.c
                 else:
@@ -481,7 +564,7 @@ class CuencaEditor:
             entry = table_data[idx]
 
             if isinstance(entry, ChowCEntry):
-                c_val = entry.get_c(slope_cat)
+                c_val = entry.c_tr2  # Siempre Tr=2 para Chow
             elif isinstance(entry, FHWACEntry):
                 c_val = entry.c
             else:
@@ -512,7 +595,7 @@ class CuencaEditor:
 
     def _recalculate_cn(self, new_area: float) -> Optional[int]:
         """Recalcula CN usando tablas de coberturas."""
-        from hidropluvial.core.coefficients import CN_TABLES, format_cn_table, weighted_cn
+        from hidropluvial.core.coefficients import CN_TABLES, weighted_cn
 
         self.echo(f"\n  Calculando CN ponderado para area de {new_area:.2f} ha")
 

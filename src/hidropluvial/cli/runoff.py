@@ -15,10 +15,12 @@ from hidropluvial.core.coefficients import (
     CN_TABLES,
     ChowCEntry,
     FHWACEntry,
-    format_c_table,
-    format_cn_table,
     weighted_c,
     weighted_cn,
+)
+from hidropluvial.cli.theme import (
+    print_c_table_chow, print_c_table_fhwa, print_c_table_simple,
+    print_cn_table, print_info,
 )
 from hidropluvial.session import WeightedCoefficient, CoverageItem
 
@@ -124,11 +126,13 @@ def runoff_weighted_c(
     tr = 2 if is_chow else 10
 
     if is_chow:
-        typer.echo(f"\n  Tabla Ven Te Chow: seleccion basada en Tr=2 anos")
-        typer.echo("  El coeficiente se ajustara automaticamente segun el Tr del analisis.")
-        typer.echo(format_c_table(table_data, table_name, tr, selection_mode=True))
+        print_info("Tabla Ven Te Chow: selección basada en Tr=2 años")
+        print_info("El coeficiente se ajustará automáticamente según el Tr del análisis.")
+        print_c_table_chow(table_data, table_name, selection_mode=True)
+    elif is_fhwa:
+        print_c_table_fhwa(table_data, table_name, tr=tr)
     else:
-        typer.echo(format_c_table(table_data, table_name, tr))
+        print_c_table_simple(table_data, table_name)
 
     # Solicitar area total si no se proporciono
     if area_total is None:
@@ -418,7 +422,7 @@ def runoff_weighted_cn(
 
         # Mostrar tabla si cambio
         if current_table != table_key:
-            typer.echo(format_cn_table(table_data, table_name))
+            print_cn_table(table_data, table_name)
             current_table = table_key
 
         # Seleccionar cobertura de la tabla elegida
@@ -591,7 +595,7 @@ def collect_weighted_cn_interactive(
             table_name, table_data = CN_TABLES["agricultural"]
 
         if current_table != table_key:
-            echo_fn(format_cn_table(table_data, table_name))
+            print_cn_table(table_data, table_name)
             current_table = table_key
 
         choices = []

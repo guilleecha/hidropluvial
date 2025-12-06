@@ -38,7 +38,7 @@ class TestHydrographSCS:
         captured = capsys.readouterr()
         assert "HIDROGRAMA SCS" in captured.out
         assert "Área de cuenca:" in captured.out
-        assert "1.00 km2" in captured.out
+        assert "1.00 km²" in captured.out
         assert "CAUDAL PICO:" in captured.out
         assert "TIEMPO AL PICO:" in captured.out
         assert "VOLUMEN:" in captured.out
@@ -167,7 +167,8 @@ class TestHydrographSCS:
             )
 
         captured = capsys.readouterr()
-        assert "desconocido" in captured.err
+        # Rich prints errors to stdout
+        assert "desconocido" in captured.out
 
     def test_invalid_uh_method(self, capsys):
         """Test metodo UH invalido."""
@@ -188,7 +189,8 @@ class TestHydrographSCS:
             )
 
         captured = capsys.readouterr()
-        assert "desconocido" in captured.err
+        # Rich prints errors to stdout
+        assert "desconocido" in captured.out
 
     def test_export_to_csv(self, capsys):
         """Test exportar hidrograma a CSV."""
@@ -244,7 +246,8 @@ class TestHydrographSCS:
             )
 
             captured = capsys.readouterr()
-            assert f"Período retorno:       {tr:>12} años" in captured.out
+            # New format without wide padding
+            assert f"Período retorno: {tr} años" in captured.out
 
     def test_custom_lambda(self, capsys):
         """Test con lambda personalizado."""
@@ -284,7 +287,7 @@ class TestHydrographSCS:
         )
 
         captured = capsys.readouterr()
-        assert "10.00 km2" in captured.out
+        assert "10.00 km²" in captured.out
 
 
 class TestHydrographGZ:
@@ -330,7 +333,8 @@ class TestHydrographGZ:
             )
 
             captured = capsys.readouterr()
-            assert f"Factor X:              {x:>12.2f}" in captured.out
+            # New format without wide padding
+            assert f"Factor X: {x:.2f}" in captured.out
 
     def test_different_return_periods(self, capsys):
         """Test diferentes periodos de retorno."""
@@ -348,7 +352,8 @@ class TestHydrographGZ:
             )
 
             captured = capsys.readouterr()
-            assert f"Período retorno:       {tr:>12} años" in captured.out
+            # New format without wide padding
+            assert f"Período retorno: {tr} años" in captured.out
 
     def test_shows_intermediate_results(self, capsys):
         """Test muestra resultados intermedios."""

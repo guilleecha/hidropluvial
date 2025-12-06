@@ -80,9 +80,9 @@ def session_batch(
         cuenca_nombre=cuenca_cfg.get("nombre", ""),
     )
 
-    typer.echo(f"\n{'='*55}")
-    typer.echo(f"  BATCH: Sesión creada [{session.id}]")
-    typer.echo(f"{'='*55}")
+    from hidropluvial.cli.theme import print_header, print_separator
+
+    print_header(f"BATCH: Sesion creada [{session.id}]")
 
     # Calcular Tc con todos los métodos
     tc_methods = config.get("tc_methods", ["desbordes"])
@@ -220,8 +220,8 @@ def session_batch(
                     if storm_type != "gz":
                         break
 
-    typer.echo(f"\n  Total: {n_analyses} análisis completados")
-    typer.echo(f"{'='*55}")
+    typer.echo(f"\n  Total: {n_analyses} analisis completados")
+    print_separator()
 
     # Mostrar resumen
     rows = manager.get_summary_table(session)

@@ -9,7 +9,7 @@ from rich import box
 from hidropluvial.cli.theme.palette import get_console, get_palette
 from hidropluvial.cli.theme.styled import (
     styled_header, styled_label, styled_success, styled_warning,
-    styled_error, styled_info,
+    styled_error, styled_info, styled_note, styled_note_box,
 )
 
 
@@ -75,6 +75,18 @@ def print_info(text: str) -> None:
     console.print(styled_info(text))
 
 
+def print_note(text: str) -> None:
+    """Imprime una nota informativa destacada."""
+    console = get_console()
+    console.print(styled_note(text))
+
+
+def print_note_box(lines: list[str], title: str = "NOTA") -> None:
+    """Imprime un panel de nota con múltiples líneas."""
+    console = get_console()
+    console.print(styled_note_box(lines, title))
+
+
 def print_section(title: str) -> None:
     """Imprime título de sección."""
     console = get_console()
@@ -82,6 +94,15 @@ def print_section(title: str) -> None:
     console.print()
     console.print(f"-- {title} --", style=f"bold {p.secondary}")
     console.print()
+
+
+def print_subheader(title: str, width: int = 45) -> None:
+    """Imprime un subencabezado o separador con título."""
+    console = get_console()
+    p = get_palette()
+    if title:
+        console.print(f"\n  {title}", style=f"bold {p.secondary}")
+    console.print(f"  {'-' * width}", style=p.border)
 
 
 def print_result_row(label: str, value, unit: str = None, highlight: bool = False) -> None:
@@ -126,6 +147,164 @@ def print_summary_box(title: str, items: list[tuple[str, str, str]]) -> None:
         border_style=p.border,
         box=box.ROUNDED,
         padding=(0, 1),
+    )
+    console.print(panel)
+
+
+def print_basin_info(
+    basin_name: str,
+    basin_id: str,
+    project_name: str = None,
+    area_ha: float = None,
+    slope_pct: float = None,
+    n_analyses: int = None,
+    return_periods: list[int] = None,
+    c: float = None,
+    cn: int = None,
+) -> None:
+    """
+    Imprime información de cuenca en un panel estilizado.
+
+    Args:
+        basin_name: Nombre de la cuenca
+        basin_id: ID de la cuenca
+        project_name: Nombre del proyecto (opcional)
+        area_ha: Área en hectáreas
+        slope_pct: Pendiente en porcentaje
+        n_analyses: Número de análisis
+        return_periods: Lista de períodos de retorno
+        c: Coeficiente de escorrentía
+        cn: Número de curva
+    """
+    from rich.table import Table
+
+    console = get_console()
+    p = get_palette()
+
+    # Crear tabla sin bordes para el contenido con mejor espaciado
+    table = Table(
+        show_header=False,
+        box=None,
+        padding=(0, 2),  # Más espacio horizontal entre columnas
+        expand=True,
+        row_styles=["", ""],  # Alternar estilos si se desea
+    )
+    table.add_column("Label", style=p.label, width=12)
+    table.add_column("Value", style=f"bold {p.number}")
+
+    # Agregar filas según los datos disponibles
+    if project_name:
+        table.add_row("Proyecto", Text(project_name, style=p.secondary))
+
+    if area_ha is not None:
+        area_text = Text()
+        area_text.append(f"{area_ha:.1f}", style=f"bold {p.number}")
+        area_text.append(" ha", style=p.unit)
+        table.add_row("Área", area_text)
+
+    if slope_pct is not None:
+        slope_text = Text()
+        slope_text.append(f"{slope_pct:.2f}", style=f"bold {p.number}")
+        slope_text.append(" %", style=p.unit)
+        table.add_row("Pendiente", slope_text)
+
+    if c is not None:
+        table.add_row("Coef. C", f"{c:.2f}")
+
+    if cn is not None:
+        table.add_row("CN", str(cn))
+
+    if n_analyses is not None:
+        n_style = p.success if n_analyses > 0 else p.muted
+        table.add_row("Análisis", Text(str(n_analyses), style=n_style))
+
+    if return_periods:
+        tr_str = ", ".join(str(tr) for tr in return_periods)
+        table.add_row("Tr", Text(tr_str, style=p.muted))
+
+    # Crear título con nombre e ID
+    title_text = Text()
+    title_text.append(f" {basin_name} ", style=f"bold {p.primary}")
+    title_text.append(f"[{basin_id[:8]}]", style=p.muted)
+
+    console.print()  # Espacio antes del panel
+    panel = Panel(
+        table,
+        title=title_text,
+        title_align="left",
+        border_style=p.primary,
+        box=box.ROUNDED,
+        padding=(1, 2),  # Más padding interno
+    )
+    console.print(panel)
+
+
+def print_project_info(
+    project_name: str,
+    project_id: str,
+    n_basins: int = None,
+    n_analyses: int = None,
+    description: str = None,
+    author: str = None,
+    location: str = None,
+) -> None:
+    """
+    Imprime información de proyecto en un panel estilizado.
+
+    Args:
+        project_name: Nombre del proyecto
+        project_id: ID del proyecto
+        n_basins: Número de cuencas
+        n_analyses: Número total de análisis
+        description: Descripción del proyecto
+        author: Autor
+        location: Ubicación
+    """
+    from rich.table import Table
+
+    console = get_console()
+    p = get_palette()
+
+    # Crear tabla sin bordes con mejor espaciado
+    table = Table(
+        show_header=False,
+        box=None,
+        padding=(0, 2),  # Más espacio horizontal
+        expand=True,
+    )
+    table.add_column("Label", style=p.label, width=12)
+    table.add_column("Value")
+
+    if description:
+        table.add_row("Descripción", Text(description, style=p.muted))
+
+    if author:
+        table.add_row("Autor", Text(author, style=p.secondary))
+
+    if location:
+        table.add_row("Ubicación", Text(location, style=p.secondary))
+
+    if n_basins is not None:
+        n_style = p.success if n_basins > 0 else p.muted
+        table.add_row("Cuencas", Text(str(n_basins), style=n_style))
+
+    if n_analyses is not None:
+        n_style = p.success if n_analyses > 0 else p.muted
+        table.add_row("Análisis", Text(str(n_analyses), style=n_style))
+
+    # Crear título
+    title_text = Text()
+    title_text.append(f" {project_name} ", style=f"bold {p.primary}")
+    title_text.append(f"[{project_id[:8]}]", style=p.muted)
+
+    console.print()  # Espacio antes del panel
+    panel = Panel(
+        table,
+        title=title_text,
+        title_align="left",
+        border_style=p.accent,
+        box=box.ROUNDED,
+        padding=(1, 2),  # Más padding interno
     )
     console.print(panel)
 
@@ -179,33 +358,64 @@ def print_banner() -> None:
     console = get_console()
     p = get_palette()
 
-    banner = """
-+-------------------------------------------------------------+
-|         HIDROPLUVIAL - Asistente de Analisis                |
-|         Calculos hidrologicos para Uruguay                  |
-+-------------------------------------------------------------+
-"""
-    console.print(banner, style=p.primary)
+    # Título principal
+    title = Text()
+    title.append("HIDROPLUVIAL", style=f"bold {p.primary}")
+
+    # Subtítulo
+    subtitle = Text()
+    subtitle.append("Asistente de Análisis Hidrológicos\n", style=f"{p.secondary}")
+    subtitle.append("Cálculos para Uruguay", style=p.muted)
+
+    # Panel con diseño mejorado
+    panel = Panel(
+        subtitle,
+        title=title,
+        title_align="center",
+        border_style=p.primary,
+        box=box.DOUBLE,
+        padding=(1, 4),
+        width=60,
+    )
+
+    console.print()
+    console.print(panel)
+    console.print()
 
 
 def print_completion_banner(n_analyses: int, session_id: str) -> None:
     """Imprime banner de finalización."""
+    from rich.table import Table
+
     console = get_console()
     p = get_palette()
 
-    console.print()
-    console.print("=" * 60, style=p.border)
+    # Contenido del panel
+    table = Table(
+        show_header=False,
+        box=None,
+        padding=(0, 2),
+        expand=True,
+    )
+    table.add_column("Label", style=p.label, width=18)
+    table.add_column("Value")
 
+    table.add_row("Análisis generados", Text(str(n_analyses), style=f"bold {p.number}"))
+    table.add_row("Sesión guardada", Text(session_id, style=f"bold {p.accent}"))
+
+    # Título
     title = Text()
-    title.append("  ANALISIS COMPLETADO", style=f"bold {p.success}")
-    console.print(title)
+    title.append("✓ ANÁLISIS COMPLETADO", style=f"bold {p.success}")
 
-    console.print("=" * 60, style=p.border)
+    panel = Panel(
+        table,
+        title=title,
+        title_align="center",
+        border_style=p.success,
+        box=box.ROUNDED,
+        padding=(1, 2),
+    )
 
-    info = Text()
-    info.append(f"\n  Analisis generados: ", style=p.label)
-    info.append(f"{n_analyses}", style=f"bold {p.number}")
-    info.append(f"\n  Sesion guardada: ", style=p.label)
-    info.append(f"{session_id}", style=f"bold {p.accent}")
-    console.print(info)
+    console.print()
+    console.print(panel)
     console.print()

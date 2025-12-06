@@ -16,6 +16,10 @@ from hidropluvial.cli.wizard.menus import (
     manage_projects_menu,
 )
 from hidropluvial.project import Project, get_project_manager
+from hidropluvial.cli.theme import (
+    print_header, print_section, print_success, print_warning,
+    print_info, print_error, print_separator,
+)
 
 
 def wizard_main() -> None:
@@ -40,7 +44,7 @@ def wizard_main() -> None:
         ).ask()
 
         if choice is None or "6." in choice:
-            typer.echo("\nHasta pronto!\n")
+            print_info("Hasta pronto!")
             raise typer.Exit()
 
         try:
@@ -69,7 +73,7 @@ def _new_basin() -> None:
     if project is None:
         raise typer.Exit()
 
-    typer.echo(f"\n  Proyecto seleccionado: {project.name} [{project.id}]\n")
+    print_success(f"Proyecto seleccionado: {project.name} [{project.id}]")
 
     # Recolectar configuracion de la cuenca
     config = WizardConfig.from_wizard()
@@ -86,13 +90,11 @@ def _new_basin() -> None:
     ).ask()
 
     if not confirmar:
-        typer.echo("\nOperacion cancelada.\n")
+        print_warning("Operacion cancelada")
         raise typer.Exit()
 
     # Ejecutar con el proyecto seleccionado
-    typer.echo("\n" + "=" * 60)
-    typer.echo("  EJECUTANDO ANALISIS")
-    typer.echo("=" * 60 + "\n")
+    print_header("EJECUTANDO ANALISIS")
 
     runner = AnalysisRunner(config, project_id=project.id)
     project, basin = runner.run()
@@ -139,7 +141,7 @@ def _select_or_create_project_for_basin() -> Optional[Project]:
 
 def _create_project_quick() -> Optional[Project]:
     """Crea un proyecto de forma rápida (solo nombre obligatorio)."""
-    typer.echo("\n  -- Nuevo Proyecto --\n")
+    print_section("Nuevo Proyecto")
 
     name = questionary.text(
         "Nombre del proyecto:",
@@ -188,15 +190,13 @@ def _create_project_quick() -> Optional[Project]:
         location=location,
     )
 
-    typer.echo(f"\n  Proyecto creado: {project.name} [{project.id}]")
+    print_success(f"Proyecto creado: {project.name} [{project.id}]")
     return project
 
 
 def _create_project() -> None:
     """Crea un nuevo proyecto y ofrece opciones para agregar cuencas."""
-    typer.echo("\n" + "=" * 60)
-    typer.echo("  CREAR NUEVO PROYECTO")
-    typer.echo("=" * 60 + "\n")
+    print_header("CREAR NUEVO PROYECTO")
 
     # Solicitar datos del proyecto
     name = questionary.text(
@@ -235,7 +235,7 @@ def _create_project() -> None:
         location=location or "",
     )
 
-    typer.echo(f"\n  Proyecto creado: {project.name} [{project.id}]\n")
+    print_success(f"Proyecto creado: {project.name} [{project.id}]")
 
     # Menu post-creacion
     _post_project_creation_menu(project)
@@ -257,8 +257,8 @@ def _post_project_creation_menu(project: Project) -> None:
         ).ask()
 
         if choice is None or "Volver" in choice:
-            typer.echo(f"\n  Proyecto '{project.name}' guardado sin cuencas.")
-            typer.echo(f"  Puedes agregar cuencas luego desde 'Continuar proyecto'.\n")
+            print_info(f"Proyecto '{project.name}' guardado sin cuencas")
+            print_info("Puedes agregar cuencas luego desde 'Continuar proyecto'")
             raise typer.Exit()
 
         if "Agregar nueva" in choice:
@@ -273,7 +273,7 @@ def _post_project_creation_menu(project: Project) -> None:
 
 def _add_basin_to_project(project: Project) -> None:
     """Agrega una nueva cuenca al proyecto usando el wizard."""
-    typer.echo(f"\n  Agregando cuenca al proyecto: {project.name}\n")
+    print_info(f"Agregando cuenca al proyecto: {project.name}")
 
     # Recolectar configuracion
     config = WizardConfig.from_wizard()
@@ -290,18 +290,16 @@ def _add_basin_to_project(project: Project) -> None:
     ).ask()
 
     if not confirmar:
-        typer.echo("\nOperacion cancelada.\n")
+        print_warning("Operacion cancelada")
         return
 
     # Ejecutar con el proyecto existente
-    typer.echo("\n" + "=" * 60)
-    typer.echo("  EJECUTANDO ANALISIS")
-    typer.echo("=" * 60 + "\n")
+    print_header("EJECUTANDO ANALISIS")
 
     runner = AnalysisRunner(config, project_id=project.id)
     updated_project, basin = runner.run()
 
-    typer.echo(f"\n  Cuenca '{basin.name}' agregada al proyecto '{project.name}'.\n")
+    print_success(f"Cuenca '{basin.name}' agregada al proyecto '{project.name}'")
 
     # Menu post-ejecucion
     menu = PostExecutionMenu(updated_project, basin, config.c, config.cn, config.length_m)
@@ -319,7 +317,7 @@ def _import_basin_to_project(project: Project) -> None:
     sessions = session_manager.list_sessions()
 
     if not other_projects and not sessions:
-        typer.echo("\n  No hay otros proyectos ni cuencas disponibles para importar.\n")
+        print_warning("No hay otros proyectos ni cuencas disponibles para importar")
         return
 
     # Construir opciones
@@ -349,7 +347,7 @@ def _import_basin_to_project(project: Project) -> None:
         source_project = project_manager.get_project(source_id)
 
         if not source_project or not source_project.basins:
-            typer.echo("\n  El proyecto no tiene cuencas.\n")
+            print_warning("El proyecto no tiene cuencas")
             return
 
         basin_choices = [
@@ -383,8 +381,8 @@ def _import_basin_to_project(project: Project) -> None:
             project.add_basin(new_basin)
             project_manager.save_project(project)
 
-            typer.echo(f"\n  Cuenca '{new_basin.name}' importada al proyecto '{project.name}'.")
-            typer.echo(f"  (Nueva ID: {new_basin.id})\n")
+            print_success(f"Cuenca '{new_basin.name}' importada al proyecto '{project.name}'")
+            print_info(f"Nueva ID: {new_basin.id}")
 
     elif "[Cuenca legacy]" in choice:
         # Importar sesion legacy
@@ -398,4 +396,4 @@ def _import_basin_to_project(project: Project) -> None:
             project.add_basin(basin)
             project_manager.save_project(project)
 
-            typer.echo(f"\n  Cuenca '{basin.name}' importada al proyecto '{project.name}'.\n")
+            print_success(f"Cuenca '{basin.name}' importada al proyecto '{project.name}'")

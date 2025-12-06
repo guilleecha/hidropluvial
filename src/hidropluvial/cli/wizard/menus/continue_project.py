@@ -139,14 +139,7 @@ class ContinueProjectMenu(BaseMenu):
 
     def _show_project_header(self) -> None:
         """Muestra encabezado con info del proyecto."""
-        self.echo(f"\n{'='*60}")
-        self.echo(f"  PROYECTO: {self.project.name} [{self.project.id}]")
-        self.echo(f"{'='*60}")
-        if self.project.description:
-            self.echo(f"  Descripcion: {self.project.description}")
-        self.echo(f"  Cuencas: {self.project.n_basins}")
-        self.echo(f"  Total analisis: {self.project.total_analyses}")
-        self.echo(f"{'='*60}\n")
+        self.project_info(self.project)
 
     def _handle_project_action(self, action: str) -> None:
         """Maneja la accion seleccionada para el proyecto."""
@@ -202,7 +195,7 @@ class ContinueProjectMenu(BaseMenu):
         self.echo("\n  Configurando nueva cuenca para el proyecto...\n")
 
         # Usar WizardConfig pero forzar el proyecto actual
-        config = WizardConfig.from_wizard(project_id=self.project.id)
+        config = WizardConfig.from_wizard()
         if config is None:
             return
 
@@ -261,7 +254,7 @@ class ContinueProjectMenu(BaseMenu):
                 "Que deseas hacer?",
                 choices=[
                     "Ver tabla resumen",
-                    "Ver graficos (hietograma + hidrograma)",
+                    "Ver fichas de analisis",
                     "Comparar hidrogramas",
                     "Agregar mas analisis",
                     "Filtrar resultados",
@@ -289,17 +282,8 @@ class ContinueProjectMenu(BaseMenu):
 
     def _show_basin_header(self) -> None:
         """Muestra encabezado con info de la cuenca."""
-        self.echo(f"\n{'='*60}")
-        self.echo(f"  CUENCA: {self.basin.name} [{self.basin.id}]")
-        if self.project:
-            self.echo(f"  Proyecto: {self.project.name}")
-        self.echo(f"{'='*60}")
-        self.echo(f"  Area: {self.basin.area_ha} ha, S={self.basin.slope_pct}%")
-        self.echo(f"  Analisis: {len(self.basin.analyses)}")
-        if self.basin.analyses:
-            trs = sorted(set(a.storm.return_period for a in self.basin.analyses))
-            self.echo(f"  Periodos de retorno: {trs}")
-        self.echo(f"{'='*60}\n")
+        project_name = self.project.name if self.project else None
+        self.basin_info(self.basin, project_name)
 
     def _handle_basin_action(self, action: str) -> None:
         """Maneja la accion seleccionada para la cuenca."""
@@ -308,7 +292,7 @@ class ContinueProjectMenu(BaseMenu):
 
         if "tabla" in action.lower():
             self._show_table(session)
-        elif "graficos" in action.lower():
+        elif "fichas" in action.lower():
             self._show_interactive_viewer()
         elif "Comparar" in action:
             self._compare_hydrographs(session)

@@ -158,13 +158,33 @@ El wizard permite configurar:
 
 ## Documentación
 
+### Guías de Usuario
+
 | Documento | Descripción |
 |-----------|-------------|
 | [INSTALACION.md](docs/INSTALACION.md) | Guía completa de instalación |
 | [MANUAL_USUARIO.md](docs/MANUAL_USUARIO.md) | Manual práctico con ejemplos |
-| [METODOLOGIAS.md](docs/METODOLOGIAS.md) | Fundamentos teóricos |
 | [CLI.md](docs/CLI.md) | Referencia de comandos |
 | [WIZARD.md](docs/WIZARD.md) | Guía del asistente |
+
+### Referencias Metodológicas
+
+Documentación técnica con teoría, fórmulas y extractos de código:
+
+| Documento | Contenido |
+|-----------|-----------|
+| [metodologias/idf.md](docs/metodologias/idf.md) | Curvas IDF: DINAGUA Uruguay, Sherman, Bernard, Koutsoyiannis |
+| [metodologias/tc.md](docs/metodologias/tc.md) | Tiempo de concentración: Kirpich, Témez, Desbordes, NRCS |
+| [metodologias/runoff.md](docs/metodologias/runoff.md) | Escorrentía: SCS Curve Number, Método Racional |
+| [metodologias/hydrograph.md](docs/metodologias/hydrograph.md) | Hidrogramas: SCS triangular/curvilíneo, Snyder, Clark |
+
+### Documentación Interna
+
+| Documento | Descripción |
+|-----------|-------------|
+| [internal/SPEC.md](docs/internal/SPEC.md) | Especificación técnica del proyecto |
+| [internal/DESARROLLO.md](docs/internal/DESARROLLO.md) | Estado del desarrollo |
+| [internal/guia_graficos.md](docs/internal/guia_graficos.md) | Generación de gráficos TikZ |
 
 ---
 

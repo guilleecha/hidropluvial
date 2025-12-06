@@ -116,35 +116,26 @@ class BasinManagementMenu(BaseMenu):
         if not basin:
             return
 
-        self.echo(f"\n{'='*55}")
-        self.echo(f"  CUENCA: {basin.name}")
-        self.echo(f"{'='*55}")
-        self.echo(f"  ID: {basin.id}")
-        self.echo(f"  Area: {basin.area_ha} ha")
-        self.echo(f"  Pendiente: {basin.slope_pct} %")
-        self.echo(f"  P3,10: {basin.p3_10} mm")
+        self.basin_info(basin, self.project.name)
 
-        if basin.c is not None:
-            self.echo(f"  Coef. C: {basin.c}")
-        if basin.cn is not None:
-            self.echo(f"  CN: {basin.cn}")
+        # Mostrar detalles adicionales no incluidos en basin_info
+        if basin.p3_10:
+            self.info(f"P3,10: {basin.p3_10} mm")
         if basin.length_m:
-            self.echo(f"  Longitud: {basin.length_m} m")
+            self.info(f"Longitud cauce: {basin.length_m} m")
         if basin.notes:
-            self.echo(f"  Notas: {basin.notes}")
+            self.note(f"Notas: {basin.notes}")
 
-        self.echo(f"\n  Analisis: {len(basin.analyses)}")
+        # Lista detallada de análisis
         if basin.analyses:
-            self.echo(f"  {'-'*50}")
+            self.section("Análisis")
             for i, a in enumerate(basin.analyses):
                 h = a.hydrograph
                 s = a.storm
                 self.echo(
-                    f"    [{i}] {h.tc_method} {s.type} Tr{s.return_period} "
+                    f"  [{i}] {h.tc_method} {s.type} Tr{s.return_period} "
                     f"Qp={h.peak_flow_m3s:.2f} m3/s"
                 )
-
-        self.echo(f"{'='*55}\n")
 
     def _edit_basin(self) -> None:
         """Editar parametros de una cuenca."""
@@ -155,20 +146,12 @@ class BasinManagementMenu(BaseMenu):
         # Convertir a session para usar el editor existente
         session = basin.to_session()
 
-        self.echo(f"\n  Valores actuales de '{basin.name}':")
-        self.echo(f"    Area:      {basin.area_ha} ha")
-        self.echo(f"    Pendiente: {basin.slope_pct} %")
-        self.echo(f"    P3,10:     {basin.p3_10} mm")
-        if basin.c is not None:
-            self.echo(f"    Coef. C:   {basin.c}")
-        if basin.cn is not None:
-            self.echo(f"    CN:        {basin.cn}")
-        if basin.length_m:
-            self.echo(f"    Longitud:  {basin.length_m} m")
+        self.section(f"Valores actuales de '{basin.name}'")
+        self.basin_info(basin, self.project.name)
 
         if basin.analyses:
-            self.echo(f"\n  ADVERTENCIA: Esta cuenca tiene {len(basin.analyses)} analisis.")
-            self.echo(f"  Al modificar la cuenca se eliminaran todos los analisis.\n")
+            self.warning(f"ADVERTENCIA: Esta cuenca tiene {len(basin.analyses)} analisis.")
+            self.warning("Al modificar la cuenca se eliminaran todos los analisis.")
 
         # Usar editor de cuenca
         editor = CuencaEditor(session, self.manager)
@@ -288,7 +271,7 @@ class BasinManagementMenu(BaseMenu):
         self.echo(f"\n  Agregando cuenca al proyecto: {self.project.name}\n")
 
         # Usar WizardConfig
-        config = WizardConfig.from_wizard(project_id=self.project.id)
+        config = WizardConfig.from_wizard()
         if config is None:
             return
 

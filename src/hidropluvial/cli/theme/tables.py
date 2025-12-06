@@ -2,11 +2,18 @@
 Funciones para crear e imprimir tablas Rich.
 """
 
+from typing import TYPE_CHECKING
+
 from rich.table import Table
 from rich.text import Text
 from rich import box
 
 from hidropluvial.cli.theme.palette import get_console, get_palette
+
+if TYPE_CHECKING:
+    from hidropluvial.core.coefficients import (
+        CoefficientEntry, ChowCEntry, FHWACEntry, CNEntry
+    )
 
 
 def create_results_table(
@@ -241,8 +248,8 @@ def print_basins_detail_table(basins, title: str = "CUENCAS") -> None:
     console.print(table)
 
 
-def print_sessions_table(sessions: list[dict], title: str = "SESIONES LEGACY") -> None:
-    """Imprime tabla de sesiones legacy."""
+def print_sessions_table(sessions: list[dict], title: str = "SESIONES DISPONIBLES") -> None:
+    """Imprime tabla de sesiones."""
     console = get_console()
     p = get_palette()
 
@@ -250,14 +257,32 @@ def print_sessions_table(sessions: list[dict], title: str = "SESIONES LEGACY") -
         console.print("  No hay sesiones.", style=p.muted)
         return
 
-    table = create_sessions_table(title)
+    table = Table(
+        title=title,
+        title_style=f"bold {p.primary}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    table.add_column("ID", style=p.accent, justify="left")
+    table.add_column("Nombre", justify="left")
+    table.add_column("Cuenca", justify="left", style=p.muted)
+    table.add_column("Analisis", justify="right", style=p.number)
+    table.add_column("Actualizado", justify="left", style=p.muted)
 
     for sess in sessions:
-        name = sess['name'][:35] if len(sess['name']) > 35 else sess['name']
+        name = sess['name'][:20] if len(sess['name']) > 20 else sess['name']
+        cuenca = sess.get('cuenca', '-')[:15]
+        updated = sess.get('updated_at', '')[:19].replace("T", " ")
         table.add_row(
             sess['id'],
             name,
+            cuenca,
             str(sess.get('n_analyses', 0)),
+            updated,
         )
 
     console.print(table)
@@ -495,3 +520,330 @@ def print_comparison_table(
     console.print(
         f"  [dim]tp: pico HU | tb: base HU | Tc, Tp: min | P, Pe: mm | Qp: m³/s | Vol: hm³[/dim]"
     )
+
+
+# =============================================================================
+# TABLAS DE COEFICIENTES C y CN
+# =============================================================================
+
+def print_c_table_chow(
+    table: list["ChowCEntry"],
+    title: str = "Tabla Ven Te Chow - Applied Hydrology",
+    selection_mode: bool = False,
+) -> None:
+    """
+    Imprime tabla de coeficientes C (Ven Te Chow) con formato Rich.
+
+    Args:
+        table: Lista de ChowCEntry
+        title: Título de la tabla
+        selection_mode: Si True, destaca la columna Tr2 como seleccionable
+    """
+    from hidropluvial.cli.theme.styled import styled_note_box
+
+    console = get_console()
+    p = get_palette()
+
+    rich_table = Table(
+        title=title,
+        title_style=f"bold {p.table_header}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    # Columnas
+    rich_table.add_column("#", justify="right", style=p.muted, width=3)
+    rich_table.add_column("Categoria", justify="left", style=p.table_category)
+    rich_table.add_column("Descripcion", justify="left")
+
+    if selection_mode:
+        # Tr2 destacado como seleccionable
+        rich_table.add_column("Tr2", justify="right", style=f"bold {p.table_highlight}")
+        rich_table.add_column("Tr5", justify="right", style=p.muted)
+        rich_table.add_column("Tr10", justify="right", style=p.muted)
+        rich_table.add_column("Tr25", justify="right", style=p.muted)
+        rich_table.add_column("Tr50", justify="right", style=p.muted)
+        rich_table.add_column("Tr100", justify="right", style=p.muted)
+    else:
+        # Todos los valores con mismo estilo
+        for tr in ["Tr2", "Tr5", "Tr10", "Tr25", "Tr50", "Tr100"]:
+            rich_table.add_column(tr, justify="right", style=p.number)
+
+    current_category = ""
+    for i, entry in enumerate(table):
+        # Agregar separador visual entre categorías
+        if entry.category != current_category and current_category:
+            rich_table.add_row(*[""] * 9)  # Fila vacía como separador
+        current_category = entry.category
+
+        rich_table.add_row(
+            str(i + 1),
+            entry.category,
+            entry.description,
+            f"{entry.c_tr2:.2f}",
+            f"{entry.c_tr5:.2f}",
+            f"{entry.c_tr10:.2f}",
+            f"{entry.c_tr25:.2f}",
+            f"{entry.c_tr50:.2f}",
+            f"{entry.c_tr100:.2f}",
+        )
+
+    console.print(rich_table)
+
+    # Nota informativa
+    if selection_mode:
+        console.print(styled_note_box([
+            "Selecciona el coeficiente C para Tr=2 años (columna Tr2).",
+            "El valor se ajustará automáticamente según el Tr del análisis.",
+            "Los valores Tr5-Tr100 son de referencia.",
+        ]))
+    else:
+        console.print(styled_note_box([
+            "Para ponderación, se usa C(Tr2) y se ajusta según Tr del análisis."
+        ]))
+
+
+def print_c_table_fhwa(
+    table: list["FHWACEntry"],
+    title: str = "Tabla FHWA HEC-22",
+    tr: int = 10,
+) -> None:
+    """
+    Imprime tabla de coeficientes C (FHWA) con formato Rich.
+
+    Args:
+        table: Lista de FHWACEntry
+        title: Título de la tabla
+        tr: Periodo de retorno para mostrar C ajustado
+    """
+    from hidropluvial.cli.theme.styled import styled_note_box
+
+    console = get_console()
+    p = get_palette()
+
+    rich_table = Table(
+        title=title,
+        title_style=f"bold {p.table_header}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    rich_table.add_column("#", justify="right", style=p.muted, width=3)
+    rich_table.add_column("Categoria", justify="left", style=p.table_category)
+    rich_table.add_column("Descripcion", justify="left")
+    rich_table.add_column("C base", justify="right", style=p.number)
+    rich_table.add_column(f"C (Tr={tr})", justify="right", style=f"bold {p.table_highlight}")
+
+    current_category = ""
+    for i, entry in enumerate(table):
+        if entry.category != current_category and current_category:
+            rich_table.add_row(*[""] * 5)
+        current_category = entry.category
+
+        c_adj = entry.get_c(tr)
+        rich_table.add_row(
+            str(i + 1),
+            entry.category,
+            entry.description,
+            f"{entry.c_base:.2f}",
+            f"{c_adj:.2f}",
+        )
+
+    console.print(rich_table)
+
+    console.print(styled_note_box([
+        "Factores de ajuste FHWA por Tr:",
+        "  Tr ≤ 10: 1.00  |  Tr=25: 1.10  |  Tr=50: 1.20  |  Tr=100: 1.25"
+    ]))
+
+
+def print_c_table_simple(
+    table: list["CoefficientEntry"],
+    title: str = "Tabla de Coeficientes C",
+) -> None:
+    """
+    Imprime tabla de coeficientes C simple (rango min-max) con formato Rich.
+
+    Args:
+        table: Lista de CoefficientEntry
+        title: Título de la tabla
+    """
+    console = get_console()
+    p = get_palette()
+
+    rich_table = Table(
+        title=title,
+        title_style=f"bold {p.table_header}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    rich_table.add_column("#", justify="right", style=p.muted, width=3)
+    rich_table.add_column("Categoria", justify="left", style=p.table_category)
+    rich_table.add_column("Descripcion", justify="left")
+    rich_table.add_column("C min", justify="right", style=p.number)
+    rich_table.add_column("C max", justify="right", style=p.number)
+    rich_table.add_column("C típico", justify="right", style=f"bold {p.table_highlight}")
+
+    current_category = ""
+    for i, entry in enumerate(table):
+        if entry.category != current_category and current_category:
+            rich_table.add_row(*[""] * 6)
+        current_category = entry.category
+
+        rich_table.add_row(
+            str(i + 1),
+            entry.category,
+            entry.description,
+            f"{entry.c_min:.2f}",
+            f"{entry.c_max:.2f}",
+            f"{entry.c_recommended:.2f}",
+        )
+
+    console.print(rich_table)
+
+
+def print_cn_table(
+    table: list["CNEntry"],
+    title: str = "Tabla SCS - Curva Número",
+) -> None:
+    """
+    Imprime tabla de CN con formato Rich.
+
+    Args:
+        table: Lista de CNEntry
+        title: Título de la tabla
+    """
+    from hidropluvial.cli.theme.styled import styled_note_box
+
+    console = get_console()
+    p = get_palette()
+
+    rich_table = Table(
+        title=title,
+        title_style=f"bold {p.table_header}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    rich_table.add_column("#", justify="right", style=p.muted, width=3)
+    rich_table.add_column("Categoria", justify="left", style=p.table_category)
+    rich_table.add_column("Descripcion", justify="left")
+    rich_table.add_column("Cond.", justify="center", style=p.muted)
+    rich_table.add_column("A", justify="right", style=p.number)
+    rich_table.add_column("B", justify="right", style=f"bold {p.table_highlight}")
+    rich_table.add_column("C", justify="right", style=p.number)
+    rich_table.add_column("D", justify="right", style=p.number)
+
+    current_category = ""
+    for i, entry in enumerate(table):
+        if entry.category != current_category and current_category:
+            rich_table.add_row(*[""] * 8)
+        current_category = entry.category
+
+        rich_table.add_row(
+            str(i + 1),
+            entry.category,
+            entry.description,
+            entry.condition[:3] if entry.condition != "N/A" else "-",
+            str(entry.cn_a),
+            str(entry.cn_b),
+            str(entry.cn_c),
+            str(entry.cn_d),
+        )
+
+    console.print(rich_table)
+
+    console.print(styled_note_box([
+        "Grupos hidrológicos de suelo:",
+        "  A: Alta infiltración (arena, grava)",
+        "  B: Moderada infiltración (limo arenoso)",
+        "  C: Baja infiltración (limo arcilloso)",
+        "  D: Muy baja infiltración (arcilla)",
+    ], title="GRUPOS DE SUELO"))
+
+
+def print_summary_table(session_name: str, rows: list[dict]) -> None:
+    """
+    Imprime tabla resumen comparativa de analisis con formato Rich.
+
+    Args:
+        session_name: Nombre de la sesion
+        rows: Lista de diccionarios con datos de cada analisis
+    """
+    from hidropluvial.cli.formatters import format_flow, format_volume_hm3
+
+    console = get_console()
+    p = get_palette()
+
+    if not rows:
+        console.print("  No hay analisis.", style=p.muted)
+        return
+
+    table = Table(
+        title=f"RESUMEN COMPARATIVO - {session_name}",
+        title_style=f"bold {p.primary}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    # Columnas
+    table.add_column("ID", style=p.accent, justify="left")
+    table.add_column("Tc", justify="left")
+    table.add_column("Tc(min)", justify="right", style=p.number)
+    table.add_column("tp(min)", justify="right", style=p.muted)
+    table.add_column("X", justify="right", style=p.number)
+    table.add_column("tb(min)", justify="right", style=p.muted)
+    table.add_column("Tormenta", justify="left")
+    table.add_column("Tr", justify="right", style=p.number)
+    table.add_column("Qp(m3/s)", justify="right")
+    table.add_column("Tp(min)", justify="right", style=p.number)
+    table.add_column("Vol(hm3)", justify="right", style=p.number)
+
+    # Encontrar maximo Qp
+    max_qp = max(r['qpeak_m3s'] for r in rows) if rows else 0
+
+    for r in rows:
+        x_str = f"{r['x']:.2f}" if r.get('x') else "-"
+        tp_str = f"{r['tp_min']:.1f}" if r.get('tp_min') else "-"
+        tb_str = f"{r['tb_min']:.1f}" if r.get('tb_min') else "-"
+        Tp_str = f"{r['Tp_min']:.1f}" if r.get('Tp_min') else "-"
+
+        # Destacar Qp maximo
+        qp_val = r['qpeak_m3s']
+        qp_str = format_flow(qp_val)
+        if qp_val == max_qp:
+            qp_text = Text(qp_str, style=f"bold {p.accent}")
+        else:
+            qp_text = Text(qp_str, style=p.number)
+
+        table.add_row(
+            r['id'],
+            r['tc_method'],
+            f"{r['tc_min']:.1f}",
+            tp_str,
+            x_str,
+            tb_str,
+            r['storm'],
+            str(r['tr']),
+            qp_text,
+            Tp_str,
+            format_volume_hm3(r['vol_m3']),
+        )
+
+    console.print(table)

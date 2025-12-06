@@ -7,6 +7,7 @@ from typing import Annotated
 import typer
 
 from hidropluvial.core import kirpich, temez
+from hidropluvial.cli.theme import print_header, print_field, print_separator
 
 # Crear sub-aplicación
 tc_app = typer.Typer(help="Cálculo de tiempo de concentración")
@@ -48,13 +49,11 @@ def tc_desbordes(
     """Calcula Tc usando Metodo de los Desbordes (DINAGUA Uruguay)."""
     from hidropluvial.core import desbordes
     tc = desbordes(area, slope_pct, c, t0)
-    typer.echo(f"\n{'='*50}")
-    typer.echo(f"  METODO DE LOS DESBORDES (DINAGUA)")
-    typer.echo(f"{'='*50}")
-    typer.echo(f"  Area:              {area:.2f} ha")
-    typer.echo(f"  Pendiente:         {slope_pct:.2f} %")
-    typer.echo(f"  Coef. escorrentia: {c:.2f}")
-    typer.echo(f"  T0:                {t0:.1f} min")
-    typer.echo(f"{'='*50}")
-    typer.echo(f"  Tc = {tc:.2f} horas ({tc*60:.1f} minutos)")
-    typer.echo(f"{'='*50}")
+    print_header("METODO DE LOS DESBORDES (DINAGUA)")
+    print_field("Area", f"{area:.2f}", "ha")
+    print_field("Pendiente", f"{slope_pct:.2f}", "%")
+    print_field("Coef. escorrentia", f"{c:.2f}")
+    print_field("T0", f"{t0:.1f}", "min")
+    print_separator()
+    print_field("Tc", f"{tc:.2f} horas ({tc*60:.1f} minutos)")
+    print_separator()

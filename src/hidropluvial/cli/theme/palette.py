@@ -32,6 +32,7 @@ class ColorPalette:
     error: str        # Error
     info: str         # Información
     muted: str        # Texto secundario/atenuado
+    note: str         # Notas informativas (cyan distintivo)
 
     # Colores para datos
     number: str       # Números y valores
@@ -41,6 +42,11 @@ class ColorPalette:
     # Bordes y separadores
     border: str       # Color de bordes
     header_bg: str    # Fondo de encabezados (para tablas)
+
+    # Colores para tablas de coeficientes
+    table_header: str    # Encabezados de tabla
+    table_category: str  # Categorías en tablas
+    table_highlight: str # Valores destacados en tablas
 
 
 # Tema por defecto - Estilo "programador" con colores pasteles
@@ -53,11 +59,15 @@ THEME_DEFAULT = ColorPalette(
     error="#d75f5f",        # Rojo suave
     info="#5f87af",         # Azul info
     muted="#808080",        # Gris
+    note="#5fd7d7",         # Cyan brillante para notas
     number="#d7af5f",       # Amarillo para números
     unit="#87af87",         # Verde para unidades
     label="#afafaf",        # Gris claro para etiquetas
     border="#5f5f5f",       # Gris oscuro para bordes
     header_bg="#3a3a3a",    # Fondo oscuro para headers
+    table_header="#5f87af", # Azul para headers de tabla
+    table_category="#87afaf",  # Cyan para categorías
+    table_highlight="#d7af5f", # Amarillo para valores destacados
 )
 
 # Tema Monokai - Inspirado en el esquema de colores Monokai
@@ -70,11 +80,15 @@ THEME_MONOKAI = ColorPalette(
     error="#f92672",        # Rosa/rojo
     info="#66d9ef",         # Cyan
     muted="#75715e",        # Gris/marrón
+    note="#66d9ef",         # Cyan Monokai para notas
     number="#fd971f",       # Naranja
     unit="#a6e22e",         # Verde
     label="#f8f8f2",        # Blanco
     border="#49483e",       # Gris oscuro
     header_bg="#272822",    # Fondo Monokai
+    table_header="#66d9ef", # Cyan para headers
+    table_category="#a6e22e",  # Verde lima para categorías
+    table_highlight="#fd971f", # Naranja para destacados
 )
 
 # Tema Nord - Colores fríos y suaves
@@ -87,11 +101,15 @@ THEME_NORD = ColorPalette(
     error="#bf616a",        # Rojo
     info="#5e81ac",         # Azul
     muted="#4c566a",        # Gris
+    note="#88c0d0",         # Cyan Nord para notas
     number="#d08770",       # Naranja
     unit="#a3be8c",         # Verde
     label="#d8dee9",        # Gris claro
     border="#3b4252",       # Gris oscuro
     header_bg="#2e3440",    # Fondo Nord
+    table_header="#88c0d0", # Cyan para headers
+    table_category="#81a1c1",  # Azul claro para categorías
+    table_highlight="#d08770", # Naranja para destacados
 )
 
 # Tema Minimal - Solo grises y un acento
@@ -104,11 +122,15 @@ THEME_MINIMAL = ColorPalette(
     error="#ff8787",        # Rojo suave
     info="#5fafff",         # Azul
     muted="#606060",        # Gris oscuro
+    note="#5fafff",         # Azul para notas
     number="#ffffff",       # Blanco
     unit="#909090",         # Gris
     label="#909090",        # Gris
     border="#404040",       # Gris muy oscuro
     header_bg="#303030",    # Fondo oscuro
+    table_header="#5fafff", # Azul para headers
+    table_category="#b0b0b0",  # Gris claro para categorías
+    table_highlight="#5fafff", # Azul para destacados
 )
 
 # Mapeo de nombres a temas
@@ -157,6 +179,7 @@ class CLITheme:
                 "error": p.error,
                 "info": p.info,
                 "muted": p.muted,
+                "note": p.note,
                 "number": p.number,
                 "unit": p.unit,
                 "label": p.label,
@@ -165,6 +188,9 @@ class CLITheme:
                 "header": f"bold {p.primary}",
                 "value": f"bold {p.number}",
                 "param": p.label,
+                "table.header": f"bold {p.table_header}",
+                "table.category": p.table_category,
+                "table.highlight": f"bold {p.table_highlight}",
             })
             cls._console = Console(theme=custom_theme)
         return cls._console

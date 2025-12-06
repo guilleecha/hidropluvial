@@ -7,6 +7,7 @@ from typing import Annotated, Optional
 import typer
 
 from hidropluvial.session import SessionManager
+from hidropluvial.cli.theme import print_header, print_field, print_separator, print_subheader
 
 # Instancia global del gestor de sesiones
 _session_manager: Optional[SessionManager] = None
@@ -49,25 +50,23 @@ def session_create(
         cuenca_nombre=cuenca_nombre,
     )
 
-    typer.echo(f"\n{'='*55}")
-    typer.echo(f"  SESION CREADA")
-    typer.echo(f"{'='*55}")
-    typer.echo(f"  ID:                {session.id}")
-    typer.echo(f"  Nombre:            {session.name}")
-    typer.echo(f"  Cuenca:            {session.cuenca.nombre}")
-    typer.echo(f"  {'-'*40}")
-    typer.echo(f"  Área:              {session.cuenca.area_ha:>10.2f} ha")
-    typer.echo(f"  Pendiente:         {session.cuenca.slope_pct:>10.2f} %")
-    typer.echo(f"  P3,10:             {session.cuenca.p3_10:>10.1f} mm")
+    print_header("SESION CREADA")
+    print_field("ID", session.id)
+    print_field("Nombre", session.name)
+    print_field("Cuenca", session.cuenca.nombre)
+    print_subheader("")
+    print_field("Area", f"{session.cuenca.area_ha:.2f}", "ha")
+    print_field("Pendiente", f"{session.cuenca.slope_pct:.2f}", "%")
+    print_field("P3,10", f"{session.cuenca.p3_10:.1f}", "mm")
     if session.cuenca.c:
-        typer.echo(f"  Coef. C:           {session.cuenca.c:>10.2f}")
+        print_field("Coef. C", f"{session.cuenca.c:.2f}")
     if session.cuenca.cn:
-        typer.echo(f"  CN:                {session.cuenca.cn:>10}")
+        print_field("CN", f"{session.cuenca.cn}")
     if session.cuenca.length_m:
-        typer.echo(f"  Longitud cauce:    {session.cuenca.length_m:>10.0f} m")
-    typer.echo(f"{'='*55}")
+        print_field("Longitud cauce", f"{session.cuenca.length_m:.0f}", "m")
+    print_separator()
     typer.echo(f"\n  Usa 'session tc {session.id}' para calcular Tc")
-    typer.echo(f"  Usa 'session analyze {session.id}' para análisis completo\n")
+    typer.echo(f"  Usa 'session analyze {session.id}' para analisis completo\n")
 
 
 def session_list():
@@ -80,17 +79,8 @@ def session_list():
         typer.echo("Usa 'session create' para crear una nueva.\n")
         return
 
-    typer.echo(f"\n{'='*75}")
-    typer.echo(f"  SESIONES DISPONIBLES")
-    typer.echo(f"{'='*75}")
-    typer.echo(f"  {'ID':8} | {'Nombre':20} | {'Cuenca':15} | {'Análisis':>8} | {'Actualizado':19}")
-    typer.echo(f"  {'-'*71}")
-
-    for s in sessions:
-        updated = s["updated_at"][:19].replace("T", " ")
-        typer.echo(f"  {s['id']:8} | {s['name'][:20]:20} | {s['cuenca'][:15]:15} | {s['n_analyses']:>8} | {updated}")
-
-    typer.echo(f"{'='*75}\n")
+    from hidropluvial.cli.theme import print_sessions_table
+    print_sessions_table(sessions)
 
 
 def session_show(
@@ -105,42 +95,37 @@ def session_show(
         typer.echo(f"Error: Sesión '{session_id}' no encontrada.", err=True)
         raise typer.Exit(1)
 
-    typer.echo(f"\n{'='*60}")
-    typer.echo(f"  SESION: {session.name}")
-    typer.echo(f"{'='*60}")
-    typer.echo(f"  ID:                {session.id}")
-    typer.echo(f"  Creada:            {session.created_at[:19].replace('T', ' ')}")
-    typer.echo(f"  Actualizada:       {session.updated_at[:19].replace('T', ' ')}")
+    print_header(f"SESION: {session.name}")
+    print_field("ID", session.id)
+    print_field("Creada", session.created_at[:19].replace('T', ' '))
+    print_field("Actualizada", session.updated_at[:19].replace('T', ' '))
 
-    typer.echo(f"\n  CUENCA: {session.cuenca.nombre}")
-    typer.echo(f"  {'-'*45}")
-    typer.echo(f"  Área:              {session.cuenca.area_ha:>12.2f} ha")
-    typer.echo(f"  Pendiente:         {session.cuenca.slope_pct:>12.2f} %")
-    typer.echo(f"  P3,10:             {session.cuenca.p3_10:>12.1f} mm")
+    print_subheader(f"CUENCA: {session.cuenca.nombre}")
+    print_field("Area", f"{session.cuenca.area_ha:.2f}", "ha")
+    print_field("Pendiente", f"{session.cuenca.slope_pct:.2f}", "%")
+    print_field("P3,10", f"{session.cuenca.p3_10:.1f}", "mm")
     if session.cuenca.c:
-        typer.echo(f"  Coef. C:           {session.cuenca.c:>12.2f}")
+        print_field("Coef. C", f"{session.cuenca.c:.2f}")
     if session.cuenca.cn:
-        typer.echo(f"  CN:                {session.cuenca.cn:>12}")
+        print_field("CN", f"{session.cuenca.cn}")
     if session.cuenca.length_m:
-        typer.echo(f"  Longitud cauce:    {session.cuenca.length_m:>12.0f} m")
+        print_field("Longitud cauce", f"{session.cuenca.length_m:.0f}", "m")
 
     # Mostrar Tc calculados
     if session.tc_results:
-        typer.echo(f"\n  TIEMPOS DE CONCENTRACION:")
-        typer.echo(f"  {'-'*45}")
+        print_subheader("TIEMPOS DE CONCENTRACION")
         for tc in session.tc_results:
             typer.echo(f"  {tc.method:15} Tc = {tc.tc_min:>8.1f} min ({tc.tc_hr:.2f} hr)")
 
     # Mostrar análisis
     if session.analyses:
-        typer.echo(f"\n  ANALISIS REALIZADOS: {len(session.analyses)}")
-        typer.echo(f"  {'-'*45}")
+        print_subheader(f"ANALISIS REALIZADOS: {len(session.analyses)}")
         for a in session.analyses:
             x_str = f"X={a.hydrograph.x_factor:.2f}" if a.hydrograph.x_factor else ""
             typer.echo(f"  [{a.id}] {a.tc.method} + {a.storm.type} Tr{a.storm.return_period} {x_str}")
-            typer.echo(f"          Qp = {a.hydrograph.peak_flow_m3s:.3f} m³/s, Tp = {a.hydrograph.time_to_peak_min:.1f} min")
+            typer.echo(f"          Qp = {a.hydrograph.peak_flow_m3s:.3f} m3/s, Tp = {a.hydrograph.time_to_peak_min:.1f} min")
 
-    typer.echo(f"{'='*60}\n")
+    print_separator()
 
 
 def session_tc(
@@ -165,10 +150,9 @@ def session_tc(
 
     method_list = [m.strip().lower() for m in methods.split(",")]
 
-    typer.echo(f"\n{'='*55}")
-    typer.echo(f"  CALCULO DE TIEMPOS DE CONCENTRACION")
-    typer.echo(f"  Sesión: {session.name} [{session.id}]")
-    typer.echo(f"{'='*55}")
+    print_header("CALCULO DE TIEMPOS DE CONCENTRACION")
+    typer.echo(f"  Sesion: {session.name} [{session.id}]")
+    print_subheader("")
 
     for method in method_list:
         tc_hr = None
@@ -214,7 +198,7 @@ def session_tc(
             result = manager.add_tc_result(session, method, tc_hr, **params)
             typer.echo(f"  {method:15} Tc = {result.tc_min:>8.1f} min ({result.tc_hr:.2f} hr)")
 
-    typer.echo(f"{'='*55}\n")
+    print_separator()
 
 
 def session_summary(
@@ -240,35 +224,20 @@ def session_summary(
         return
 
     from hidropluvial.cli.formatters import format_flow, format_volume_hm3
+    from hidropluvial.cli.theme import print_summary_table
 
     rows = manager.get_summary_table(session)
 
-    typer.echo(f"\n{'='*115}")
-    typer.echo(f"  RESUMEN COMPARATIVO - {session.name}")
-    typer.echo(f"{'='*115}")
-    typer.echo(f"  {'ID':8} | {'Tc':12} | {'Tc(min)':>8} | {'tp(min)':>8} | {'X':>5} | {'tb(min)':>8} | {'Tormenta':10} | {'Tr':>4} | {'Qp(m³/s)':>9} | {'Tp(min)':>8} | {'Vol(hm³)':>10}")
-    typer.echo(f"  {'-'*111}")
-
-    for r in rows:
-        x_str = f"{r['x']:.2f}" if r['x'] else "-"
-        tp_str = f"{r['tp_min']:.1f}" if r['tp_min'] else "-"
-        tb_str = f"{r['tb_min']:.1f}" if r['tb_min'] else "-"
-        Tp_str = f"{r['Tp_min']:.1f}" if r['Tp_min'] else "-"
-        typer.echo(
-            f"  {r['id']:8} | {r['tc_method']:12} | {r['tc_min']:>8.1f} | {tp_str:>8} | {x_str:>5} | {tb_str:>8} | {r['storm']:10} | "
-            f"{r['tr']:>4} | {format_flow(r['qpeak_m3s']):>9} | {Tp_str:>8} | {format_volume_hm3(r['vol_m3']):>10}"
-        )
-
-    typer.echo(f"{'='*115}\n")
+    print_summary_table(session.name, rows)
 
     # Mostrar máximos/mínimos
     if len(rows) > 1:
         max_q = max(rows, key=lambda x: x['qpeak_m3s'])
         min_q = min(rows, key=lambda x: x['qpeak_m3s'])
 
-        typer.echo(f"  Caudal máximo: {format_flow(max_q['qpeak_m3s'])} m³/s ({max_q['tc_method']} + {max_q['storm']} Tr{max_q['tr']})")
-        typer.echo(f"  Caudal mínimo: {format_flow(min_q['qpeak_m3s'])} m³/s ({min_q['tc_method']} + {min_q['storm']} Tr{min_q['tr']})")
-        typer.echo(f"  Variación: {(max_q['qpeak_m3s'] - min_q['qpeak_m3s']) / min_q['qpeak_m3s'] * 100:.1f}%\n")
+        typer.echo(f"  Caudal maximo: {format_flow(max_q['qpeak_m3s'])} m3/s ({max_q['tc_method']} + {max_q['storm']} Tr{max_q['tr']})")
+        typer.echo(f"  Caudal minimo: {format_flow(min_q['qpeak_m3s'])} m3/s ({min_q['tc_method']} + {min_q['storm']} Tr{min_q['tr']})")
+        typer.echo(f"  Variacion: {(max_q['qpeak_m3s'] - min_q['qpeak_m3s']) / min_q['qpeak_m3s'] * 100:.1f}%\n")
 
 
 def session_delete(
@@ -334,12 +303,10 @@ def session_edit(
         raise typer.Exit(1)
 
     # Mostrar valores actuales y propuestos
-    typer.echo(f"\n{'='*65}")
-    typer.echo(f"  EDITAR SESION: {session.name} [{session.id}]")
-    typer.echo(f"{'='*65}")
+    print_header(f"EDITAR SESION: {session.name} [{session.id}]")
 
     cuenca = session.cuenca
-    typer.echo(f"\n  {'Parámetro':<20} {'Actual':>12} {'Nuevo':>12}")
+    typer.echo(f"\n  {'Parametro':<20} {'Actual':>12} {'Nuevo':>12}")
     typer.echo(f"  {'-'*44}")
 
     if area_ha is not None:
@@ -371,11 +338,11 @@ def session_edit(
         typer.echo(f"      (fueron calculados con los datos anteriores)")
 
     if clone:
-        typer.echo(f"\n  Modo: CLONAR (se creará nueva sesión, la original no cambia)")
+        typer.echo(f"\n  Modo: CLONAR (se creara nueva sesion, la original no cambia)")
     else:
-        typer.echo(f"\n  Modo: MODIFICAR (se actualizará la sesión existente)")
+        typer.echo(f"\n  Modo: MODIFICAR (se actualizara la sesion existente)")
 
-    typer.echo(f"{'='*65}")
+    print_separator()
 
     # Confirmar
     if not typer.confirm("\n¿Continuar con los cambios?"):

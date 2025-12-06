@@ -18,6 +18,10 @@ from hidropluvial.core import (
     scs_triangular_uh,
     temez,
 )
+from hidropluvial.cli.theme import (
+    print_header, print_section, print_separator, print_field,
+    print_success, print_error, get_console, get_palette,
+)
 
 # Crear sub-aplicación
 hydrograph_app = typer.Typer(help="Generación de hidrogramas")
@@ -66,7 +70,7 @@ def hydrograph_scs(
             c_escorrentia = 1 - (s_mm / (s_mm + 25.4))
         tc_hr = desbordes(area_ha, slope_pct, c_escorrentia)
     else:
-        typer.echo(f"Error: Método Tc desconocido: {tc_method}", err=True)
+        print_error(f"Método Tc desconocido: {tc_method}")
         raise typer.Exit(1)
 
     tc_min = tc_hr * 60
@@ -99,7 +103,7 @@ def hydrograph_scs(
     elif method == "curvilinear":
         uh_time, uh_flow = scs_curvilinear_uh(area, tc_hr, dt_hr)
     else:
-        typer.echo(f"Error: Método UH desconocido: {method}", err=True)
+        print_error(f"Método UH desconocido: {method}")
         raise typer.Exit(1)
 
     # PASO 6: Convolución
@@ -114,37 +118,32 @@ def hydrograph_scs(
     volume_m3 = float(np.trapezoid(hydrograph_flow, hydrograph_time * 3600))
 
     # Mostrar resultados
-    typer.echo(f"\n{'='*60}")
-    typer.echo(f"  HIDROGRAMA SCS - ANÁLISIS COMPLETO")
-    typer.echo(f"{'='*60}")
-    typer.echo(f"\n  DATOS DE ENTRADA:")
-    typer.echo(f"  {'-'*40}")
-    typer.echo(f"  Área de cuenca:        {area:>12.2f} km2")
-    typer.echo(f"  Longitud cauce:        {length:>12.0f} m")
-    typer.echo(f"  Pendiente:             {slope*100:>12.2f} %")
-    typer.echo(f"  P3,10:                 {p3_10:>12.1f} mm")
-    typer.echo(f"  Período retorno:       {return_period:>12} años")
-    typer.echo(f"  CN:                    {cn:>12}")
-    typer.echo(f"  Método Tc:             {tc_method:>12}")
-    typer.echo(f"  Método UH:             {method:>12}")
+    print_header("HIDROGRAMA SCS - ANÁLISIS COMPLETO")
 
-    typer.echo(f"\n  RESULTADOS INTERMEDIOS:")
-    typer.echo(f"  {'-'*40}")
-    typer.echo(f"  Tc:                    {tc_hr:>12.2f} hr ({tc_min:.1f} min)")
-    typer.echo(f"  Duración tormenta:     {duration_hr:>12.2f} hr")
-    typer.echo(f"  Intensidad:            {intensity_mmhr:>12.2f} mm/hr")
-    typer.echo(f"  Precipitación total:   {precip_mm:>12.2f} mm")
-    typer.echo(f"  Retención S:           {runoff_result.retention_mm:>12.2f} mm")
-    typer.echo(f"  Abstracción Ia:        {runoff_result.initial_abstraction_mm:>12.2f} mm")
-    typer.echo(f"  Escorrentía Q:         {runoff_mm:>12.2f} mm")
-    typer.echo(f"  Coef. escorrentía:     {runoff_mm/precip_mm*100:>12.1f} %")
+    print_section("Datos de Entrada")
+    print_field("Área de cuenca", f"{area:.2f}", "km²")
+    print_field("Longitud cauce", f"{length:.0f}", "m")
+    print_field("Pendiente", f"{slope*100:.2f}", "%")
+    print_field("P3,10", f"{p3_10:.1f}", "mm")
+    print_field("Período retorno", str(return_period), "años")
+    print_field("CN", str(cn))
+    print_field("Método Tc", tc_method)
+    print_field("Método UH", method)
 
-    typer.echo(f"\n  RESULTADOS FINALES:")
-    typer.echo(f"  {'-'*40}")
-    typer.echo(f"  CAUDAL PICO:           {peak_flow:>12.3f} m3/s")
-    typer.echo(f"  TIEMPO AL PICO:        {time_to_peak:>12.2f} hr ({time_to_peak*60:.1f} min)")
-    typer.echo(f"  VOLUMEN:               {volume_m3:>12.0f} m3")
-    typer.echo(f"{'='*60}\n")
+    print_section("Resultados Intermedios")
+    print_field("Tc", f"{tc_hr:.2f} hr ({tc_min:.1f} min)")
+    print_field("Duración tormenta", f"{duration_hr:.2f}", "hr")
+    print_field("Intensidad", f"{intensity_mmhr:.2f}", "mm/hr")
+    print_field("Precipitación total", f"{precip_mm:.2f}", "mm")
+    print_field("Retención S", f"{runoff_result.retention_mm:.2f}", "mm")
+    print_field("Abstracción Ia", f"{runoff_result.initial_abstraction_mm:.2f}", "mm")
+    print_field("Escorrentía Q", f"{runoff_mm:.2f}", "mm")
+    print_field("Coef. escorrentía", f"{runoff_mm/precip_mm*100:.1f}", "%")
+
+    print_section("Resultados Finales")
+    print_field("CAUDAL PICO", f"{peak_flow:.3f}", "m³/s")
+    print_field("TIEMPO AL PICO", f"{time_to_peak:.2f} hr ({time_to_peak*60:.1f} min)")
+    print_field("VOLUMEN", f"{volume_m3:.0f}", "m³")
 
     # Exportar si se solicita
     if output:
@@ -152,7 +151,7 @@ def hydrograph_scs(
             f.write("Tiempo_hr,Caudal_m3s\n")
             for t, q in zip(hydrograph_time, hydrograph_flow):
                 f.write(f"{t:.4f},{q:.4f}\n")
-        typer.echo(f"Hidrograma exportado a: {output}")
+        print_success(f"Hidrograma exportado a: {output}")
 
 
 @hydrograph_app.command("gz")
@@ -228,33 +227,28 @@ def hydrograph_gz(
     tb_teorico = (1 + x_factor) * tp_teorico
 
     # Mostrar resultados
-    typer.echo(f"\n{'='*60}")
-    typer.echo(f"  HIDROGRAMA GZ - ANÁLISIS COMPLETO")
-    typer.echo(f"{'='*60}")
-    typer.echo(f"\n  DATOS DE ENTRADA:")
-    typer.echo(f"  {'-'*40}")
-    typer.echo(f"  Área de cuenca:        {area_ha:>12.2f} ha")
-    typer.echo(f"  Pendiente:             {slope_pct:>12.2f} %")
-    typer.echo(f"  Coef. escorrentía C:   {c:>12.2f}")
-    typer.echo(f"  P3,10:                 {p3_10:>12.1f} mm")
-    typer.echo(f"  Período retorno:       {return_period:>12} años")
-    typer.echo(f"  Factor X:              {x_factor:>12.2f}")
+    print_header("HIDROGRAMA GZ - ANÁLISIS COMPLETO")
 
-    typer.echo(f"\n  RESULTADOS INTERMEDIOS:")
-    typer.echo(f"  {'-'*40}")
-    typer.echo(f"  Tc (Desbordes):        {tc_hr:>12.2f} hr ({tc_min:.1f} min)")
-    typer.echo(f"  Tp teórico:            {tp_teorico:>12.2f} hr ({tp_teorico*60:.1f} min)")
-    typer.echo(f"  Tb teórico:            {tb_teorico:>12.2f} hr ({tb_teorico*60:.1f} min)")
-    typer.echo(f"  Duración tormenta:     {duration_hr:>12.1f} hr")
-    typer.echo(f"  Precipitación total:   {precip_mm:>12.2f} mm")
-    typer.echo(f"  Escorrentía (C*P):     {total_runoff_mm:>12.2f} mm")
+    print_section("Datos de Entrada")
+    print_field("Área de cuenca", f"{area_ha:.2f}", "ha")
+    print_field("Pendiente", f"{slope_pct:.2f}", "%")
+    print_field("Coef. escorrentía C", f"{c:.2f}")
+    print_field("P3,10", f"{p3_10:.1f}", "mm")
+    print_field("Período retorno", str(return_period), "años")
+    print_field("Factor X", f"{x_factor:.2f}")
 
-    typer.echo(f"\n  RESULTADOS FINALES:")
-    typer.echo(f"  {'-'*40}")
-    typer.echo(f"  CAUDAL PICO:           {peak_flow:>12.3f} m3/s")
-    typer.echo(f"  TIEMPO AL PICO:        {time_to_peak:>12.2f} hr ({time_to_peak*60:.1f} min)")
-    typer.echo(f"  VOLUMEN:               {volume_m3:>12.0f} m3")
-    typer.echo(f"{'='*60}\n")
+    print_section("Resultados Intermedios")
+    print_field("Tc (Desbordes)", f"{tc_hr:.2f} hr ({tc_min:.1f} min)")
+    print_field("Tp teórico", f"{tp_teorico:.2f} hr ({tp_teorico*60:.1f} min)")
+    print_field("Tb teórico", f"{tb_teorico:.2f} hr ({tb_teorico*60:.1f} min)")
+    print_field("Duración tormenta", f"{duration_hr:.1f}", "hr")
+    print_field("Precipitación total", f"{precip_mm:.2f}", "mm")
+    print_field("Escorrentía (C*P)", f"{total_runoff_mm:.2f}", "mm")
+
+    print_section("Resultados Finales")
+    print_field("CAUDAL PICO", f"{peak_flow:.3f}", "m³/s")
+    print_field("TIEMPO AL PICO", f"{time_to_peak:.2f} hr ({time_to_peak*60:.1f} min)")
+    print_field("VOLUMEN", f"{volume_m3:.0f}", "m³")
 
     # Exportar si se solicita
     if output:
@@ -262,4 +256,4 @@ def hydrograph_gz(
             f.write("Tiempo_hr,Caudal_m3s\n")
             for t, q in zip(hydrograph_time, hydrograph_flow):
                 f.write(f"{t:.4f},{q:.4f}\n")
-        typer.echo(f"Hidrograma exportado a: {output}")
+        print_success(f"Hidrograma exportado a: {output}")

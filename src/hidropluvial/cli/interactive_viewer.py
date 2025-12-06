@@ -1,9 +1,10 @@
 """
-Visor interactivo de hidrogramas y hietogramas con navegacion por teclado.
+Visor interactivo de fichas de analisis con navegacion por teclado.
 
 Permite navegar entre analisis usando:
-- Flechas izquierda/derecha: cambiar analisis
-- Flechas arriba/abajo: ir al primero/ultimo
+- Flechas izquierda/derecha: cambiar analisis secuencialmente
+- Flechas arriba/abajo: moverse en la lista lateral
+- Enter: seleccionar analisis de la lista
 - q/ESC: salir
 """
 
@@ -12,6 +13,13 @@ import sys
 from typing import Optional
 
 import plotext as plt
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+from rich import box
+
+from hidropluvial.cli.theme import get_palette
 
 
 def clear_screen() -> None:
@@ -90,19 +98,198 @@ def get_key() -> str:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
-def plot_combined(
+def _format_analysis_label(analysis, index: int, max_len: int = 35) -> str:
+    """Formatea etiqueta corta de un analisis."""
+    hydro = analysis.hydrograph
+    storm = analysis.storm
+    tc = analysis.tc
+
+    x_str = f"X{hydro.x_factor:.1f}" if hydro.x_factor else ""
+    label = f"{tc.method[:8]} {storm.type[:3]}Tr{storm.return_period}"
+    if x_str:
+        label += f" {x_str}"
+    label += f" Qp={hydro.peak_flow_m3s:.1f}"
+
+    if len(label) > max_len:
+        label = label[:max_len-2] + ".."
+    return label
+
+
+def _build_analysis_list(analyses: list, current_idx: int, max_visible: int = 12) -> Table:
+    """Construye la tabla con lista de analisis, destacando el actual."""
+    p = get_palette()
+
+    table = Table(
+        show_header=True,
+        header_style=f"bold {p.secondary}",
+        box=box.SIMPLE,
+        padding=(0, 1),
+        expand=False,
+    )
+    table.add_column("#", style=p.muted, width=3)
+    table.add_column("Analisis", width=38)
+    table.add_column("Qp", justify="right", width=7)
+
+    n = len(analyses)
+
+    # Calcular ventana visible centrada en current_idx
+    half = max_visible // 2
+    start = max(0, current_idx - half)
+    end = min(n, start + max_visible)
+    if end - start < max_visible:
+        start = max(0, end - max_visible)
+
+    # Indicador de scroll arriba
+    if start > 0:
+        table.add_row("", Text("...", style=p.muted), "")
+
+    for i in range(start, end):
+        a = analyses[i]
+        hydro = a.hydrograph
+        storm = a.storm
+        tc = a.tc
+
+        x_str = f" X{hydro.x_factor:.1f}" if hydro.x_factor else ""
+        label = f"{tc.method[:8]} {storm.type[:3]}Tr{storm.return_period}{x_str}"
+        qp_str = f"{hydro.peak_flow_m3s:.2f}"
+
+        # Estilo: destacado si es el actual, gris si no
+        if i == current_idx:
+            idx_text = Text(f">{i+1}", style=f"bold {p.accent}")
+            label_text = Text(label, style=f"bold {p.accent}")
+            qp_text = Text(qp_str, style=f"bold {p.accent}")
+        else:
+            idx_text = Text(f" {i+1}", style=p.muted)
+            label_text = Text(label, style=p.muted)
+            qp_text = Text(qp_str, style=p.muted)
+
+        table.add_row(idx_text, label_text, qp_text)
+
+    # Indicador de scroll abajo
+    if end < n:
+        table.add_row("", Text("...", style=p.muted), "")
+
+    return table
+
+
+def _build_info_panel(analysis, session_name: str, current_idx: int, n_total: int) -> Panel:
+    """Construye panel con informacion del analisis."""
+    from hidropluvial.cli.formatters import format_flow, format_volume_hm3
+    p = get_palette()
+
+    hydro = analysis.hydrograph
+    storm = analysis.storm
+    tc = analysis.tc
+
+    # Titulo del panel
+    x_str = f" X={hydro.x_factor:.2f}" if hydro.x_factor else ""
+    title = Text()
+    title.append(f" FICHA DE ANALISIS ", style=f"bold {p.primary}")
+    title.append(f"[{current_idx+1}/{n_total}]", style=p.muted)
+
+    # Contenido: tabla compacta con datos
+    info_table = Table(
+        show_header=False,
+        box=None,
+        padding=(0, 1),
+        expand=False,
+    )
+    info_table.add_column("Label", style=p.label, width=10)
+    info_table.add_column("Value", style=f"bold {p.number}", width=14)
+    info_table.add_column("Label2", style=p.label, width=10)
+    info_table.add_column("Value2", style=f"bold {p.number}", width=14)
+
+    # Fila 1: Cuenca y Tormenta
+    info_table.add_row(
+        "Cuenca:", Text(session_name[:14], style=p.secondary),
+        "Tormenta:", Text(f"{storm.type.upper()} Tr{storm.return_period}", style=p.secondary),
+    )
+
+    # Fila 2: Tc (metodo) y tp
+    tp_str = f"{hydro.tp_unit_min:.0f} min" if hydro.tp_unit_min else "-"
+    tc_text = Text()
+    tc_text.append(f"{tc.tc_min:.1f} min ", style=f"bold {p.number}")
+    tc_text.append(f"({tc.method[:6]})", style=p.muted)
+    info_table.add_row(
+        "Tc:", tc_text,
+        "tp (HU):", Text(tp_str, style=f"bold {p.number}"),
+    )
+
+    # Fila 3: Factor X y tb
+    x_val = f"{hydro.x_factor:.2f}" if hydro.x_factor else "-"
+    tb_str = f"{hydro.tb_min:.0f} min" if hydro.tb_min else "-"
+    info_table.add_row(
+        "Factor X:", Text(x_val, style=f"bold {p.number}"),
+        "tb:", Text(tb_str, style=f"bold {p.number}"),
+    )
+
+    # Fila 4: P y Pe
+    info_table.add_row(
+        "P total:", Text(f"{storm.total_depth_mm:.1f} mm", style=f"bold {p.number}"),
+        "Pe:", Text(f"{hydro.runoff_mm:.1f} mm", style=f"bold {p.number}"),
+    )
+
+    # Fila 5: i_max y coeficiente
+    param_str = "-"
+    if tc.parameters:
+        if "c" in tc.parameters:
+            param_str = f"C={tc.parameters['c']:.2f}"
+        elif "cn_adjusted" in tc.parameters:
+            param_str = f"CN={tc.parameters['cn_adjusted']}"
+
+    info_table.add_row(
+        "i max:", Text(f"{storm.peak_intensity_mmhr:.1f} mm/h", style=f"bold {p.number}"),
+        "Coef.:", Text(param_str, style=f"bold {p.number}"),
+    )
+
+    # Separador
+    info_table.add_row("", "", "", "")
+
+    # Fila 6: Resultados principales (destacados)
+    qp_text = Text()
+    qp_text.append(f"{format_flow(hydro.peak_flow_m3s)} ", style=f"bold {p.accent}")
+    qp_text.append("m3/s", style=p.unit)
+
+    tp_peak_text = Text()
+    tp_peak_text.append(f"{hydro.time_to_peak_min:.0f} ", style=f"bold {p.accent}")
+    tp_peak_text.append("min", style=p.unit)
+
+    info_table.add_row(
+        "Qp:", qp_text,
+        "Tp:", tp_peak_text,
+    )
+
+    # Fila 7: Volumen
+    vol_text = Text()
+    vol_text.append(f"{format_volume_hm3(hydro.volume_m3)} ", style=f"bold {p.accent}")
+    vol_text.append("hm3", style=p.unit)
+
+    info_table.add_row(
+        "Volumen:", vol_text,
+        "", "",
+    )
+
+    return Panel(
+        info_table,
+        title=title,
+        title_align="left",
+        border_style=p.primary,
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+
+
+def plot_combined_styled(
     analysis,
-    title: str,
-    width: int = 85,
-    height_hyeto: int = 12,
-    height_hydro: int = 18,
+    width: int = 70,
+    height_hyeto: int = 10,
+    height_hydro: int = 14,
 ) -> None:
     """
-    Plotea hietograma e hidrograma combinados (uno arriba del otro).
+    Plotea hietograma e hidrograma combinados con barras separadas.
 
     Args:
         analysis: AnalysisRun con datos de tormenta e hidrograma
-        title: Titulo del grafico
         width: Ancho total del grafico
         height_hyeto: Alto del hietograma
         height_hydro: Alto del hidrograma
@@ -133,31 +320,24 @@ def plot_combined(
         use_minutes = storm_duration_min < 120
 
         if use_minutes:
-            # Tiempo en minutos
-            time_values = [(t - dt_min/2) for t in storm.time_min]
-            dt_value = dt_min
+            time_values = list(storm.time_min)
             time_label = "min"
-            # Ticks cada 10 o 15 minutos segun duracion
             tick_step = 10 if storm_duration_min <= 60 else 15
-            max_time = max(time_values) + dt_value if time_values else 60
+            max_time = max(time_values) + dt_min if time_values else 60
             x_ticks = list(range(0, int(max_time) + tick_step, tick_step))
         else:
-            # Tiempo en horas
-            time_values = [(t - dt_min/2) / 60 for t in storm.time_min]
-            dt_value = dt_min / 60
+            time_values = [t / 60 for t in storm.time_min]
             time_label = "h"
-            max_time = max(time_values) + dt_value if time_values else 6
+            max_time = max(time_values) + dt_min / 60 if time_values else 6
             x_ticks = list(range(0, int(max_time) + 2))
 
-        # Usar barras con ancho explícito basado en dt
-        plt.bar(time_values, storm.intensity_mmhr, color="cyan", width=dt_value * 0.9)
+        # Barras con valores numericos
+        plt.bar(time_values, storm.intensity_mmhr, color="cyan")
 
-        # Configurar ticks limpios en X
         plt.xticks(x_ticks, [str(t) for t in x_ticks])
-
-        plt.title(f"Hietograma - P={storm.total_depth_mm:.1f}mm, imax={storm.peak_intensity_mmhr:.1f}mm/h")
+        plt.title(f"Hietograma - P={storm.total_depth_mm:.1f}mm  imax={storm.peak_intensity_mmhr:.1f}mm/h")
         plt.ylabel("i (mm/h)")
-        plt.xlabel(f"({time_label})")  # Indicar unidad usada
+        plt.xlabel(f"Tiempo ({time_label})")
     else:
         plt.title("Hietograma - Sin datos")
 
@@ -176,13 +356,13 @@ def plot_combined(
         peak_t = hydro.time_hr[peak_idx]
         plt.scatter([peak_t], [peak_q], marker="x", color="red")
 
-        # Configurar ticks limpios en X (horas enteras)
+        # Ticks limpios
         max_time = max(hydro.time_hr) if hydro.time_hr else 6
         x_ticks = list(range(0, int(max_time) + 2))
         plt.xticks(x_ticks, [str(t) for t in x_ticks])
 
         from hidropluvial.cli.formatters import format_flow
-        plt.title(f"Hidrograma - Qp={format_flow(hydro.peak_flow_m3s)} m3/s, Tp={hydro.time_to_peak_min:.0f}min")
+        plt.title(f"Hidrograma - Qp={format_flow(hydro.peak_flow_m3s)}m3/s  Tp={hydro.time_to_peak_min:.0f}min")
         plt.ylabel("Q (m3/s)")
         plt.xlabel("Tiempo (h)")
     else:
@@ -191,7 +371,111 @@ def plot_combined(
     plt.theme("clear")
     plt.show()
 
-    # Titulo principal
+
+def interactive_hydrograph_viewer(
+    analyses: list,
+    session_name: str,
+    width: int = 75,
+    height: int = 16,
+) -> None:
+    """
+    Visor interactivo de fichas de analisis.
+
+    Permite navegar entre analisis con las flechas del teclado.
+    Muestra hietograma e hidrograma combinados con panel de informacion.
+
+    Navegacion:
+    - Flechas izquierda/derecha: cambiar analisis secuencialmente
+    - Flechas arriba/abajo: moverse en la lista lateral
+    - Enter: ir al analisis seleccionado en la lista
+    - q/ESC: salir
+
+    Args:
+        analyses: Lista de AnalysisRun
+        session_name: Nombre de la sesion
+        width: Ancho del grafico
+        height: Alto del grafico (no usado, se usan alturas fijas)
+    """
+    if not analyses:
+        print("  No hay analisis disponibles.")
+        return
+
+    console = Console()
+    p = get_palette()
+
+    current_idx = 0
+    n_analyses = len(analyses)
+
+    while True:
+        clear_screen()
+
+        analysis = analyses[current_idx]
+
+        # Panel de informacion
+        info_panel = _build_info_panel(analysis, session_name, current_idx, n_analyses)
+        console.print(info_panel)
+        console.print()
+
+        # Graficos
+        plot_combined_styled(
+            analysis,
+            width=width,
+            height_hyeto=10,
+            height_hydro=14,
+        )
+
+        # Lista de analisis (si hay mas de uno)
+        if n_analyses > 1:
+            console.print()
+            list_table = _build_analysis_list(analyses, current_idx)
+            list_panel = Panel(
+                list_table,
+                title=Text(" Lista de Analisis ", style=f"bold {p.secondary}"),
+                title_align="left",
+                border_style=p.border,
+                box=box.ROUNDED,
+                padding=(0, 1),
+            )
+            console.print(list_panel)
+
+        # Instrucciones de navegacion
+        console.print()
+        nav_text = Text()
+        nav_text.append("  [", style=p.muted)
+        nav_text.append("<-", style=f"bold {p.primary}")
+        nav_text.append("] Anterior  [", style=p.muted)
+        nav_text.append("->", style=f"bold {p.primary}")
+        nav_text.append("] Siguiente  [", style=p.muted)
+        nav_text.append("q", style=f"bold {p.primary}")
+        nav_text.append("] Salir", style=p.muted)
+        console.print(nav_text)
+
+        # Esperar input
+        key = get_key()
+
+        if key == 'q' or key == 'esc':
+            clear_screen()
+            console.print(f"\n  Visor cerrado. Cuenca: {session_name}\n")
+            break
+        elif key == 'left':
+            current_idx = (current_idx - 1) % n_analyses
+        elif key == 'right':
+            current_idx = (current_idx + 1) % n_analyses
+
+
+# Mantener funcion legacy para compatibilidad
+def plot_combined(
+    analysis,
+    title: str,
+    width: int = 85,
+    height_hyeto: int = 12,
+    height_hydro: int = 18,
+) -> None:
+    """
+    Plotea hietograma e hidrograma combinados (version legacy).
+    Redirige a la nueva funcion con barras separadas.
+    """
+    plot_combined_styled(analysis, width, height_hyeto, height_hydro)
     print(f"\n  {title}")
 
 
@@ -236,82 +520,3 @@ def plot_hydrograph(
     # Mostrar info adicional
     for line in info_lines:
         print(line)
-
-
-def interactive_hydrograph_viewer(
-    analyses: list,
-    session_name: str,
-    width: int = 80,
-    height: int = 16,
-) -> None:
-    """
-    Visor interactivo de hidrogramas y hietogramas.
-
-    Permite navegar entre analisis con las flechas del teclado.
-    Muestra hietograma e hidrograma combinados.
-
-    Args:
-        analyses: Lista de AnalysisRun
-        session_name: Nombre de la sesion
-        width: Ancho del grafico
-        height: Alto del grafico (no usado, se usan alturas fijas)
-    """
-    if not analyses:
-        print("  No hay analisis disponibles.")
-        return
-
-    current_idx = 0
-    n_analyses = len(analyses)
-
-    while True:
-        clear_screen()
-
-        analysis = analyses[current_idx]
-        hydro = analysis.hydrograph
-        storm = analysis.storm
-        tc = analysis.tc
-
-        # Construir titulo
-        x_str = f" X={hydro.x_factor:.2f}" if hydro.x_factor else ""
-        title = f"[{current_idx+1}/{n_analyses}] {tc.method} + {storm.type.upper()} Tr{storm.return_period}{x_str}"
-
-        # Plotear graficos combinados
-        plot_combined(
-            analysis,
-            title,
-            width=width,
-            height_hyeto=12,
-            height_hydro=18,
-        )
-
-        # Info adicional compacta
-        from hidropluvial.cli.formatters import format_flow, format_volume_hm3
-
-        tp_str = f"{hydro.tp_unit_min:.0f}" if hydro.tp_unit_min else "-"
-        tb_str = f"{hydro.tb_min:.0f}" if hydro.tb_min else "-"
-        x_val = f"{hydro.x_factor:.2f}" if hydro.x_factor else "-"
-
-        print(f"  Cuenca: {session_name}")
-        print()
-        print(f"  Tc={tc.tc_min:.0f}min  tp={tp_str}min  X={x_val}  tb={tb_str}min")
-        print(f"  P={storm.total_depth_mm:.1f}mm  Pe={hydro.runoff_mm:.1f}mm  Vol={format_volume_hm3(hydro.volume_m3)}hm3")
-        print()
-        print(f"  [<-] Anterior  [->] Siguiente  [q] Salir")
-
-        # Esperar input
-        key = get_key()
-
-        if key == 'q' or key == 'esc':
-            clear_screen()
-            print(f"\n  Visor cerrado. Cuenca: {session_name}\n")
-            break
-        elif key == 'left':
-            current_idx = (current_idx - 1) % n_analyses
-        elif key == 'right':
-            current_idx = (current_idx + 1) % n_analyses
-        elif key == 'up':
-            # Ir al primero
-            current_idx = 0
-        elif key == 'down':
-            # Ir al ultimo
-            current_idx = n_analyses - 1

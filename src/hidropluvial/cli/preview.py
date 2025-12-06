@@ -164,72 +164,56 @@ def plot_hydrograph_comparison_terminal(
         analyses: Lista de diccionarios con 'time_hr', 'flow_m3s', 'label'
         width: Ancho en caracteres
         height: Alto en caracteres
-        show_legend: Si mostrar leyenda debajo del grafico
+        show_legend: Si mostrar leyenda en esquina superior derecha
     """
     plt.clear_figure()
     plt.plot_size(width, height)
 
-    # Colores y simbolos para leyenda
+    # Colores para cada serie
     colors = ["blue", "red", "green", "yellow", "cyan", "magenta"]
-    symbols = ["─", "═", "~", "-", "┄", "╌"]  # Símbolos para la leyenda
 
-    legend_items = []
+    # Calcular max_time y max_flow para posicionar leyenda
+    max_time = 0
+    max_flow = 0
 
     for i, analysis in enumerate(analyses):
         color = colors[i % len(colors)]
         label = analysis.get("label", f"Serie {i+1}")
 
+        time_list = list(analysis["time_hr"])
+        flow_list = list(analysis["flow_m3s"])
+
+        max_time = max(max_time, max(time_list) if time_list else 0)
+        max_flow = max(max_flow, max(flow_list) if flow_list else 0)
+
         plt.plot(
-            list(analysis["time_hr"]),
-            list(analysis["flow_m3s"]),
+            time_list,
+            flow_list,
             label=label,
             color=color,
             marker="braille"
         )
 
-        # Guardar para leyenda manual
-        legend_items.append((symbols[i % len(symbols)], color, label))
-
     plt.title("Comparacion de Hidrogramas")
     plt.xlabel("Tiempo (h)")
     plt.ylabel("Q (m3/s)")
 
+    # Leyenda en esquina superior derecha (noreste)
+    if show_legend and analyses:
+        legend_x = max_time * 0.75  # 75% del ancho
+        legend_y = max_flow * 0.95  # 95% del alto
+
+        for i, analysis in enumerate(analyses):
+            color = colors[i % len(colors)]
+            label = analysis.get("label", f"Serie {i+1}")
+            # Posicionar cada linea de leyenda
+            y_pos = legend_y - (i * max_flow * 0.08)
+            plt.text(f"─ {label}", x=legend_x, y=y_pos, color=color)
+
     plt.theme("clear")
     plt.show()
 
-    # Mostrar leyenda manual debajo del grafico
-    if show_legend and legend_items:
-        _print_legend(legend_items)
 
-
-def _print_legend(items: list[tuple[str, str, str]]) -> None:
-    """
-    Imprime leyenda para el grafico de comparacion.
-
-    Args:
-        items: Lista de (simbolo, color, etiqueta)
-    """
-    # Mapeo de colores a códigos ANSI
-    color_codes = {
-        "blue": "\033[34m",
-        "red": "\033[31m",
-        "green": "\033[32m",
-        "yellow": "\033[33m",
-        "cyan": "\033[36m",
-        "magenta": "\033[35m",
-    }
-    reset = "\033[0m"
-
-    print("\n  Leyenda:")
-    print("  " + "-" * 60)
-
-    for symbol, color, label in items:
-        color_code = color_codes.get(color, "")
-        # Usar línea coloreada como indicador
-        line_indicator = f"{color_code}{'━' * 3}{reset}"
-        print(f"  {line_indicator}  {label}")
-
-    print("")
 
 
 def print_hyetograph_bars(

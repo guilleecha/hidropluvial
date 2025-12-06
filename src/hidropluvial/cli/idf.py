@@ -16,6 +16,10 @@ from hidropluvial.core import (
     get_intensity,
     P3_10_URUGUAY,
 )
+from hidropluvial.cli.theme import (
+    print_header, print_separator, print_field, print_note,
+    print_success, get_console, get_palette,
+)
 
 # Crear sub-aplicación
 idf_app = typer.Typer(help="Análisis de curvas IDF")
@@ -40,21 +44,18 @@ def idf_uruguay(
     """
     result = dinagua_intensity(p3_10, return_period, duration, area)
 
-    typer.echo(f"\n{'='*50}")
-    typer.echo(f"  METODO DINAGUA URUGUAY")
-    typer.echo(f"{'='*50}")
-    typer.echo(f"  P3,10 base:        {result.p3_10:>10.1f} mm")
-    typer.echo(f"  Periodo retorno:   {result.return_period_yr:>10.0f} anios")
-    typer.echo(f"  Duracion:          {result.duration_hr:>10.2f} hr")
+    print_header("METODO DINAGUA URUGUAY")
+    print_field("P3,10 base", f"{result.p3_10:.1f}", "mm")
+    print_field("Periodo retorno", f"{result.return_period_yr:.0f}", "años")
+    print_field("Duracion", f"{result.duration_hr:.2f}", "hr")
     if result.area_km2:
-        typer.echo(f"  Area cuenca:       {result.area_km2:>10.1f} km2")
-    typer.echo(f"{'='*50}")
-    typer.echo(f"  Factor CT:         {result.ct:>10.4f}")
-    typer.echo(f"  Factor CA:         {result.ca:>10.4f}")
-    typer.echo(f"{'='*50}")
-    typer.echo(f"  INTENSIDAD:        {result.intensity_mmhr:>10.2f} mm/hr")
-    typer.echo(f"  PRECIPITACION:     {result.depth_mm:>10.2f} mm")
-    typer.echo(f"{'='*50}\n")
+        print_field("Area cuenca", f"{result.area_km2:.1f}", "km²")
+    print_separator("-", 50)
+    print_field("Factor CT", f"{result.ct:.4f}")
+    print_field("Factor CA", f"{result.ca:.4f}")
+    print_separator("-", 50)
+    print_field("INTENSIDAD", f"{result.intensity_mmhr:.2f}", "mm/hr")
+    print_field("PRECIPITACION", f"{result.depth_mm:.2f}", "mm")
 
 
 @idf_app.command("tabla-uy")
@@ -115,12 +116,28 @@ def idf_tabla_uruguay(
 @idf_app.command("departamentos")
 def idf_departamentos():
     """Lista valores de P3,10 por departamento de Uruguay."""
-    typer.echo("\nValores de P3,10 por departamento (mm):")
-    typer.echo("-" * 35)
+    from rich.table import Table
+    from rich import box
+
+    console = get_console()
+    p = get_palette()
+
+    table = Table(
+        title="P3,10 por Departamento",
+        title_style=f"bold {p.primary}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+    )
+    table.add_column("Departamento", justify="left")
+    table.add_column("P3,10", justify="right", style=p.number)
+    table.add_column("", justify="left", style=p.unit)
+
     for depto, p310 in sorted(P3_10_URUGUAY.items()):
-        typer.echo(f"  {depto.replace('_', ' ').title():20} {p310:>5} mm")
-    typer.echo("-" * 35)
-    typer.echo("\nNota: Para proyectos críticos, mayorar 5-10% por cambio climático.")
+        table.add_row(depto.replace('_', ' ').title(), str(p310), "mm")
+
+    console.print(table)
+    print_note("Para proyectos críticos, mayorar 5-10% por cambio climático")
 
 
 # ============================================================================

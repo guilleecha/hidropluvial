@@ -7,6 +7,11 @@ from typing import Annotated, Optional
 import typer
 
 from hidropluvial.cli.project.base import get_project_manager
+from hidropluvial.cli.theme import (
+    print_basin_info, print_success, print_error, print_info, print_section,
+    print_basins_detail_table, get_console, get_palette,
+)
+from rich.text import Text
 
 
 def basin_add(
@@ -32,14 +37,14 @@ def basin_add(
     project = manager.get_project(project_id)
 
     if project is None:
-        typer.echo(f"\n  Error: Proyecto '{project_id}' no encontrado.\n")
+        print_error(f"Proyecto '{project_id}' no encontrado.")
         raise typer.Exit(1)
 
     # Validar parámetros obligatorios
     if area is None or slope is None or p3_10 is None:
-        typer.echo("\n  Error: Faltan parámetros obligatorios.")
-        typer.echo("  Uso: hp project basin-add <proyecto> <nombre> --area X --slope Y --p3_10 Z")
-        typer.echo("\n  Opciones adicionales: --c, --cn, --length\n")
+        print_error("Faltan parámetros obligatorios.")
+        print_info("Uso: hp project basin-add <proyecto> <nombre> --area X --slope Y --p3_10 Z")
+        print_info("Opciones adicionales: --c, --cn, --length")
         raise typer.Exit(1)
 
     basin = manager.create_basin(
@@ -53,19 +58,17 @@ def basin_add(
         length_m=length,
     )
 
-    typer.echo(f"\n  Cuenca agregada al proyecto '{project.name}':")
-    typer.echo(f"    ID:        {basin.id}")
-    typer.echo(f"    Nombre:    {basin.name}")
-    typer.echo(f"    Área:      {basin.area_ha} ha")
-    typer.echo(f"    Pendiente: {basin.slope_pct} %")
-    typer.echo(f"    P3,10:     {basin.p3_10} mm")
-    if basin.c is not None:
-        typer.echo(f"    C:         {basin.c}")
-    if basin.cn is not None:
-        typer.echo(f"    CN:        {basin.cn}")
-    if basin.length_m is not None:
-        typer.echo(f"    Longitud:  {basin.length_m} m")
-    typer.echo("")
+    print_success(f"Cuenca agregada al proyecto '{project.name}'")
+    print_basin_info(
+        basin_name=basin.name,
+        basin_id=basin.id,
+        project_name=project.name,
+        area_ha=basin.area_ha,
+        slope_pct=basin.slope_pct,
+        c=basin.c,
+        cn=basin.cn,
+        n_analyses=0,
+    )
 
 
 def basin_list(
@@ -78,30 +81,18 @@ def basin_list(
     project = manager.get_project(project_id)
 
     if project is None:
-        typer.echo(f"\n  Error: Proyecto '{project_id}' no encontrado.\n")
+        print_error(f"Proyecto '{project_id}' no encontrado.")
         raise typer.Exit(1)
 
     if not project.basins:
-        typer.echo(f"\n  El proyecto '{project.name}' no tiene cuencas.")
-        typer.echo(f"  Usa 'hp project basin-add {project.id}' para agregar una.\n")
+        print_info(f"El proyecto '{project.name}' no tiene cuencas.")
+        print_info(f"Usa 'hp project basin-add {project.id}' para agregar una.")
         return
 
-    typer.echo(f"\n{'='*70}")
-    typer.echo(f"  CUENCAS DEL PROYECTO: {project.name}")
-    typer.echo(f"{'='*70}")
-    typer.echo(f"  {'ID':<10} {'Nombre':<22} {'Área(ha)':>9} {'Pend(%)':>8} {'C':>6} {'CN':>4} {'Análisis':>9}")
-    typer.echo(f"  {'-'*65}")
-
-    for basin in project.basins:
-        name = basin.name[:21] if len(basin.name) > 21 else basin.name
-        c_str = f"{basin.c:.2f}" if basin.c else "-"
-        cn_str = str(basin.cn) if basin.cn else "-"
-        typer.echo(
-            f"  {basin.id:<10} {name:<22} {basin.area_ha:>9.1f} {basin.slope_pct:>8.1f} "
-            f"{c_str:>6} {cn_str:>4} {len(basin.analyses):>9}"
-        )
-
-    typer.echo(f"{'='*70}\n")
+    console = get_console()
+    console.print()
+    print_basins_detail_table(project.basins, title=f"Cuencas del Proyecto: {project.name}")
+    console.print()
 
 
 def basin_show(
@@ -115,60 +106,80 @@ def basin_show(
     project = manager.get_project(project_id)
 
     if project is None:
-        typer.echo(f"\n  Error: Proyecto '{project_id}' no encontrado.\n")
+        print_error(f"Proyecto '{project_id}' no encontrado.")
         raise typer.Exit(1)
 
     basin = project.get_basin(basin_id)
 
     if basin is None:
-        typer.echo(f"\n  Error: Cuenca '{basin_id}' no encontrada en el proyecto.\n")
+        print_error(f"Cuenca '{basin_id}' no encontrada en el proyecto.")
         raise typer.Exit(1)
 
-    typer.echo(f"\n{'='*60}")
-    typer.echo(f"  CUENCA: {basin.name}")
-    typer.echo(f"{'='*60}")
-    typer.echo(f"  ID:          {basin.id}")
-    typer.echo(f"  Proyecto:    {project.name}")
-    typer.echo(f"  Creada:      {basin.created_at[:10]}")
-    typer.echo(f"  Modificada:  {basin.updated_at[:10]}")
+    console = get_console()
+    p = get_palette()
+    console.print()
 
-    typer.echo(f"\n  PARÁMETROS FÍSICOS:")
-    typer.echo(f"    Área:      {basin.area_ha} ha ({basin.area_ha/100:.2f} km²)")
-    typer.echo(f"    Pendiente: {basin.slope_pct} %")
-    typer.echo(f"    P3,10:     {basin.p3_10} mm")
-    if basin.length_m:
-        typer.echo(f"    Longitud:  {basin.length_m} m")
-
-    typer.echo(f"\n  COEFICIENTES DE ESCORRENTÍA:")
-    if basin.c is not None:
-        c_str = f"{basin.c:.3f}"
-        if basin.c_weighted:
-            c_str += " (ponderado)"
-        typer.echo(f"    C:  {c_str}")
-    if basin.cn is not None:
-        cn_str = str(basin.cn)
-        if basin.cn_weighted:
-            cn_str += " (ponderado)"
-        typer.echo(f"    CN: {cn_str}")
-
-    if basin.tc_results:
-        typer.echo(f"\n  TIEMPOS DE CONCENTRACIÓN ({len(basin.tc_results)}):")
-        for tc in basin.tc_results:
-            typer.echo(f"    {tc.method.capitalize()}: {tc.tc_min:.1f} min ({tc.tc_hr:.3f} hr)")
-
+    # Panel principal con info de cuenca
+    trs = None
     if basin.analyses:
-        typer.echo(f"\n  ANÁLISIS ({len(basin.analyses)}):")
+        trs = sorted(set(a.storm.return_period for a in basin.analyses))
+
+    print_basin_info(
+        basin_name=basin.name,
+        basin_id=basin.id,
+        project_name=project.name,
+        area_ha=basin.area_ha,
+        slope_pct=basin.slope_pct,
+        n_analyses=len(basin.analyses),
+        return_periods=trs,
+        c=basin.c,
+        cn=basin.cn,
+    )
+
+    # Detalles adicionales
+    print_section("Parámetros físicos")
+    print_info(f"P3,10: {basin.p3_10} mm")
+    if basin.length_m:
+        print_info(f"Longitud cauce: {basin.length_m} m")
+
+    # Coeficientes con info de ponderación
+    if basin.c is not None and basin.c_weighted:
+        print_info(f"C ponderado con {len(basin.c_weighted.items)} coberturas")
+    if basin.cn is not None and basin.cn_weighted:
+        print_info(f"CN ponderado con {len(basin.cn_weighted.items)} coberturas")
+
+    # Tiempos de concentración
+    if basin.tc_results:
+        print_section(f"Tiempos de Concentración ({len(basin.tc_results)})")
+        for tc in basin.tc_results:
+            text = Text()
+            text.append(f"  {tc.method.capitalize()}: ", style=p.label)
+            text.append(f"{tc.tc_min:.1f}", style=f"bold {p.number}")
+            text.append(" min", style=p.unit)
+            text.append(f" ({tc.tc_hr:.3f} hr)", style=p.muted)
+            console.print(text)
+
+    # Análisis
+    if basin.analyses:
+        print_section(f"Análisis ({len(basin.analyses)})")
         for a in basin.analyses:
             x_str = f" X={a.hydrograph.x_factor:.2f}" if a.hydrograph.x_factor else ""
-            typer.echo(
-                f"    [{a.id}] {a.tc.method} + {a.storm.type.upper()} "
-                f"Tr{a.storm.return_period}{x_str} → Qp={a.hydrograph.peak_flow_m3s:.3f} m³/s"
-            )
+            text = Text()
+            text.append(f"  [{a.id[:8]}] ", style=p.muted)
+            text.append(f"{a.tc.method}", style=p.secondary)
+            text.append(f" {a.storm.type.upper()} ", style=p.label)
+            text.append(f"Tr{a.storm.return_period}", style=p.secondary)
+            text.append(x_str, style=p.muted)
+            text.append(f" → Qp=", style=p.label)
+            text.append(f"{a.hydrograph.peak_flow_m3s:.3f}", style=f"bold {p.accent}")
+            text.append(" m³/s", style=p.unit)
+            console.print(text)
 
     if basin.notes:
-        typer.echo(f"\n  Notas: {basin.notes}")
+        print_section("Notas")
+        console.print(f"  {basin.notes}", style=p.muted)
 
-    typer.echo(f"{'='*60}\n")
+    console.print()
 
 
 def basin_delete(

@@ -72,9 +72,9 @@ def session_report(
     generator = ReportGenerator()
     rows = manager.get_summary_table(session)
 
-    typer.echo(f"\n{'='*60}")
-    typer.echo(f"  GENERANDO REPORTE - {session.name}")
-    typer.echo(f"{'='*60}")
+    from hidropluvial.cli.theme import print_header, print_subheader, print_separator
+
+    print_header(f"GENERANDO REPORTE - {session.name}")
     typer.echo(f"  Directorio: {output_dir.absolute()}")
 
     # =========================================================================
@@ -192,9 +192,7 @@ def session_report(
     # =========================================================================
     # RESUMEN
     # =========================================================================
-    typer.echo(f"\n  {'='*50}")
-    typer.echo(f"  ARCHIVOS GENERADOS:")
-    typer.echo(f"  {'='*50}")
+    print_subheader("ARCHIVOS GENERADOS")
     typer.echo(f"  Documento principal: {main_filename}")
     if template_dir:
         typer.echo(f"  Template:            template.tex + template_config.tex")
@@ -202,11 +200,11 @@ def session_report(
         typer.echo(f"  Secciones:           {len(sections)} archivos (sec_*.tex)")
     typer.echo(f"  hietogramas/         {len(generated_files['hyetographs'])} archivos")
     typer.echo(f"  hidrogramas/         {len(generated_files['hydrographs'])} archivos")
-    typer.echo(f"  {'='*50}")
+    print_separator()
     typer.echo(f"\n  Para compilar:")
     typer.echo(f"    cd {output_dir.absolute()}")
     typer.echo(f"    pdflatex {main_filename}")
-    typer.echo(f"{'='*60}\n")
+    print_separator()
 
 
 def _generate_sections(session, rows, generated_files):

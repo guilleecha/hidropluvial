@@ -87,6 +87,34 @@ def styled_muted(text: str) -> Text:
     return Text(text, style=p.muted)
 
 
+def styled_note(text: str) -> Text:
+    """Nota informativa con icono distintivo."""
+    p = get_palette()
+    result = Text()
+    result.append("NOTA: ", style=f"bold {p.note}")
+    result.append(text, style=p.note)
+    return result
+
+
+def styled_note_box(lines: list[str], title: str = "NOTA") -> Panel:
+    """Crea un panel de nota con múltiples líneas."""
+    p = get_palette()
+    content = Text()
+    for i, line in enumerate(lines):
+        if i > 0:
+            content.append("\n")
+        content.append(line, style=p.note)
+
+    return Panel(
+        content,
+        title=f"[bold {p.note}]{title}[/]",
+        title_align="left",
+        border_style=p.note,
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+
+
 def create_summary_panel(title: str, content: str) -> Panel:
     """Crea un panel de resumen."""
     p = get_palette()

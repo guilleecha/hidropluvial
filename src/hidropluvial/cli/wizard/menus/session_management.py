@@ -8,6 +8,7 @@ import questionary
 
 from hidropluvial.cli.wizard.menus.base import BaseMenu
 from hidropluvial.cli.wizard.menus.cuenca_editor import CuencaEditor
+from hidropluvial.cli.theme import print_sessions_table, get_console
 
 
 class SessionManagementMenu(BaseMenu):
@@ -52,20 +53,12 @@ class SessionManagementMenu(BaseMenu):
 
     def _show_sessions_table(self, sessions: list[dict]) -> None:
         """Muestra tabla de sesiones."""
-        self.echo(f"\n{'='*65}")
-        self.echo(f"  SESIONES GUARDADAS ({len(sessions)})")
-        self.echo(f"{'='*65}")
-        self.echo(f"  {'ID':<10} {'Nombre':<28} {'Cuenca':<15} {'N':>5}")
-        self.echo(f"  {'-'*60}")
-
-        for s in sessions[:15]:
-            name = s['name'][:27] if len(s['name']) > 27 else s['name']
-            cuenca = s['cuenca'][:14] if len(s['cuenca']) > 14 else s['cuenca']
-            self.echo(f"  {s['id']:<10} {name:<28} {cuenca:<15} {s['n_analyses']:>5}")
-
+        console = get_console()
+        console.print()
+        print_sessions_table(sessions[:15], title=f"Sesiones Guardadas ({len(sessions)})")
         if len(sessions) > 15:
-            self.echo(f"  ... y {len(sessions) - 15} mas")
-        self.echo(f"{'='*65}\n")
+            self.info(f"... y {len(sessions) - 15} más")
+        console.print()
 
     def _handle_action(self, action: str, sessions: list[dict]) -> None:
         """Maneja la accion seleccionada."""
@@ -242,20 +235,8 @@ class SessionManagementMenu(BaseMenu):
 
     def _show_cuenca_values(self, session, cuenca) -> None:
         """Muestra valores actuales de la cuenca."""
-        self.echo(f"\n{'='*55}")
-        self.echo(f"  EDITAR CUENCA: {session.name}")
-        self.echo(f"{'='*55}")
-        self.echo(f"  Valores actuales:")
-        self.echo(f"    Area:      {cuenca.area_ha} ha")
-        self.echo(f"    Pendiente: {cuenca.slope_pct} %")
-        self.echo(f"    P3,10:     {cuenca.p3_10} mm")
-        if cuenca.c is not None:
-            self.echo(f"    Coef. C:   {cuenca.c}")
-        if cuenca.cn is not None:
-            self.echo(f"    CN:        {cuenca.cn}")
-        if cuenca.length_m:
-            self.echo(f"    Longitud:  {cuenca.length_m} m")
-        self.echo(f"{'='*55}\n")
+        self.header(f"Editar cuenca: {session.name}")
+        self.session_info(session)
 
     def _collect_cuenca_values(self, cuenca, params_to_edit: list) -> dict:
         """Recolecta nuevos valores de cuenca."""

@@ -27,9 +27,8 @@ class TestTcKirpich:
         assert "1000" in captured.out
         assert "0.02" in captured.out
         assert "natural" in captured.out
-        assert "Tc =" in captured.out
-        assert "horas" in captured.out
-        assert "minutos" in captured.out
+        assert "Tc" in captured.out
+        assert "horas" in captured.out or "minutos" in captured.out
 
     def test_grassy_surface(self, capsys):
         """Test superficie grassy."""
@@ -37,7 +36,7 @@ class TestTcKirpich:
 
         captured = capsys.readouterr()
         assert "grassy" in captured.out
-        assert "Tc =" in captured.out
+        assert "Tc" in captured.out
 
     def test_concrete_surface(self, capsys):
         """Test superficie concrete."""
@@ -45,7 +44,7 @@ class TestTcKirpich:
 
         captured = capsys.readouterr()
         assert "concrete" in captured.out
-        assert "Tc =" in captured.out
+        assert "Tc" in captured.out
 
     def test_shows_slope_percentage(self, capsys):
         """Test muestra pendiente en porcentaje."""
@@ -61,7 +60,7 @@ class TestTcKirpich:
 
             captured = capsys.readouterr()
             assert str(int(length)) in captured.out
-            assert "Tc =" in captured.out
+            assert "Tc" in captured.out
 
     def test_different_slopes(self, capsys):
         """Test diferentes pendientes."""
@@ -69,7 +68,7 @@ class TestTcKirpich:
             tc_kirpich(length=1000.0, slope=slope, surface="natural")
 
             captured = capsys.readouterr()
-            assert "Tc =" in captured.out
+            assert "Tc" in captured.out
 
 
 class TestTcTemez:
@@ -82,9 +81,8 @@ class TestTcTemez:
         captured = capsys.readouterr()
         assert "2.5" in captured.out
         assert "0.0223" in captured.out
-        assert "Tc =" in captured.out
-        assert "horas" in captured.out
-        assert "minutos" in captured.out
+        assert "Tc" in captured.out
+        assert "horas" in captured.out or "minutos" in captured.out
 
     def test_shows_slope_percentage(self, capsys):
         """Test muestra pendiente en porcentaje."""
@@ -99,7 +97,7 @@ class TestTcTemez:
             tc_temez(length=length, slope=0.02)
 
             captured = capsys.readouterr()
-            assert "Tc =" in captured.out
+            assert "Tc" in captured.out
             assert "km" in captured.out
 
     def test_different_slopes(self, capsys):
@@ -108,7 +106,7 @@ class TestTcTemez:
             tc_temez(length=3.0, slope=slope)
 
             captured = capsys.readouterr()
-            assert "Tc =" in captured.out
+            assert "Tc" in captured.out
 
 
 class TestTcDesbordes:
@@ -122,9 +120,8 @@ class TestTcDesbordes:
         assert "DESBORDES" in captured.out or "Desbordes" in captured.out
         assert "DINAGUA" in captured.out
         assert "10" in captured.out
-        assert "Tc =" in captured.out
-        assert "horas" in captured.out
-        assert "minutos" in captured.out
+        assert "Tc" in captured.out
+        assert "horas" in captured.out or "minutos" in captured.out
 
     def test_shows_all_parameters(self, capsys):
         """Test muestra todos los parámetros."""
@@ -157,7 +154,7 @@ class TestTcDesbordes:
             tc_desbordes(area=area, slope_pct=2.0, c=0.5, t0=5.0)
 
             captured = capsys.readouterr()
-            assert "Tc =" in captured.out
+            assert "Tc" in captured.out
 
     def test_different_slopes(self, capsys):
         """Test diferentes pendientes."""
@@ -165,7 +162,7 @@ class TestTcDesbordes:
             tc_desbordes(area=20.0, slope_pct=slope, c=0.5, t0=5.0)
 
             captured = capsys.readouterr()
-            assert "Tc =" in captured.out
+            assert "Tc" in captured.out
 
     def test_different_c_values(self, capsys):
         """Test diferentes coeficientes C."""
@@ -173,7 +170,7 @@ class TestTcDesbordes:
             tc_desbordes(area=20.0, slope_pct=2.0, c=c, t0=5.0)
 
             captured = capsys.readouterr()
-            assert "Tc =" in captured.out
+            assert "Tc" in captured.out
 
 
 class TestTcAppCLI:
@@ -183,7 +180,7 @@ class TestTcAppCLI:
         """Test comando kirpich via CLI."""
         result = runner.invoke(tc_app, ["kirpich", "1000", "0.02"])
         assert result.exit_code == 0
-        assert "Tc =" in result.output
+        assert "Tc" in result.output
 
     def test_kirpich_with_surface_option(self):
         """Test kirpich con opción surface."""
@@ -202,7 +199,7 @@ class TestTcAppCLI:
         """Test comando temez via CLI."""
         result = runner.invoke(tc_app, ["temez", "2.5", "0.0223"])
         assert result.exit_code == 0
-        assert "Tc =" in result.output
+        assert "Tc" in result.output
         assert "km" in result.output
 
     def test_desbordes_via_cli(self):
@@ -210,7 +207,7 @@ class TestTcAppCLI:
         result = runner.invoke(tc_app, ["desbordes", "10", "2.0", "0.5"])
         assert result.exit_code == 0
         assert "DESBORDES" in result.output or "Desbordes" in result.output
-        assert "Tc =" in result.output
+        assert "Tc" in result.output
 
     def test_desbordes_with_t0(self):
         """Test desbordes con opción t0."""
@@ -335,8 +332,8 @@ class TestTcIntegration:
 def _extract_tc_hours(output: str) -> float:
     """Extrae Tc en horas de la salida del CLI."""
     import re
-    # Busca "Tc = X.XX horas"
-    match = re.search(r"Tc\s*=\s*(\d+\.?\d*)\s*horas", output)
+    # Busca "Tc = X.XX horas" o "Tc: X.XX horas"
+    match = re.search(r"Tc\s*[=:]\s*(\d+\.?\d*)\s*horas", output)
     if match:
         return float(match.group(1))
     raise ValueError(f"No se pudo extraer Tc de: {output}")

@@ -14,6 +14,7 @@ from hidropluvial.core import (
     generate_hyetograph,
     generate_hyetograph_dinagua,
 )
+from hidropluvial.cli.theme import print_header, print_field, print_separator
 
 # Crear sub-aplicación
 storm_app = typer.Typer(help="Generación de tormentas de diseño")
@@ -54,21 +55,19 @@ def storm_uruguay(
             json.dump(result.model_dump(), f, indent=2)
         typer.echo(f"Hietograma guardado en {output}")
     else:
-        typer.echo(f"\n{'='*50}")
-        typer.echo(f"  HIETOGRAMA DINAGUA URUGUAY")
-        typer.echo(f"{'='*50}")
-        typer.echo(f"  P3,10 base:        {p3_10:>10.1f} mm")
-        typer.echo(f"  Período retorno:   {return_period:>10} años")
-        typer.echo(f"  Duración:          {duration:>10.2f} hr")
-        typer.echo(f"  Intervalo dt:      {dt:>10.1f} min")
+        print_header("HIETOGRAMA DINAGUA URUGUAY")
+        print_field("P3,10 base", f"{p3_10:.1f}", "mm")
+        print_field("Periodo retorno", f"{return_period}", "anos")
+        print_field("Duracion", f"{duration:.2f}", "hr")
+        print_field("Intervalo dt", f"{dt:.1f}", "min")
         if area:
-            typer.echo(f"  Área cuenca:       {area:>10.1f} km²")
-        typer.echo(f"  Método:            {result.method:>10}")
-        typer.echo(f"{'='*50}")
-        typer.echo(f"  Precipitación:     {result.total_depth_mm:>10.2f} mm")
-        typer.echo(f"  Intensidad pico:   {result.peak_intensity_mmhr:>10.2f} mm/hr")
-        typer.echo(f"  Intervalos:        {len(result.time_min):>10}")
-        typer.echo(f"{'='*50}\n")
+            print_field("Area cuenca", f"{area:.1f}", "km2")
+        print_field("Metodo", result.method)
+        print_separator()
+        print_field("Precipitacion", f"{result.total_depth_mm:.2f}", "mm")
+        print_field("Intensidad pico", f"{result.peak_intensity_mmhr:.2f}", "mm/hr")
+        print_field("Intervalos", f"{len(result.time_min)}")
+        print_separator()
 
 
 @storm_app.command("bimodal")
@@ -136,23 +135,21 @@ def storm_bimodal_uy(
             json.dump(result.model_dump(), f, indent=2)
         typer.echo(f"Hietograma guardado en {output}")
     else:
-        typer.echo(f"\n{'='*55}")
-        typer.echo(f"  HIETOGRAMA BIMODAL DINAGUA")
-        typer.echo(f"{'='*55}")
-        typer.echo(f"  P3,10 base:        {p3_10:>10.1f} mm")
-        typer.echo(f"  Periodo retorno:   {return_period:>10} anos")
-        typer.echo(f"  Duracion:          {duration:>10.1f} hr")
-        typer.echo(f"  Intervalo dt:      {dt:>10.1f} min")
-        typer.echo(f"  Pico 1:            {peak1*100:>10.0f} %")
-        typer.echo(f"  Pico 2:            {peak2*100:>10.0f} %")
-        typer.echo(f"  Split volumen:     {split*100:.0f}% / {(1-split)*100:.0f}%")
+        print_header("HIETOGRAMA BIMODAL DINAGUA")
+        print_field("P3,10 base", f"{p3_10:.1f}", "mm")
+        print_field("Periodo retorno", f"{return_period}", "anos")
+        print_field("Duracion", f"{duration:.1f}", "hr")
+        print_field("Intervalo dt", f"{dt:.1f}", "min")
+        print_field("Pico 1", f"{peak1*100:.0f}", "%")
+        print_field("Pico 2", f"{peak2*100:.0f}", "%")
+        print_field("Split volumen", f"{split*100:.0f}% / {(1-split)*100:.0f}%")
         if area:
-            typer.echo(f"  Area cuenca:       {area:>10.1f} km2")
-        typer.echo(f"{'='*55}")
-        typer.echo(f"  Precipitacion:     {result.total_depth_mm:>10.2f} mm")
-        typer.echo(f"  Intensidad pico:   {result.peak_intensity_mmhr:>10.2f} mm/hr")
-        typer.echo(f"  Intervalos:        {len(result.time_min):>10}")
-        typer.echo(f"{'='*55}\n")
+            print_field("Area cuenca", f"{area:.1f}", "km2")
+        print_separator()
+        print_field("Precipitacion", f"{result.total_depth_mm:.2f}", "mm")
+        print_field("Intensidad pico", f"{result.peak_intensity_mmhr:.2f}", "mm/hr")
+        print_field("Intervalos", f"{len(result.time_min)}")
+        print_separator()
 
 
 @storm_app.command("gz")
@@ -189,21 +186,19 @@ def storm_gz(
             json.dump(result.model_dump(), f, indent=2)
         typer.echo(f"Hietograma guardado en {output}")
     else:
-        typer.echo(f"\n{'='*55}")
-        typer.echo(f"  HIETOGRAMA GZ - TORMENTA 6 HORAS (PICO ADELANTADO)")
-        typer.echo(f"{'='*55}")
-        typer.echo(f"  P3,10 base:        {p3_10:>10.1f} mm")
-        typer.echo(f"  Periodo retorno:   {return_period:>10} anos")
-        typer.echo(f"  Duracion:          {duration:>10.1f} hr")
-        typer.echo(f"  Intervalo dt:      {dt:>10.1f} min")
-        typer.echo(f"  Pico en:           {'1ra hora':>10}")
+        print_header("HIETOGRAMA GZ - TORMENTA 6 HORAS (PICO ADELANTADO)")
+        print_field("P3,10 base", f"{p3_10:.1f}", "mm")
+        print_field("Periodo retorno", f"{return_period}", "anos")
+        print_field("Duracion", f"{duration:.1f}", "hr")
+        print_field("Intervalo dt", f"{dt:.1f}", "min")
+        print_field("Pico en", "1ra hora")
         if area:
-            typer.echo(f"  Area cuenca:       {area:>10.1f} km2")
-        typer.echo(f"{'='*55}")
-        typer.echo(f"  Precipitacion:     {result.total_depth_mm:>10.2f} mm")
-        typer.echo(f"  Intensidad pico:   {result.peak_intensity_mmhr:>10.2f} mm/hr")
-        typer.echo(f"  Intervalos:        {len(result.time_min):>10}")
-        typer.echo(f"{'='*55}\n")
+            print_field("Area cuenca", f"{area:.1f}", "km2")
+        print_separator()
+        print_field("Precipitacion", f"{result.total_depth_mm:.2f}", "mm")
+        print_field("Intensidad pico", f"{result.peak_intensity_mmhr:.2f}", "mm/hr")
+        print_field("Intervalos", f"{len(result.time_min)}")
+        print_separator()
 
 
 # ============================================================================

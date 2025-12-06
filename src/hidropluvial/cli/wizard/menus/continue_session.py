@@ -64,7 +64,7 @@ class ContinueSessionMenu(BaseMenu):
                 "Que deseas hacer?",
                 choices=[
                     "Ver tabla resumen",
-                    "Ver hidrogramas (navegacion interactiva)",
+                    "Ver fichas de analisis (navegacion interactiva)",
                     "Comparar hidrogramas",
                     "Ver hietograma",
                     "Agregar mas analisis",
@@ -95,21 +95,13 @@ class ContinueSessionMenu(BaseMenu):
 
     def _show_session_header(self) -> None:
         """Muestra encabezado con info de la sesion."""
-        self.echo(f"\n{'='*60}")
-        self.echo(f"  SESION: {self.session.name} [{self.session.id}]")
-        self.echo(f"{'='*60}")
-        self.echo(f"  Cuenca: {self.session.cuenca.area_ha} ha, S={self.session.cuenca.slope_pct}%")
-        self.echo(f"  Analisis: {len(self.session.analyses)}")
-        if self.session.analyses:
-            trs = sorted(set(a.storm.return_period for a in self.session.analyses))
-            self.echo(f"  Periodos de retorno: {trs}")
-        self.echo(f"{'='*60}\n")
+        self.session_info(self.session)
 
     def _handle_action(self, action: str) -> None:
         """Maneja la accion seleccionada."""
         if "tabla" in action.lower():
             self._show_table()
-        elif "navegacion" in action.lower():
+        elif "fichas" in action.lower():
             self._show_interactive_viewer()
         elif "Comparar" in action:
             self._compare_hydrographs()
@@ -142,13 +134,8 @@ class ContinueSessionMenu(BaseMenu):
         self._safe_call(session_preview, self.session.id, analysis_idx=None, compare=False)
 
     def _show_interactive_viewer(self) -> None:
-        """Muestra visor interactivo de hidrogramas."""
-        if not self.session.analyses:
-            self.echo("  No hay analisis disponibles.")
-            return
-
-        from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
-        interactive_hydrograph_viewer(self.session.analyses, self.session.name)
+        """Muestra visor interactivo de fichas de analisis."""
+        self.show_analysis_cards()
 
     def _compare_hydrographs(self) -> None:
         """Compara hidrogramas con opcion de seleccionar cuales."""

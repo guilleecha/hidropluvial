@@ -50,7 +50,7 @@ class TestIDFUruguay:
         )
 
         captured = capsys.readouterr()
-        assert "50.0 km2" in captured.out
+        assert "50.0 km²" in captured.out
 
     def test_shows_factors(self, capsys):
         """Test muestra factores CT y CA."""
@@ -153,7 +153,8 @@ class TestIDFDepartamentos:
         idf_departamentos()
 
         captured = capsys.readouterr()
-        assert "P3,10 por departamento" in captured.out
+        # Case-insensitive check (output may use "Departamento")
+        assert "p3,10 por departamento" in captured.out.lower()
         assert "mm" in captured.out
         # Verificar algunos departamentos conocidos
         assert "Montevideo" in captured.out or "montevideo" in captured.out.lower()

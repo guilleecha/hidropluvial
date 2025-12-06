@@ -11,6 +11,7 @@ import typer
 import questionary
 
 from hidropluvial.cli.wizard.styles import WIZARD_STYLE
+from hidropluvial.cli.theme import print_step, print_info, print_warning, print_note
 
 
 class StepResult(Enum):
@@ -150,16 +151,40 @@ class WizardNavigator:
 
     def __init__(self, steps: list[WizardStep] = None, state: WizardState = None):
         self.state = state or WizardState()
-        self.steps: list[WizardStep] = steps or []
+        self.steps: list[WizardStep] = steps if steps is not None else self._default_steps()
         self.current_step = 0
+
+    def _default_steps(self) -> list[WizardStep]:
+        """Crea los pasos por defecto del wizard."""
+        from hidropluvial.cli.wizard.steps.datos_cuenca import (
+            StepNombre,
+            StepDatosCuenca,
+            StepLongitud,
+        )
+        from hidropluvial.cli.wizard.steps.escorrentia import StepMetodoEscorrentia
+        from hidropluvial.cli.wizard.steps.tc_tormenta import (
+            StepMetodosTc,
+            StepTormenta,
+            StepSalida,
+        )
+
+        return [
+            StepNombre(self.state),
+            StepDatosCuenca(self.state),
+            StepLongitud(self.state),
+            StepMetodoEscorrentia(self.state),
+            StepMetodosTc(self.state),
+            StepTormenta(self.state),
+            StepSalida(self.state),
+        ]
 
     def run(self) -> Optional[WizardState]:
         """Ejecuta el wizard con navegación."""
         while 0 <= self.current_step < len(self.steps):
             step = self.steps[self.current_step]
 
-            # Mostrar progreso
-            typer.echo(f"\n  [Paso {self.current_step + 1}/{len(self.steps)}]")
+            # Mostrar progreso con estilo
+            print_step(self.current_step + 1, len(self.steps), step.title)
 
             result = step.execute()
 
@@ -168,11 +193,11 @@ class WizardNavigator:
             elif result == StepResult.BACK:
                 if self.current_step > 0:
                     self.current_step -= 1
-                    typer.echo("\n  << Volviendo al paso anterior...")
+                    print_info("<< Volviendo al paso anterior...")
                 else:
-                    typer.echo("\n  (Ya estás en el primer paso)")
+                    print_note("Ya estás en el primer paso")
             elif result == StepResult.CANCEL:
-                typer.echo("\n  Wizard cancelado.")
+                print_warning("Wizard cancelado")
                 return None
 
         if self.current_step >= len(self.steps):

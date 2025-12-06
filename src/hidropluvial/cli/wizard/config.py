@@ -402,7 +402,10 @@ class WizardConfig:
     def _calculate_weighted_c(self, table_key: str) -> Optional[float]:
         """Calcula C ponderado interactivamente y guarda datos para recálculo."""
         from hidropluvial.core.coefficients import (
-            C_TABLES, ChowCEntry, FHWACEntry, format_c_table, weighted_c
+            C_TABLES, ChowCEntry, FHWACEntry, weighted_c
+        )
+        from hidropluvial.cli.theme import (
+            print_c_table_chow, print_c_table_fhwa, print_c_table_simple, print_info
         )
 
         table_name, table_data = C_TABLES[table_key]
@@ -415,12 +418,13 @@ class WizardConfig:
         tr = 2 if is_chow else 10
 
         if is_chow:
-            # Mostrar tabla en modo selección (Tr2 seleccionable, otros referencia)
-            typer.echo(format_c_table(table_data, table_name, tr, selection_mode=True))
+            print_c_table_chow(table_data, table_name, selection_mode=True)
+        elif is_fhwa:
+            print_c_table_fhwa(table_data, table_name, tr=tr)
         else:
-            typer.echo(format_c_table(table_data, table_name, tr))
+            print_c_table_simple(table_data, table_name)
 
-        typer.echo(f"\n  Area de la cuenca: {self.area_ha} ha")
+        print_info(f"Área de la cuenca: {self.area_ha} ha")
         typer.echo("  Asigna coberturas. Presiona Enter sin valor para terminar.\n")
 
         # Guardamos áreas, coeficientes e índices de tabla
@@ -574,7 +578,8 @@ class WizardConfig:
 
     def _calculate_weighted_cn(self) -> Optional[int]:
         """Calcula CN ponderado interactivamente, permitiendo mezclar tablas."""
-        from hidropluvial.core.coefficients import CN_TABLES, format_cn_table, weighted_cn
+        from hidropluvial.core.coefficients import CN_TABLES, weighted_cn
+        from hidropluvial.cli.theme import print_cn_table
 
         # Solicitar grupo de suelo
         soil = questionary.select(
@@ -665,7 +670,7 @@ class WizardConfig:
 
             # Mostrar tabla si cambio
             if current_table != table_key:
-                typer.echo(format_cn_table(table_data, table_name))
+                print_cn_table(table_data, table_name)
                 current_table = table_key
 
             # Seleccionar cobertura de la tabla elegida

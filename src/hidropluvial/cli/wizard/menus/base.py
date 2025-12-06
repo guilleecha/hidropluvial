@@ -11,6 +11,10 @@ import questionary
 from hidropluvial.cli.session.base import get_session_manager
 from hidropluvial.cli.wizard.styles import WIZARD_STYLE
 from hidropluvial.session import Session, SessionManager
+from hidropluvial.cli.theme import (
+    print_header, print_section, print_success, print_warning,
+    print_error, print_info, print_note, print_basin_info, print_project_info,
+)
 
 
 class BaseMenu(ABC):
@@ -40,11 +44,83 @@ class BaseMenu(ABC):
         """Wrapper para typer.echo."""
         typer.echo(message)
 
-    def header(self, title: str, width: int = 65) -> None:
-        """Muestra un encabezado formateado."""
-        self.echo(f"\n{'='*width}")
-        self.echo(f"  {title}")
-        self.echo(f"{'='*width}")
+    def header(self, title: str, subtitle: str = None) -> None:
+        """Muestra un encabezado formateado con estilo."""
+        print_header(title, subtitle)
+
+    def section(self, title: str) -> None:
+        """Muestra título de sección."""
+        print_section(title)
+
+    def success(self, message: str) -> None:
+        """Muestra mensaje de éxito."""
+        print_success(message)
+
+    def warning(self, message: str) -> None:
+        """Muestra advertencia."""
+        print_warning(message)
+
+    def error(self, message: str) -> None:
+        """Muestra error."""
+        print_error(message)
+
+    def info(self, message: str) -> None:
+        """Muestra información."""
+        print_info(message)
+
+    def note(self, message: str) -> None:
+        """Muestra nota destacada."""
+        print_note(message)
+
+    def basin_info(self, basin, project_name: str = None) -> None:
+        """Muestra información de cuenca en panel estilizado."""
+        trs = None
+        if hasattr(basin, 'analyses') and basin.analyses:
+            trs = sorted(set(a.storm.return_period for a in basin.analyses))
+
+        print_basin_info(
+            basin_name=basin.name,
+            basin_id=basin.id,
+            project_name=project_name,
+            area_ha=basin.area_ha,
+            slope_pct=basin.slope_pct,
+            n_analyses=len(basin.analyses) if hasattr(basin, 'analyses') else None,
+            return_periods=trs,
+            c=basin.c if hasattr(basin, 'c') else None,
+            cn=basin.cn if hasattr(basin, 'cn') else None,
+        )
+
+    def project_info(self, project) -> None:
+        """Muestra información de proyecto en panel estilizado."""
+        n_analyses = sum(len(b.analyses) for b in project.basins) if project.basins else 0
+
+        print_project_info(
+            project_name=project.name,
+            project_id=project.id,
+            n_basins=len(project.basins) if project.basins else 0,
+            n_analyses=n_analyses,
+            description=project.description if hasattr(project, 'description') else None,
+            author=project.author if hasattr(project, 'author') else None,
+            location=project.location if hasattr(project, 'location') else None,
+        )
+
+    def session_info(self, session) -> None:
+        """Muestra información de sesión en panel estilizado."""
+        trs = None
+        if hasattr(session, 'analyses') and session.analyses:
+            trs = sorted(set(a.storm.return_period for a in session.analyses))
+
+        cuenca = session.cuenca
+        print_basin_info(
+            basin_name=session.name,
+            basin_id=session.id,
+            area_ha=cuenca.area_ha if cuenca else None,
+            slope_pct=cuenca.slope_pct if cuenca else None,
+            n_analyses=len(session.analyses) if hasattr(session, 'analyses') else None,
+            return_periods=trs,
+            c=cuenca.c if cuenca and hasattr(cuenca, 'c') else None,
+            cn=cuenca.cn if cuenca and hasattr(cuenca, 'cn') else None,
+        )
 
     def select(self, message: str, choices: list[str]) -> Optional[str]:
         """Muestra un menu de seleccion."""
@@ -125,3 +201,23 @@ class SessionMenu(BaseMenu):
     def reload_session(self) -> None:
         """Recarga la sesion desde el manager."""
         self._session = self.manager.get_session(self._session.id)
+
+    def show_analysis_cards(self, analyses: list = None, name: str = None) -> None:
+        """
+        Muestra el visor interactivo de fichas de analisis.
+
+        Args:
+            analyses: Lista de analisis (default: self.session.analyses)
+            name: Nombre a mostrar (default: self.session.name)
+        """
+        if analyses is None:
+            analyses = self.session.analyses
+        if name is None:
+            name = self.session.name
+
+        if not analyses:
+            self.echo("  No hay analisis disponibles.")
+            return
+
+        from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
+        interactive_hydrograph_viewer(analyses, name)

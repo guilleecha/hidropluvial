@@ -170,19 +170,24 @@ class StepMetodoEscorrentia(WizardStep):
     def _calculate_weighted_c(self, table_key: str) -> Optional[float]:
         """Calcula C ponderado (versión simplificada)."""
         from hidropluvial.core.coefficients import (
-            C_TABLES, ChowCEntry, FHWACEntry, format_c_table, weighted_c
+            C_TABLES, ChowCEntry, FHWACEntry, weighted_c
+        )
+        from hidropluvial.cli.theme import (
+            print_c_table_chow, print_c_table_fhwa, print_c_table_simple
         )
 
         table_name, table_data = C_TABLES[table_key]
         first_entry = table_data[0]
         is_chow = isinstance(first_entry, ChowCEntry)
         is_fhwa = isinstance(first_entry, FHWACEntry)
-        tr = 2 if is_chow else 10
 
+        # Mostrar tabla con formato Rich
         if is_chow:
-            typer.echo(format_c_table(table_data, table_name, tr, selection_mode=True))
+            print_c_table_chow(table_data, table_name, selection_mode=True)
+        elif is_fhwa:
+            print_c_table_fhwa(table_data, table_name, tr=10)
         else:
-            typer.echo(format_c_table(table_data, table_name, tr))
+            print_c_table_simple(table_data, table_name)
 
         self.echo(f"\n  Área de la cuenca: {self.state.area_ha} ha")
         self.echo("  Asigna coberturas. Selecciona '<< Volver' para cancelar.\n")
@@ -420,7 +425,8 @@ class StepMetodoEscorrentia(WizardStep):
 
     def _calculate_weighted_cn(self) -> Optional[int]:
         """Calcula CN ponderado (versión simplificada)."""
-        from hidropluvial.core.coefficients import CN_TABLES, format_cn_table, weighted_cn
+        from hidropluvial.core.coefficients import CN_TABLES, weighted_cn
+        from hidropluvial.cli.theme import print_cn_table
 
         res, soil = self.select(
             "Grupo hidrológico de suelo:",
@@ -502,7 +508,7 @@ class StepMetodoEscorrentia(WizardStep):
             table_name, table_data = CN_TABLES[table_key]
 
             if current_table != table_key:
-                typer.echo(format_cn_table(table_data, table_name))
+                print_cn_table(table_data, table_name)
                 current_table = table_key
 
             choices = []

@@ -133,28 +133,12 @@ class ProjectManagementMenu(BaseMenu):
         if not project:
             return
 
-        self.echo(f"\n{'='*55}")
-        self.echo(f"  PROYECTO: {project.name}")
-        self.echo(f"{'='*55}")
-        self.echo(f"  ID: {project.id}")
-        if project.description:
-            self.echo(f"  Descripcion: {project.description}")
-        if project.author:
-            self.echo(f"  Autor: {project.author}")
-        if project.location:
-            self.echo(f"  Ubicacion: {project.location}")
-        self.echo(f"  Cuencas: {project.n_basins}")
-        self.echo(f"  Total analisis: {project.total_analyses}")
+        self.project_info(project)
 
         if project.basins:
-            self.echo(f"\n  Cuencas del proyecto:")
-            self.echo(f"  {'-'*50}")
+            self.section("Cuencas del proyecto")
             for b in project.basins:
-                self.echo(f"    [{b.id}] {b.name}")
-                self.echo(f"           Area: {b.area_ha} ha, S: {b.slope_pct}%")
-                self.echo(f"           Analisis: {len(b.analyses)}")
-
-        self.echo(f"{'='*55}\n")
+                self.basin_info(b, project.name)
 
     def _manage_basins(self, projects: list[dict]) -> None:
         """Abre el menu de gestion de cuencas de un proyecto."""

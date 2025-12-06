@@ -7,6 +7,11 @@ from typing import Annotated, Optional
 import typer
 
 from hidropluvial.project import ProjectManager, Project
+from hidropluvial.cli.theme import (
+    print_project_info, print_basin_info, print_success, print_error,
+    print_info, print_projects_table, print_basins_detail_table,
+    get_console,
+)
 
 
 # Instancia global del gestor de proyectos
@@ -45,16 +50,17 @@ def project_create(
         location=location or "",
     )
 
-    typer.echo(f"\n  Proyecto creado:")
-    typer.echo(f"    ID:          {project.id}")
-    typer.echo(f"    Nombre:      {project.name}")
-    if project.description:
-        typer.echo(f"    Descripción: {project.description}")
-    if project.author:
-        typer.echo(f"    Autor:       {project.author}")
-    if project.location:
-        typer.echo(f"    Ubicación:   {project.location}")
-    typer.echo(f"\n  Usa 'hp project basin-add {project.id}' para agregar cuencas.\n")
+    print_success("Proyecto creado")
+    print_project_info(
+        project_name=project.name,
+        project_id=project.id,
+        description=project.description,
+        author=project.author,
+        location=project.location,
+        n_basins=0,
+        n_analyses=0,
+    )
+    print_info(f"Usa 'hp project basin-add {project.id}' para agregar cuencas.")
 
 
 def project_list() -> None:
@@ -67,21 +73,14 @@ def project_list() -> None:
     projects = manager.list_projects()
 
     if not projects:
-        typer.echo("\n  No hay proyectos guardados.")
-        typer.echo("  Usa 'hp project create <nombre>' para crear uno nuevo.\n")
+        print_info("No hay proyectos guardados.")
+        print_info("Usa 'hp project create <nombre>' para crear uno nuevo.")
         return
 
-    typer.echo(f"\n{'='*70}")
-    typer.echo(f"  PROYECTOS DISPONIBLES ({len(projects)})")
-    typer.echo(f"{'='*70}")
-    typer.echo(f"  {'ID':<10} {'Nombre':<30} {'Cuencas':>8} {'Análisis':>10}")
-    typer.echo(f"  {'-'*65}")
-
-    for p in projects:
-        name = p['name'][:29] if len(p['name']) > 29 else p['name']
-        typer.echo(f"  {p['id']:<10} {name:<30} {p['n_basins']:>8} {p['total_analyses']:>10}")
-
-    typer.echo(f"{'='*70}\n")
+    console = get_console()
+    console.print()
+    print_projects_table(projects, title=f"Proyectos Disponibles ({len(projects)})")
+    console.print()
 
 
 def project_show(
@@ -96,43 +95,29 @@ def project_show(
     project = manager.get_project(project_id)
 
     if project is None:
-        typer.echo(f"\n  Error: Proyecto '{project_id}' no encontrado.\n")
+        print_error(f"Proyecto '{project_id}' no encontrado.")
         raise typer.Exit(1)
 
-    typer.echo(f"\n{'='*70}")
-    typer.echo(f"  PROYECTO: {project.name}")
-    typer.echo(f"{'='*70}")
-    typer.echo(f"  ID:          {project.id}")
-    typer.echo(f"  Creado:      {project.created_at[:10]}")
-    typer.echo(f"  Modificado:  {project.updated_at[:10]}")
+    console = get_console()
+    console.print()
 
-    if project.description:
-        typer.echo(f"  Descripción: {project.description}")
-    if project.author:
-        typer.echo(f"  Autor:       {project.author}")
-    if project.location:
-        typer.echo(f"  Ubicación:   {project.location}")
-    if project.tags:
-        typer.echo(f"  Tags:        {', '.join(project.tags)}")
-    if project.notes:
-        typer.echo(f"  Notas:       {project.notes}")
+    print_project_info(
+        project_name=project.name,
+        project_id=project.id,
+        n_basins=project.n_basins,
+        n_analyses=project.total_analyses,
+        description=project.description,
+        author=project.author,
+        location=project.location,
+    )
 
-    typer.echo(f"\n  CUENCAS ({project.n_basins}):")
-    typer.echo(f"  {'-'*65}")
-
-    if not project.basins:
-        typer.echo("  (sin cuencas)")
+    if project.basins:
+        console.print()
+        print_basins_detail_table(project.basins, title=f"Cuencas ({project.n_basins})")
     else:
-        typer.echo(f"  {'ID':<10} {'Nombre':<25} {'Área(ha)':>10} {'Pend(%)':>8} {'Análisis':>10}")
-        typer.echo(f"  {'-'*65}")
-        for basin in project.basins:
-            name = basin.name[:24] if len(basin.name) > 24 else basin.name
-            typer.echo(
-                f"  {basin.id:<10} {name:<25} {basin.area_ha:>10.1f} "
-                f"{basin.slope_pct:>8.1f} {len(basin.analyses):>10}"
-            )
+        print_info("(sin cuencas)")
 
-    typer.echo(f"{'='*70}\n")
+    console.print()
 
 
 def project_delete(

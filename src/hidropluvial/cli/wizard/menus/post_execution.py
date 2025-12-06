@@ -47,7 +47,7 @@ class PostExecutionMenu(SessionMenu):
                 "Que deseas hacer ahora?",
                 choices=[
                     "Ver tabla resumen",
-                    "Ver hidrogramas (navegacion interactiva)",
+                    "Ver fichas de analisis (navegacion interactiva)",
                     "Comparar hidrogramas",
                     "Ver hietograma",
                     "Filtrar resultados",
@@ -61,31 +61,22 @@ class PostExecutionMenu(SessionMenu):
             )
 
             if action is None or "Salir" in action:
-                self.echo(f"\n  Cuenca guardada: {self.basin.id}")
-                self.echo(f"  Proyecto: {self.project.name} [{self.project.id}]")
-                self.echo(f"  Usa 'hp session summary {self.session.id}' para ver resultados.\n")
+                self.success(f"Cuenca guardada: {self.basin.id}")
+                self.info(f"Proyecto: {self.project.name} [{self.project.id}]")
+                self.note(f"Usa 'hp session summary {self.session.id}' para ver resultados")
                 break
 
             self._handle_action(action)
 
     def _show_session_header(self) -> None:
         """Muestra encabezado con info de la sesion/cuenca."""
-        self.echo(f"\n{'='*60}")
-        self.echo(f"  CUENCA: {self.basin.name} [{self.basin.id}]")
-        self.echo(f"  Proyecto: {self.project.name}")
-        self.echo(f"{'='*60}")
-        self.echo(f"  Area: {self.basin.area_ha} ha, S={self.basin.slope_pct}%")
-        self.echo(f"  Analisis: {len(self.basin.analyses)}")
-        if self.basin.analyses:
-            trs = sorted(set(a.storm.return_period for a in self.basin.analyses))
-            self.echo(f"  Periodos de retorno: {trs}")
-        self.echo(f"{'='*60}\n")
+        self.basin_info(self.basin, self.project.name)
 
     def _handle_action(self, action: str) -> None:
         """Maneja la accion seleccionada."""
         if "tabla" in action.lower():
             self._show_table()
-        elif "navegacion" in action.lower():
+        elif "fichas" in action.lower():
             self._show_interactive_viewer()
         elif "Comparar" in action:
             self._compare_hydrographs()
@@ -178,13 +169,8 @@ class PostExecutionMenu(SessionMenu):
         return ",".join(indices)
 
     def _show_interactive_viewer(self) -> None:
-        """Muestra visor interactivo de hidrogramas."""
-        if not self.session.analyses:
-            self.echo("  No hay analisis disponibles.")
-            return
-
-        from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
-        interactive_hydrograph_viewer(self.session.analyses, self.session.name)
+        """Muestra visor interactivo de fichas de analisis."""
+        self.show_analysis_cards()
 
     def _show_hyetograph(self) -> None:
         """Muestra hietograma de un analisis."""

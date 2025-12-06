@@ -40,7 +40,7 @@ class ContinueProjectMenu(BaseMenu):
         if sel_type == "project":
             self.project = self.project_manager.get_project(sel_id)
             if not self.project:
-                self.echo(f"\n  Error: No se pudo cargar el proyecto {sel_id}\n")
+                self.error(f"No se pudo cargar el proyecto {sel_id}")
                 return
             self._show_project_menu()
 
@@ -48,7 +48,7 @@ class ContinueProjectMenu(BaseMenu):
             # Cargar sesion legacy como Basin
             session = self.manager.get_session(sel_id)
             if not session:
-                self.echo(f"\n  Error: No se pudo cargar la sesion {sel_id}\n")
+                self.error(f"No se pudo cargar la sesión {sel_id}")
                 return
             # Convertir a Basin
             self.basin = Basin.from_session(session)
@@ -204,8 +204,11 @@ class ContinueProjectMenu(BaseMenu):
         if not self.confirm("\nEjecutar analisis?", default=True):
             return
 
-        runner = AnalysisRunner(config)
-        _, basin = runner.run()
+        runner = AnalysisRunner(config, project_id=self.project.id)
+        updated_project, basin = runner.run()
+
+        # Actualizar referencia local al proyecto
+        self.project = updated_project
 
         self.echo(f"\n  Cuenca '{basin.name}' agregada al proyecto.\n")
 
@@ -238,7 +241,7 @@ class ContinueProjectMenu(BaseMenu):
                 self.echo(f"\n  Proyecto {self.project.id} eliminado.\n")
                 return True
             else:
-                self.echo("\n  Error al eliminar proyecto.\n")
+                self.error("No se pudo eliminar el proyecto")
         return False
 
     # ========================================================================
@@ -338,7 +341,7 @@ class ContinueProjectMenu(BaseMenu):
         if n > 2:
             mode = self.select(
                 "Que hidrogramas comparar?",
-                choices=["Todos", "Seleccionar cuales", "Cancelar"],
+                choices=["Todos", "Seleccionar cuales", "← Cancelar"],
             )
 
             if mode is None or "Cancelar" in mode:
@@ -436,7 +439,7 @@ class ContinueProjectMenu(BaseMenu):
             choices=[
                 f"Periodo de retorno: {tr_values}",
                 f"Metodo Tc: {tc_methods}",
-                "Cancelar",
+                "← Cancelar",
             ],
         )
 
@@ -501,5 +504,5 @@ class ContinueProjectMenu(BaseMenu):
                 if self.manager.delete(self.basin.id):
                     self.echo(f"\n  Cuenca {self.basin.id} eliminada.\n")
                     return True
-            self.echo("\n  Error al eliminar cuenca.\n")
+            self.error("No se pudo eliminar la cuenca")
         return False

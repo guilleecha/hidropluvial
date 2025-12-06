@@ -47,7 +47,7 @@ class ExportMenu(SessionMenu):
                 "Excel (.xlsx) - Tabla con todos los datos",
                 "Reporte LaTeX (.tex) - Documento tecnico",
                 "Ambos formatos",
-                "Cancelar",
+                "← Cancelar",
             ],
         )
 
@@ -177,7 +177,7 @@ class ExportMenu(SessionMenu):
             self.echo(f"\n  Excel exportado: {output_path.name}")
 
         except Exception as e:
-            self.echo(f"\n  Error al exportar Excel: {e}")
+            self.error(f"Error al exportar Excel: {e}")
 
     def _export_latex(self, output_dir: Path, base_name: str, selected_indices: Optional[list[int]]) -> None:
         """Exporta a LaTeX con filtrado opcional."""
@@ -197,7 +197,7 @@ class ExportMenu(SessionMenu):
         except SystemExit:
             pass  # Capturar typer.Exit
         except Exception as e:
-            self.echo(f"\n  Error al generar reporte: {e}")
+            self.error(f"Error al generar reporte: {e}")
         finally:
             os.chdir(original_dir)
 
@@ -336,11 +336,11 @@ class ExportBasinSelector(BaseMenu):
             f"{s['id']} - {s['name']} ({s['n_analyses']} analisis)"
             for s in sessions_with_analyses
         ]
-        choices.append("Cancelar")
+        choices.append("← Cancelar")
 
         choice = self.select("Selecciona sesion a exportar:", choices)
 
-        if choice is None or choice == "Cancelar":
+        if choice is None or "Cancelar" in choice:
             return
 
         session_id = choice.split(" - ")[0]

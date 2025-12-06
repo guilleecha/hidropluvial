@@ -715,6 +715,7 @@ def print_c_table_simple(
 def print_cn_table(
     table: list["CNEntry"],
     title: str = "Tabla SCS - Curva Número",
+    highlight_group: str = None,
 ) -> None:
     """
     Imprime tabla de CN con formato Rich.
@@ -722,57 +723,100 @@ def print_cn_table(
     Args:
         table: Lista de CNEntry
         title: Título de la tabla
+        highlight_group: Grupo de suelo a resaltar (A, B, C, D)
     """
     from hidropluvial.cli.theme.styled import styled_note_box
 
     console = get_console()
     p = get_palette()
 
-    rich_table = Table(
-        title=title,
-        title_style=f"bold {p.table_header}",
-        border_style=p.border,
-        header_style=f"bold {p.secondary}",
-        box=box.ROUNDED,
-        show_header=True,
-        padding=(0, 1),
-    )
+    # Determinar estilos de columnas según grupo resaltado
+    style_a = f"bold {p.table_highlight}" if highlight_group == "A" else p.muted
+    style_b = f"bold {p.table_highlight}" if highlight_group == "B" else p.muted
+    style_c = f"bold {p.table_highlight}" if highlight_group == "C" else p.muted
+    style_d = f"bold {p.table_highlight}" if highlight_group == "D" else p.muted
 
-    rich_table.add_column("#", justify="right", style=p.muted, width=3)
-    rich_table.add_column("Categoria", justify="left", style=p.table_category)
-    rich_table.add_column("Descripcion", justify="left")
-    rich_table.add_column("Cond.", justify="center", style=p.muted)
-    rich_table.add_column("A", justify="right", style=p.number)
-    rich_table.add_column("B", justify="right", style=f"bold {p.table_highlight}")
-    rich_table.add_column("C", justify="right", style=p.number)
-    rich_table.add_column("D", justify="right", style=p.number)
-
-    current_category = ""
-    for i, entry in enumerate(table):
-        if entry.category != current_category and current_category:
-            rich_table.add_row(*[""] * 8)
-        current_category = entry.category
-
-        rich_table.add_row(
-            str(i + 1),
-            entry.category,
-            entry.description,
-            entry.condition[:3] if entry.condition != "N/A" else "-",
-            str(entry.cn_a),
-            str(entry.cn_b),
-            str(entry.cn_c),
-            str(entry.cn_d),
+    # Si hay grupo resaltado, mostrar tabla simplificada con solo esa columna
+    if highlight_group:
+        rich_table = Table(
+            title=f"{title} (Suelo {highlight_group})",
+            title_style=f"bold {p.table_header}",
+            border_style=p.border,
+            header_style=f"bold {p.secondary}",
+            box=box.ROUNDED,
+            show_header=True,
+            padding=(0, 1),
         )
+
+        rich_table.add_column("#", justify="right", style=p.muted, width=3)
+        rich_table.add_column("Categoría", justify="left", style=p.table_category)
+        rich_table.add_column("Descripción", justify="left")
+        rich_table.add_column("Cond.", justify="center", style=p.muted)
+        rich_table.add_column(f"CN ({highlight_group})", justify="right", style=f"bold {p.number}")
+
+        current_category = ""
+        for i, entry in enumerate(table):
+            if entry.category != current_category and current_category:
+                rich_table.add_row(*[""] * 5)
+            current_category = entry.category
+
+            cn_val = entry.get_cn(highlight_group)
+            rich_table.add_row(
+                str(i + 1),
+                entry.category,
+                entry.description,
+                entry.condition[:3] if entry.condition != "N/A" else "-",
+                str(cn_val),
+            )
+    else:
+        # Tabla completa con todos los grupos
+        rich_table = Table(
+            title=title,
+            title_style=f"bold {p.table_header}",
+            border_style=p.border,
+            header_style=f"bold {p.secondary}",
+            box=box.ROUNDED,
+            show_header=True,
+            padding=(0, 1),
+        )
+
+        rich_table.add_column("#", justify="right", style=p.muted, width=3)
+        rich_table.add_column("Categoría", justify="left", style=p.table_category)
+        rich_table.add_column("Descripción", justify="left")
+        rich_table.add_column("Cond.", justify="center", style=p.muted)
+        rich_table.add_column("A", justify="right", style=style_a)
+        rich_table.add_column("B", justify="right", style=style_b)
+        rich_table.add_column("C", justify="right", style=style_c)
+        rich_table.add_column("D", justify="right", style=style_d)
+
+        current_category = ""
+        for i, entry in enumerate(table):
+            if entry.category != current_category and current_category:
+                rich_table.add_row(*[""] * 8)
+            current_category = entry.category
+
+            rich_table.add_row(
+                str(i + 1),
+                entry.category,
+                entry.description,
+                entry.condition[:3] if entry.condition != "N/A" else "-",
+                str(entry.cn_a),
+                str(entry.cn_b),
+                str(entry.cn_c),
+                str(entry.cn_d),
+            )
 
     console.print(rich_table)
 
-    console.print(styled_note_box([
-        "Grupos hidrológicos de suelo:",
-        "  A: Alta infiltración (arena, grava)",
-        "  B: Moderada infiltración (limo arenoso)",
-        "  C: Baja infiltración (limo arcilloso)",
-        "  D: Muy baja infiltración (arcilla)",
-    ], title="GRUPOS DE SUELO"))
+    # Mostrar nota sobre grupos de suelo solo si no hay grupo resaltado
+    if not highlight_group:
+        console.print(styled_note_box([
+            "Grupos hidrológicos de suelo:",
+            "  A: Alta infiltración (arena, grava)",
+            "  B: Moderada infiltración (limo arenoso)",
+            "  C: Baja infiltración (limo arcilloso)",
+            "  D: Muy baja infiltración (arcilla)",
+        ], title="GRUPOS DE SUELO"))
 
 
 def print_summary_table(session_name: str, rows: list[dict]) -> None:

@@ -123,7 +123,7 @@ class PostExecutionMenu(SessionMenu):
                 choices=[
                     "Todos",
                     "Seleccionar cuales",
-                    "Cancelar",
+                    "← Cancelar",
                 ],
             )
 
@@ -290,7 +290,7 @@ class PostExecutionMenu(SessionMenu):
                 f"Tipo de tormenta: {storm_types}",
                 runoff_choice,
                 "Combinacion personalizada",
-                "Cancelar",
+                "← Cancelar",
             ],
         )
 
@@ -485,7 +485,7 @@ class PostExecutionMenu(SessionMenu):
         ]
         if analyses_with_notes:
             choices.append("Ver notas de analisis")
-        choices.append("Volver")
+        choices.append("← Volver")
 
         action = self.select("\nQue deseas hacer?", choices)
 

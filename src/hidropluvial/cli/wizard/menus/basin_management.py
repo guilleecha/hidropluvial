@@ -26,7 +26,7 @@ class BasinManagementMenu(BaseMenu):
             # Recargar proyecto para tener datos actualizados
             self.project = self.project_manager.get_project(self.project.id)
             if not self.project:
-                self.echo("\n  Error: Proyecto no encontrado.\n")
+                self.error("Proyecto no encontrado")
                 return
 
             self._show_overview()
@@ -260,7 +260,7 @@ class BasinManagementMenu(BaseMenu):
                 self.project_manager.save_project(self.project)
                 self.echo(f"\n  Cuenca '{basin.name}' eliminada.\n")
             else:
-                self.echo(f"\n  Error al eliminar cuenca.\n")
+                self.error("No se pudo eliminar la cuenca")
 
     def _add_new_basin(self) -> None:
         """Agrega una nueva cuenca al proyecto."""

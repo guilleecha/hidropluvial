@@ -207,7 +207,7 @@ class ProjectManagementMenu(BaseMenu):
             if self.project_manager.delete_project(project.id):
                 self.echo(f"\n  Proyecto '{project.name}' eliminado.\n")
             else:
-                self.echo(f"\n  Error al eliminar proyecto.\n")
+                self.error("No se pudo eliminar el proyecto")
 
     def _create_project(self) -> None:
         """Crea un nuevo proyecto."""
@@ -270,7 +270,7 @@ class ProjectManagementMenu(BaseMenu):
                     self.echo(f"    Sesiones originales eliminadas.")
                 self.echo("")
             else:
-                self.echo("\n  Error en la migracion.\n")
+                self.error("Error en la migración")
         else:
             self.echo("\n  Migracion individual no implementada aun.\n")
 
@@ -370,7 +370,7 @@ class ProjectManagementMenu(BaseMenu):
             if self.manager.delete(session_id):
                 self.echo(f"\n  Sesion {session_id} eliminada.\n")
             else:
-                self.echo(f"\n  Error al eliminar sesion.\n")
+                self.error("No se pudo eliminar la sesión")
 
     def _delete_empty_sessions(self, sessions: list[dict]) -> None:
         """Eliminar sesiones sin analisis."""

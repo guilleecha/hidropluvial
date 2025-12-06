@@ -218,29 +218,27 @@ URUGUAY_C_TABLE = [
 # TABLAS DE CURVA NUMERO (CN)
 # =============================================================================
 
-# Tabla SCS TR-55 para areas urbanas
-SCS_CN_URBAN = [
-    # Residencial por tamano de lote
-    CNEntry("Residencial", "Lotes 500 m2 (65% impermeable)", "N/A", 77, 85, 90, 92),
-    CNEntry("Residencial", "Lotes 1000 m2 (38% impermeable)", "N/A", 61, 75, 83, 87),
-    CNEntry("Residencial", "Lotes 1500 m2 (30% impermeable)", "N/A", 57, 72, 81, 86),
-    CNEntry("Residencial", "Lotes 2000 m2 (25% impermeable)", "N/A", 54, 70, 80, 85),
-    CNEntry("Residencial", "Lotes 4000 m2 (20% impermeable)", "N/A", 51, 68, 79, 84),
+# Tabla unificada SCS TR-55 (urbanas + agrícolas)
+SCS_CN_TABLE = [
+    # ===== ÁREAS URBANAS =====
+    # Residencial por tamaño de lote
+    CNEntry("Residencial", "Lotes 500 m² (65% impermeable)", "N/A", 77, 85, 90, 92),
+    CNEntry("Residencial", "Lotes 1000 m² (38% impermeable)", "N/A", 61, 75, 83, 87),
+    CNEntry("Residencial", "Lotes 1500 m² (30% impermeable)", "N/A", 57, 72, 81, 86),
+    CNEntry("Residencial", "Lotes 2000 m² (25% impermeable)", "N/A", 54, 70, 80, 85),
+    CNEntry("Residencial", "Lotes 4000 m² (20% impermeable)", "N/A", 51, 68, 79, 84),
     # Comercial e industrial
     CNEntry("Comercial", "Distritos comerciales (85% imp)", "N/A", 89, 92, 94, 95),
     CNEntry("Industrial", "Distritos industriales (72% imp)", "N/A", 81, 88, 91, 93),
-    # Superficies
+    # Superficies impermeables
     CNEntry("Superficies", "Pavimento impermeable", "N/A", 98, 98, 98, 98),
     CNEntry("Superficies", "Grava", "N/A", 76, 85, 89, 91),
     CNEntry("Superficies", "Tierra", "N/A", 72, 82, 87, 89),
     # Espacios abiertos
-    CNEntry("Espacios abiertos", "Cesped >75% cubierto", "Buena", 39, 61, 74, 80),
-    CNEntry("Espacios abiertos", "Cesped 50-75% cubierto", "Regular", 49, 69, 79, 84),
-    CNEntry("Espacios abiertos", "Cesped <50% cubierto", "Mala", 68, 79, 86, 89),
-]
-
-# Tabla SCS TR-55 para areas agricolas
-SCS_CN_AGRICULTURAL = [
+    CNEntry("Espacios abiertos", "Césped >75% cubierto", "Buena", 39, 61, 74, 80),
+    CNEntry("Espacios abiertos", "Césped 50-75% cubierto", "Regular", 49, 69, 79, 84),
+    CNEntry("Espacios abiertos", "Césped <50% cubierto", "Mala", 68, 79, 86, 89),
+    # ===== ÁREAS AGRÍCOLAS =====
     CNEntry("Barbecho", "Suelo desnudo", "N/A", 77, 86, 91, 94),
     CNEntry("Cultivos", "Hileras rectas", "Mala", 72, 81, 88, 91),
     CNEntry("Cultivos", "Hileras rectas", "Buena", 67, 78, 85, 89),
@@ -256,6 +254,10 @@ SCS_CN_AGRICULTURAL = [
     CNEntry("Bosque", "Con mantillo", "Regular", 36, 60, 73, 79),
     CNEntry("Bosque", "Con mantillo", "Buena", 30, 55, 70, 77),
 ]
+
+# Mantener referencias legacy para compatibilidad
+SCS_CN_URBAN = SCS_CN_TABLE[:13]  # Primeras 13 entradas (urbanas)
+SCS_CN_AGRICULTURAL = SCS_CN_TABLE[13:]  # Resto (agrícolas)
 
 
 # =============================================================================
@@ -608,6 +610,8 @@ C_TABLES = {
 }
 
 CN_TABLES = {
-    "urban": ("SCS TR-55 - Areas Urbanas", SCS_CN_URBAN),
-    "agricultural": ("SCS TR-55 - Areas Agricolas", SCS_CN_AGRICULTURAL),
+    "unified": ("SCS TR-55 - Tabla Unificada", SCS_CN_TABLE),
+    # Legacy - mantener por compatibilidad
+    "urban": ("SCS TR-55 - Áreas Urbanas", SCS_CN_URBAN),
+    "agricultural": ("SCS TR-55 - Áreas Agrícolas", SCS_CN_AGRICULTURAL),
 }

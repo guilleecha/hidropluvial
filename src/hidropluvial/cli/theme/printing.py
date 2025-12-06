@@ -34,13 +34,20 @@ def print_header(text: str, subtitle: str = None) -> None:
 
 
 def print_step(step_num: int, total: int, title: str) -> None:
-    """Imprime indicador de paso del wizard."""
+    """Imprime indicador de paso del wizard con barra de progreso."""
     console = get_console()
     p = get_palette()
 
+    # Barra de progreso visual
+    filled = "●" * step_num
+    empty = "○" * (total - step_num)
+    progress_bar = filled + empty
+
     text = Text()
-    text.append(f"[{step_num}/{total}] ", style=p.muted)
+    text.append(f"\n  {progress_bar}  ", style=p.muted)
+    text.append(f"Paso {step_num}/{total}: ", style=p.muted)
     text.append(title, style=f"bold {p.secondary}")
+    text.append("\n")
     console.print(text)
 
 

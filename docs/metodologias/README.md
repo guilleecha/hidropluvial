@@ -17,6 +17,7 @@ Cada archivo incluye:
 |---------|--------|---------|
 | [idf.md](idf.md) | `core.idf` | DINAGUA Uruguay, Sherman, Bernard, Koutsoyiannis |
 | [tc.md](tc.md) | `core.tc` | Kirpich, Temez, Desbordes, NRCS, FAA, Kinematic |
+| [storms.md](storms.md) | `core.temporal` | Bloques Alternantes, Chicago, SCS 24h, Huff, Bimodal |
 | [runoff.md](runoff.md) | `core.runoff` | SCS Curve Number, Metodo Racional |
 | [hydrograph.md](hydrograph.md) | `core.hydrograph` | SCS triangular/curvilinear, Snyder, Clark, Gamma |
 

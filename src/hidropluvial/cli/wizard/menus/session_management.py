@@ -36,7 +36,7 @@ class SessionManagementMenu(BaseMenu):
                     "Renombrar sesion",
                     "Eliminar sesion",
                     "Eliminar sesiones vacias",
-                    "Volver al menu principal",
+                    "← Volver al menu principal",
                 ],
             )
 
@@ -80,11 +80,11 @@ class SessionManagementMenu(BaseMenu):
     def _select_session(self, sessions: list[dict], prompt: str) -> Optional[str]:
         """Permite seleccionar una sesion de la lista."""
         choices = [f"{s['id']} - {s['name']}" for s in sessions]
-        choices.append("Cancelar")
+        choices.append("← Cancelar")
 
         choice = self.select(prompt, choices)
 
-        if choice is None or choice == "Cancelar":
+        if choice is None or "Cancelar" in choice:
             return None
 
         return choice.split(" - ")[0]
@@ -112,11 +112,11 @@ class SessionManagementMenu(BaseMenu):
             f"{s['id']} - {s['name']} ({s['n_analyses']} analisis)"
             for s in sessions_with_analyses
         ]
-        choices.append("Cancelar")
+        choices.append("← Cancelar")
 
         choice = self.select("Selecciona sesion a exportar:", choices)
 
-        if choice is None or choice == "Cancelar":
+        if choice is None or "Cancelar" in choice:
             return
 
         session_id = choice.split(" - ")[0]
@@ -147,11 +147,11 @@ class SessionManagementMenu(BaseMenu):
     def _delete(self, sessions: list[dict]) -> None:
         """Eliminar una sesion."""
         choices = [f"{s['id']} - {s['name']} ({s['n_analyses']} analisis)" for s in sessions]
-        choices.append("Cancelar")
+        choices.append("← Cancelar")
 
         choice = self.select("Selecciona sesion a eliminar:", choices)
 
-        if choice is None or choice == "Cancelar":
+        if choice is None or "Cancelar" in choice:
             return
 
         session_id = choice.split(" - ")[0]
@@ -160,7 +160,7 @@ class SessionManagementMenu(BaseMenu):
             if self.manager.delete(session_id):
                 self.echo(f"\n  Sesion {session_id} eliminada.\n")
             else:
-                self.echo(f"\n  Error al eliminar sesion.\n")
+                self.error("No se pudo eliminar la sesión")
 
     def _delete_empty(self, sessions: list[dict]) -> None:
         """Eliminar sesiones sin analisis."""
@@ -181,11 +181,11 @@ class SessionManagementMenu(BaseMenu):
     def _edit_cuenca(self, sessions: list[dict]) -> None:
         """Editar parametros de cuenca de una sesion."""
         choices = [f"{s['id']} - {s['name']} ({s['n_analyses']} analisis)" for s in sessions]
-        choices.append("Cancelar")
+        choices.append("← Cancelar")
 
         choice = self.select("Selecciona sesion a editar:", choices)
 
-        if choice is None or choice == "Cancelar":
+        if choice is None or "Cancelar" in choice:
             return
 
         session_id = choice.split(" - ")[0]

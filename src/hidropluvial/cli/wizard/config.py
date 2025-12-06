@@ -13,6 +13,12 @@ from hidropluvial.cli.wizard.styles import (
     validate_positive_float,
     validate_range,
 )
+from hidropluvial.cli.theme import (
+    print_section,
+    print_info,
+    print_note,
+    print_error,
+)
 
 
 @dataclass
@@ -171,7 +177,7 @@ class WizardConfig:
 
         # Verificar que al menos uno fue ingresado
         if self.c is None and self.cn is None:
-            typer.echo("  Error: Debes ingresar al menos C o CN")
+            print_error("Debes ingresar al menos C o CN")
             return False
 
         # Longitud del cauce (opcional)
@@ -334,31 +340,43 @@ class WizardConfig:
         return n_tc * n_tr * (n_gz * n_x + n_non_gz)
 
     def print_summary(self) -> None:
-        """Imprime resumen de configuracion."""
+        """Imprime resumen de configuracion con formato mejorado."""
         n_total = self.get_n_combinations()
         n_tc = len(self.tc_methods)
         n_tr = len(self.return_periods)
         n_storms = len(self.storm_codes)
         n_x = len(self.x_factors) if "gz" in self.storm_codes else 1
 
-        typer.echo("\n-- Resumen --\n")
-        typer.echo(f"  Cuenca:      {self.nombre}")
-        typer.echo(f"  Area:        {self.area_ha} ha")
-        typer.echo(f"  Pendiente:   {self.slope_pct} %")
-        typer.echo(f"  P(3h,Tr10):  {self.p3_10} mm")
-        if self.c:
-            typer.echo(f"  Coef. C:     {self.c}")
-        if self.cn:
-            typer.echo(f"  Curva CN:    {self.cn}")
-        if self.length_m:
-            typer.echo(f"  Longitud:    {self.length_m} m")
-        typer.echo(f"  Metodos Tc:  {', '.join(self.tc_methods)}")
-        typer.echo(f"  Tormentas:   {', '.join(self.storm_codes)}")
-        typer.echo(f"  Tr:          {', '.join(str(tr) for tr in self.return_periods)} anos")
-        if "gz" in self.storm_codes:
-            typer.echo(f"  Factor X:    {', '.join(f'{x:.2f}' for x in self.x_factors)}")
+        print_section("Resumen de Configuración")
 
-        typer.echo(f"\n  => Se generaran {n_total} analisis ({n_tc} Tc x {n_tr} Tr x {n_storms} tormentas)")
+        # Datos de la cuenca
+        typer.echo(f"  Cuenca:       {self.nombre}")
+        typer.echo(f"  Área:         {self.area_ha:.2f} ha")
+        typer.echo(f"  Pendiente:    {self.slope_pct:.2f} %")
+        typer.echo(f"  P(3h,Tr10):   {self.p3_10:.1f} mm")
+        if self.c:
+            typer.echo(f"  Coef. C:      {self.c:.2f}")
+        if self.cn:
+            typer.echo(f"  Curva CN:     {self.cn}")
+        if self.length_m:
+            typer.echo(f"  Longitud:     {self.length_m:.0f} m")
+
+        typer.echo()  # Línea en blanco
+
+        # Parámetros de análisis
+        typer.echo(f"  Métodos Tc:   {', '.join(self.tc_methods)}")
+        typer.echo(f"  Tormentas:    {', '.join(self.storm_codes)}")
+        typer.echo(f"  Tr:           {', '.join(str(tr) for tr in self.return_periods)} años")
+        if "gz" in self.storm_codes:
+            typer.echo(f"  Factor X:     {', '.join(f'{x:.2f}' for x in self.x_factors)}")
+
+        typer.echo()  # Línea en blanco
+
+        # Destacar el conteo de análisis
+        detail = f"{n_tc} Tc × {n_tr} Tr × {n_storms} tormentas"
+        if "gz" in self.storm_codes and n_x > 1:
+            detail += f" × {n_x} factores X"
+        print_note(f"Se generarán {n_total} análisis ({detail})")
 
     def _collect_c_value(self) -> Optional[float]:
         """Recolecta coeficiente C (manual o ponderado)."""

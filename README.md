@@ -4,14 +4,14 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-724%20passed-green.svg)]()
+[![Tests](https://img.shields.io/badge/tests-793%20passed-green.svg)]()
 
 ---
 
 ## Características
 
 - **Curvas IDF** - Método DINAGUA Uruguay con factores CT y CA
-- **Hietogramas** - Bloques alternantes, Chicago, SCS Tipo I/II/III, Huff, Bimodal
+- **Hietogramas** - Bloques alternantes (GZ), Chicago, SCS Tipo I/II/III, Huff, Bimodal
 - **Tiempo de concentración** - Kirpich, Témez, Desbordes (DINAGUA)
 - **Escorrentía** - SCS Curve Number (con AMC y λ configurable), Método Racional
 - **Hidrogramas** - SCS triangular/curvilíneo, Triangular con factor X
@@ -101,7 +101,7 @@ hp wizard
 
 ---
 
-## Comandos CLI Principales
+## Comandos CLI
 
 ### Consultas IDF
 
@@ -113,34 +113,83 @@ hp idf uruguay 78 3 --tr 25
 hp idf departamentos
 ```
 
-### Gestión de Proyectos y Cuencas
+### Gestión de Proyectos
 
 ```bash
-# Listar cuencas guardadas
-hp session list
+# Crear proyecto
+hp project create "Drenaje Barrio Norte" --desc "Estudio pluvial 2024"
+
+# Listar proyectos
+hp project list
+
+# Ver detalles de un proyecto
+hp project show <project_id>
+
+# Agregar cuenca a proyecto
+hp project basin-add <project_id> "Cuenca A" --area 50 --slope 2.5 --p310 83
+
+# Listar cuencas de un proyecto
+hp project basin-list <project_id>
 
 # Ver detalles de una cuenca
-hp session show <id>
+hp project basin-show <project_id> <basin_id>
+```
 
-# Exportar a Excel
+### Tiempo de Concentración
+
+```bash
+# Método Kirpich (longitud en m, pendiente decimal)
+hp tc kirpich 800 0.0341
+
+# Método Desbordes (área ha, pendiente %, C)
+hp tc desbordes 62 3.41 0.62
+
+# Método Témez (longitud km, pendiente decimal)
+hp tc temez 0.8 0.0341
+```
+
+### Escorrentía
+
+```bash
+# SCS Curve Number
+hp runoff cn 100 81 --amc II --lambda 0.2
+
+# Ver tablas de CN
+hp runoff cn-table --group B
+```
+
+### Exportación y Reportes
+
+```bash
+# Exportar cuenca a Excel (usa session para compatibilidad)
 hp session export <id> --format xlsx
 
 # Generar reporte LaTeX
 hp session report <id> --output memoria --author "Ing. García"
 ```
 
-> **Nota**: HidroPluvial organiza el trabajo en **Proyectos** (estudios) que contienen **Cuencas** (áreas de análisis). El wizard facilita la gestión de esta jerarquía.
+> **Nota**: Los comandos `hp session` operan sobre cuencas individuales y son compatibles con el sistema de proyectos. El wizard es la forma recomendada de trabajar.
 
-### Cálculos Individuales
+---
 
-```bash
-# Tiempo de concentración
-hp tc kirpich 800 0.0341
-hp tc desbordes 62 3.41 0.62
+## Estructura de Datos
 
-# Escorrentía SCS-CN
-hp runoff cn 100 81 --amc II --lambda 0.2
+HidroPluvial organiza el trabajo en:
+
 ```
+Proyecto (estudio)
+├── Cuenca A
+│   ├── Análisis Tr=10, X=1.0
+│   ├── Análisis Tr=10, X=1.25
+│   └── Análisis Tr=25, X=1.0
+├── Cuenca B
+│   └── ...
+└── Metadatos (autor, ubicación, notas)
+```
+
+- **Proyecto**: Agrupa cuencas de un mismo estudio (ej: "Drenaje Pluvial Barrio X")
+- **Cuenca (Basin)**: Área física con sus parámetros hidrológicos
+- **Análisis**: Combinación específica de Tc, tormenta, Tr y método de escorrentía
 
 ---
 
@@ -153,6 +202,7 @@ El wizard permite configurar:
 | **AMC** | Condición de humedad antecedente | I (seco), II (promedio), III (húmedo) |
 | **Lambda (λ)** | Coeficiente abstracción inicial | 0.20 (estándar), 0.05 (urbano) |
 | **t₀** | Tiempo entrada Desbordes | 3, 5, 10 min |
+| **Factor X** | Forma del hidrograma triangular | 1.0 (racional) a 12.0 (rural) |
 
 ---
 
@@ -164,8 +214,7 @@ El wizard permite configurar:
 |-----------|-------------|
 | [INSTALACION.md](docs/INSTALACION.md) | Guía completa de instalación |
 | [MANUAL_USUARIO.md](docs/MANUAL_USUARIO.md) | Manual práctico con ejemplos |
-| [CLI.md](docs/CLI.md) | Referencia de comandos |
-| [WIZARD.md](docs/WIZARD.md) | Guía del asistente |
+| [COEFICIENTES.md](docs/COEFICIENTES.md) | Tablas de coeficientes C y CN |
 
 ### Referencias Metodológicas
 
@@ -173,8 +222,9 @@ Documentación técnica con teoría, fórmulas y extractos de código:
 
 | Documento | Contenido |
 |-----------|-----------|
-| [metodologias/idf.md](docs/metodologias/idf.md) | Curvas IDF: DINAGUA Uruguay, Sherman, Bernard, Koutsoyiannis |
-| [metodologias/tc.md](docs/metodologias/tc.md) | Tiempo de concentración: Kirpich, Témez, Desbordes, NRCS |
+| [metodologias/idf.md](docs/metodologias/idf.md) | Curvas IDF: DINAGUA Uruguay, Sherman, Bernard |
+| [metodologias/tc.md](docs/metodologias/tc.md) | Tiempo de concentración: Kirpich, Témez, Desbordes |
+| [metodologias/storms.md](docs/metodologias/storms.md) | Tormentas de diseño: Bloques alternantes, Chicago, SCS, Huff |
 | [metodologias/runoff.md](docs/metodologias/runoff.md) | Escorrentía: SCS Curve Number, Método Racional |
 | [metodologias/hydrograph.md](docs/metodologias/hydrograph.md) | Hidrogramas: SCS triangular/curvilíneo, Snyder, Clark |
 
@@ -211,7 +261,7 @@ Documentación técnica con teoría, fórmulas y extractos de código:
 pytest tests/ -v
 ```
 
-**Estado:** 724 tests pasando
+**Estado:** 793 tests pasando
 
 ---
 
@@ -226,3 +276,4 @@ MIT License - Ver [LICENSE](LICENSE)
 - Rodríguez Fontal (1980) - Curvas IDF Uruguay
 - DINAGUA/MTOP - Manual de Drenaje Pluvial Urbano
 - SCS TR-55 - Urban Hydrology for Small Watersheds
+- Chow, Maidment & Mays (1988) - Applied Hydrology

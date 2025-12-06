@@ -31,7 +31,7 @@ class ContinueSessionMenu(BaseMenu):
 
         self.session = self.manager.get_session(session_id)
         if not self.session:
-            self.echo(f"\n  Error: No se pudo cargar la sesion {session_id}\n")
+            self.error(f"No se pudo cargar la sesión {session_id}")
             return
 
         # Mostrar menu de acciones en loop
@@ -150,7 +150,7 @@ class ContinueSessionMenu(BaseMenu):
                 choices=[
                     "Todos",
                     "Seleccionar cuales",
-                    "Cancelar",
+                    "← Cancelar",
                 ],
             )
 
@@ -241,7 +241,7 @@ class ContinueSessionMenu(BaseMenu):
             choices=[
                 f"Periodo de retorno: {tr_values}",
                 f"Metodo Tc: {tc_methods}",
-                "Cancelar",
+                "← Cancelar",
             ],
         )
 
@@ -294,5 +294,5 @@ class ContinueSessionMenu(BaseMenu):
                 self.echo(f"\n  Sesion {self.session.id} eliminada.\n")
                 return True
             else:
-                self.echo("\n  Error al eliminar sesion.\n")
+                self.error("No se pudo eliminar la sesión")
         return False

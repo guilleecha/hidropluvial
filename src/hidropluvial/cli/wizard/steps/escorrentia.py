@@ -58,7 +58,7 @@ class StepMetodoEscorrentia(WizardStep):
 
         # Verificar que al menos uno fue ingresado
         if self.state.c is None and self.state.cn is None:
-            self.echo("  Error: Debes ingresar al menos C o CN")
+            self.error("Debes ingresar al menos C o CN")
             return self.execute()
 
         # Validar consistencia C vs CN si ambos fueron ingresados
@@ -264,10 +264,10 @@ class StepMetodoEscorrentia(WizardStep):
             try:
                 area_val = float(area_str)
                 if area_val <= 0 or area_val > area_remaining:
-                    self.echo(f"  Error: El área debe estar entre 0 y {area_remaining:.3f}")
+                    self.error(f"El área debe estar entre 0 y {area_remaining:.3f}")
                     continue
             except ValueError:
-                self.echo("  Error: Valor inválido")
+                self.error("Valor inválido")
                 continue
 
             if is_chow:
@@ -295,9 +295,12 @@ class StepMetodoEscorrentia(WizardStep):
         coefficients = [d["c_val"] for d in coverage_data]
         c_weighted = weighted_c(areas, coefficients)
 
+        # Determinar Tr base según tabla
+        base_tr = 2 if is_chow else None  # Chow usa Tr2, otras tablas no dependen de Tr
+
         self.state.c_weighted_data = {
             "table_key": table_key,
-            "base_tr": tr,
+            "base_tr": base_tr,
             "items": coverage_data,
         }
 
@@ -424,7 +427,7 @@ class StepMetodoEscorrentia(WizardStep):
         return StepResult.NEXT
 
     def _calculate_weighted_cn(self) -> Optional[int]:
-        """Calcula CN ponderado (versión simplificada)."""
+        """Calcula CN ponderado usando tabla unificada."""
         from hidropluvial.core.coefficients import CN_TABLES, weighted_cn
         from hidropluvial.cli.theme import print_cn_table
 
@@ -443,50 +446,47 @@ class StepMetodoEscorrentia(WizardStep):
 
         soil_group = soil[0]
 
+        # Usar tabla unificada
+        table_name, table_data = CN_TABLES["unified"]
+
         self.echo(f"\n  Grupo de suelo: {soil_group}")
-        self.echo(f"  Área de la cuenca: {self.state.area_ha} ha")
-        self.echo("  Puedes mezclar coberturas urbanas y agrícolas.\n")
+        self.echo(f"  Área de la cuenca: {self.state.area_ha} ha\n")
+
+        # Mostrar tabla unificada
+        print_cn_table(table_data, table_name, soil_group)
 
         areas = []
         cn_values = []
         area_remaining = self.state.area_ha
-        current_table = None
 
         while area_remaining > 0.001:
             self.echo(f"\n  Área restante: {area_remaining:.3f} ha ({area_remaining/self.state.area_ha*100:.1f}%)")
 
-            res, table_choice = self.select(
-                "Agregar cobertura de:",
-                choices=[
-                    "Tabla Urbana (residencial, comercial, industrial)",
-                    "Tabla Agrícola (cultivos, pasturas, bosque)",
-                    "Asignar todo el área restante",
-                    "Terminar y calcular",
-                ],
-            )
+            # Construir choices mostrando solo CN para el grupo de suelo seleccionado
+            choices = []
+            for i, e in enumerate(table_data):
+                cn = e.get_cn(soil_group)
+                cond = f" ({e.condition})" if e.condition != "N/A" else ""
+                choices.append(f"{i+1}. {e.category} - {e.description}{cond} [CN={cn}]")
+
+            choices.append("Asignar todo el área restante a una cobertura")
+            choices.append("Terminar y calcular")
+
+            res, selection = self.select("Selecciona cobertura:", choices, back_option=True)
 
             if res != StepResult.NEXT:
                 return None
 
-            if "Terminar" in table_choice:
+            if "Terminar" in selection:
                 break
 
-            if "Asignar todo" in table_choice:
-                res, final_table = self.select(
-                    "¿De qué tabla?",
-                    choices=["Urbana", "Agrícola"],
-                )
-                if res != StepResult.NEXT:
-                    continue
-
-                table_key = "urban" if "Urbana" in final_table else "agricultural"
-                _, table_data = CN_TABLES[table_key]
-
+            if "Asignar todo" in selection:
+                # Mostrar lista simplificada para asignar resto
                 cov_choices = []
                 for i, e in enumerate(table_data):
                     cn = e.get_cn(soil_group)
                     cond = f" ({e.condition})" if e.condition != "N/A" else ""
-                    cov_choices.append(f"{i+1}. {e.category} - {e.description}{cond} (CN={cn})")
+                    cov_choices.append(f"{i+1}. {e.category} - {e.description}{cond} [CN={cn}]")
 
                 res, cov_selection = self.select("Cobertura para área restante:", cov_choices)
 
@@ -496,34 +496,11 @@ class StepMetodoEscorrentia(WizardStep):
                     cn = entry.get_cn(soil_group)
                     areas.append(area_remaining)
                     cn_values.append(cn)
+                    self.echo(f"  + {area_remaining:.3f} ha con CN={cn}")
                     area_remaining = 0
                 break
 
-            # Determinar tabla
-            if "Urbana" in table_choice:
-                table_key = "urban"
-            else:
-                table_key = "agricultural"
-
-            table_name, table_data = CN_TABLES[table_key]
-
-            if current_table != table_key:
-                print_cn_table(table_data, table_name)
-                current_table = table_key
-
-            choices = []
-            for i, e in enumerate(table_data):
-                cn = e.get_cn(soil_group)
-                cond = f" ({e.condition})" if e.condition != "N/A" else ""
-                choices.append(f"{i+1}. {e.category} - {e.description}{cond} (CN={cn})")
-
-            choices.append("Volver (elegir otra tabla)")
-
-            res, selection = self.select("Selecciona cobertura:", choices, back_option=False)
-
-            if res != StepResult.NEXT or "Volver" in selection:
-                continue
-
+            # Obtener índice de la selección
             idx = int(selection.split(".")[0]) - 1
             entry = table_data[idx]
             cn = entry.get_cn(soil_group)
@@ -536,8 +513,10 @@ class StepMetodoEscorrentia(WizardStep):
             try:
                 area_val = float(area_str)
                 if area_val <= 0 or area_val > area_remaining:
+                    self.error(f"El área debe estar entre 0 y {area_remaining:.3f}")
                     continue
             except ValueError:
+                self.error("Valor inválido")
                 continue
 
             areas.append(area_val)

@@ -11,7 +11,7 @@ import typer
 import questionary
 
 from hidropluvial.cli.wizard.styles import WIZARD_STYLE
-from hidropluvial.cli.theme import print_step, print_info, print_warning, print_note
+from hidropluvial.cli.theme import print_step, print_info, print_warning, print_error, print_note
 
 
 class StepResult(Enum):
@@ -71,6 +71,10 @@ class WizardStep(ABC):
     def echo(self, msg: str) -> None:
         """Imprime mensaje."""
         typer.echo(msg)
+
+    def error(self, msg: str) -> None:
+        """Imprime mensaje de error con estilo."""
+        print_error(msg)
 
     def select(self, message: str, choices: list[str], back_option: bool = True) -> tuple[StepResult, Optional[str]]:
         """
@@ -197,8 +201,16 @@ class WizardNavigator:
                 else:
                     print_note("Ya estás en el primer paso")
             elif result == StepResult.CANCEL:
-                print_warning("Wizard cancelado")
-                return None
+                # Confirmar cancelación
+                confirm = questionary.confirm(
+                    "¿Cancelar el wizard? Se perderán los datos ingresados",
+                    default=False,
+                    style=WIZARD_STYLE,
+                ).ask()
+                if confirm:
+                    print_warning("Wizard cancelado")
+                    return None
+                # Si no confirma, continúa en el paso actual
 
         if self.current_step >= len(self.steps):
             return self.state

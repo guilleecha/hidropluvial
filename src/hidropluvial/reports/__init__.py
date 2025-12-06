@@ -22,6 +22,25 @@ from hidropluvial.reports.generator import (
     hydrograph_to_csv,
 )
 
+from hidropluvial.reports.compiler import (
+    LaTeXEngine,
+    CompilationResult,
+    compile_latex,
+    find_latex_engine,
+    check_latex_installation,
+)
+
+from hidropluvial.reports.palettes import (
+    ColorPalette,
+    PaletteType,
+    get_palette,
+    list_palettes,
+    set_active_palette,
+    get_active_palette,
+    get_series_colors,
+    get_series_styles,
+)
+
 __all__ = [
     # Charts
     "HydrographSeries",
@@ -41,4 +60,19 @@ __all__ = [
     "idf_to_csv",
     "hyetograph_to_csv",
     "hydrograph_to_csv",
+    # Compiler
+    "LaTeXEngine",
+    "CompilationResult",
+    "compile_latex",
+    "find_latex_engine",
+    "check_latex_installation",
+    # Palettes
+    "ColorPalette",
+    "PaletteType",
+    "get_palette",
+    "list_palettes",
+    "set_active_palette",
+    "get_active_palette",
+    "get_series_colors",
+    "get_series_styles",
 ]

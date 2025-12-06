@@ -17,6 +17,11 @@ def session_report(
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Nombre del directorio de salida (default: nombre de sesión)")] = None,
     author: Annotated[str, typer.Option("--author", help="Autor del reporte")] = "",
     template_dir: Annotated[Optional[str], typer.Option("--template", "-t", help="Directorio con template Pablo Pizarro")] = None,
+    pdf: Annotated[bool, typer.Option("--pdf", help="Compilar automáticamente a PDF")] = False,
+    clean: Annotated[bool, typer.Option("--clean/--no-clean", help="Limpiar archivos auxiliares después de compilar")] = True,
+    fig_width: Annotated[str, typer.Option("--fig-width", help="Ancho de figuras (ej: '0.9\\\\textwidth', '12cm')")] = r"0.9\textwidth",
+    fig_height: Annotated[str, typer.Option("--fig-height", help="Alto de figuras (ej: '6cm', '8cm')")] = "6cm",
+    palette: Annotated[str, typer.Option("--palette", "-p", help="Paleta de colores: default, professional, colorful, grayscale, hydrology")] = "default",
 ):
     """
     Genera reporte LaTeX con gráficos TikZ para cada análisis.
@@ -29,15 +34,29 @@ def session_report(
     Con --template: Genera documento compatible con template Pablo Pizarro
     y copia los archivos del template al directorio de salida.
 
+    Con --pdf: Compila automáticamente el documento a PDF usando pdflatex.
+
+    Los tamaños de figuras se pueden personalizar con --fig-width y --fig-height.
+
     Ejemplo:
         hidropluvial session report abc123 --author "Ing. Pérez"
         hidropluvial session report abc123 -o mi_reporte --template examples/
+        hidropluvial session report abc123 --pdf
+        hidropluvial session report abc123 --fig-width "0.8\\textwidth" --fig-height "8cm"
     """
     from hidropluvial.reports.charts import (
         HydrographSeries,
         generate_hydrograph_tikz,
         generate_hyetograph_tikz,
     )
+    from hidropluvial.reports.palettes import set_active_palette, get_palette
+
+    # Configurar paleta de colores
+    try:
+        set_active_palette(palette)
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
 
     manager = get_session_manager()
 
@@ -111,8 +130,8 @@ def session_report(
                 intensity_mmhr=analysis.storm.intensity_mmhr,
                 caption=hyeto_caption,
                 label=f"fig:hyeto_{file_id}",
-                width=r"0.9\textwidth",
-                height="6cm",
+                width=fig_width,
+                height=fig_height,
                 include_figure=False,  # Se incluirá dentro de minipage en fichas
             )
 
@@ -153,8 +172,8 @@ def session_report(
                 series=series,
                 caption=hydro_caption,
                 label=f"fig:hydro_{file_id}",
-                width=r"0.9\textwidth",
-                height="6cm",
+                width=fig_width,
+                height=fig_height,
                 include_figure=False,  # Se incluirá dentro de minipage en fichas
             )
 
@@ -201,10 +220,58 @@ def session_report(
     typer.echo(f"  hietogramas/         {len(generated_files['hyetographs'])} archivos")
     typer.echo(f"  hidrogramas/         {len(generated_files['hydrographs'])} archivos")
     print_separator()
-    typer.echo(f"\n  Para compilar:")
-    typer.echo(f"    cd {output_dir.absolute()}")
-    typer.echo(f"    pdflatex {main_filename}")
-    print_separator()
+
+    # =========================================================================
+    # COMPILACIÓN A PDF
+    # =========================================================================
+    if pdf:
+        from hidropluvial.reports.compiler import compile_latex, check_latex_installation
+        from hidropluvial.cli.theme import print_success, print_error, print_warning
+
+        print_subheader("COMPILANDO A PDF")
+
+        # Verificar instalación de LaTeX
+        latex_info = check_latex_installation()
+        if not latex_info["installed"]:
+            print_error("No se encontró LaTeX instalado en el sistema.")
+            typer.echo("  Instale TeX Live, MiKTeX o MacTeX para compilar a PDF.")
+            typer.echo(f"\n  Para compilar manualmente:")
+            typer.echo(f"    cd {output_dir.absolute()}")
+            typer.echo(f"    pdflatex {main_filename}")
+            raise typer.Exit(1)
+
+        typer.echo(f"  Usando: {latex_info['recommended']}")
+        typer.echo(f"  Compilando {main_filename}...")
+
+        result = compile_latex(
+            tex_file=main_path,
+            output_dir=output_dir,
+            runs=2,
+            quiet=True,
+            clean_aux=clean,
+        )
+
+        if result.success:
+            print_success(f"PDF generado: {result.pdf_path.name}")
+            if result.warnings:
+                print_warning(f"Advertencias: {len(result.warnings)}")
+                for w in result.warnings[:3]:
+                    typer.echo(f"    - {w[:80]}")
+        else:
+            print_error("Error al compilar PDF")
+            if result.error_message:
+                typer.echo(f"  {result.error_message[:200]}")
+            if result.log_path and result.log_path.exists():
+                typer.echo(f"  Ver log: {result.log_path}")
+            raise typer.Exit(1)
+
+        print_separator()
+    else:
+        typer.echo(f"\n  Para compilar:")
+        typer.echo(f"    cd {output_dir.absolute()}")
+        typer.echo(f"    pdflatex {main_filename}")
+        typer.echo(f"\n  O use --pdf para compilar automáticamente")
+        print_separator()
 
 
 def _generate_sections(session, rows, generated_files):

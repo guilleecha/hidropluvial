@@ -460,16 +460,16 @@ def hyetograph_result_to_tikz(
 # Comparación de metodologías C vs CN
 # ============================================================================
 
-# Colores para múltiples series
-SERIES_COLORS = [
-    "black", "red", "blue", "green!60!black", "orange", "purple",
-    "brown", "cyan", "magenta", "olive"
-]
+# Colores y estilos para múltiples series (importados desde palettes)
+from hidropluvial.reports.palettes import (
+    get_series_colors,
+    get_series_styles,
+    get_active_palette,
+)
 
-SERIES_STYLES = [
-    "solid", "dashed", "dotted", "dashdotted", "solid",
-    "dashed", "dotted", "dashdotted", "solid", "dashed"
-]
+# Mantener compatibilidad con código existente
+SERIES_COLORS = get_series_colors()
+SERIES_STYLES = get_series_styles()
 
 
 def generate_methodology_comparison_tikz(

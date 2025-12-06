@@ -891,3 +891,52 @@ def print_summary_table(session_name: str, rows: list[dict]) -> None:
         )
 
     console.print(table)
+
+
+def print_x_factor_table(
+    title: str = "Factor X Morfológico",
+) -> None:
+    """
+    Imprime tabla de factores X con formato Rich.
+
+    Fuente: Adaptado de 'Escoamento Superficial Direto', Rubem La Laina Porto.
+
+    Args:
+        title: Título de la tabla
+    """
+    console = get_console()
+    p = get_palette()
+
+    # Datos de la tabla
+    x_data = [
+        ("1.00", "Método racional", "Respuesta rápida, cuencas pequeñas impermeables"),
+        ("1.25", "Urbano alta pendiente", "Áreas urbanas con pendiente pronunciada"),
+        ("1.67", "Método NRCS", "Hidrograma unitario SCS estándar"),
+        ("2.25", "Uso mixto", "Combinación rural/urbano"),
+        ("3.33", "Rural sinuoso", "Cuencas rurales con cauces sinuosos"),
+        ("5.50", "Rural pend. baja", "Áreas rurales con pendiente baja"),
+        ("12.0", "Rural pend. muy baja", "Áreas rurales con pendiente muy baja"),
+    ]
+
+    table = Table(
+        title=title,
+        title_style=f"bold {p.table_header}",
+        caption="Fuente: Porto, R.L.L. 'Escoamento Superficial Direto'",
+        caption_style=p.muted,
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    table.add_column("X", justify="right", style=f"bold {p.number}", width=6)
+    table.add_column("Tipo", justify="left", style=p.table_category, width=20)
+    table.add_column("Aplicación", justify="left", style=p.muted)
+
+    for x_val, tipo, aplicacion in x_data:
+        table.add_row(x_val, tipo, aplicacion)
+
+    console.print()
+    console.print(table)
+    console.print()

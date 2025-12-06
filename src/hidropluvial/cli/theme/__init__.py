@@ -86,6 +86,7 @@ from hidropluvial.cli.theme.tables import (
     print_c_table_simple,
     print_cn_table,
     print_summary_table,
+    print_x_factor_table,
 )
 
 __all__ = [
@@ -152,4 +153,5 @@ __all__ = [
     "print_c_table_simple",
     "print_cn_table",
     "print_summary_table",
+    "print_x_factor_table",
 ]

@@ -187,24 +187,18 @@ class StepTormenta(WizardStep):
 
     def _collect_x_factors(self) -> StepResult:
         """Recolecta factores X morfológicos."""
-        self.echo("\n  Factor X morfológico (forma del hidrograma triangular):")
-        self.echo("  Fuente: Adaptado de 'Escoamento Superficial Direto', Rubem La Laina Porto\n")
-        self.echo("    X=1.00  Método racional (respuesta rápida)")
-        self.echo("    X=1.25  Áreas urbanas con gran pendiente")
-        self.echo("    X=1.67  Método NRCS")
-        self.echo("    X=2.25  Uso mixto rural/urbano")
-        self.echo("    X=3.33  Área rural sinuosa")
-        self.echo("    X=5.50  Área rural con pendiente baja")
-        self.echo("    X=12.0  Área rural con pendiente muy baja\n")
+        from hidropluvial.cli.theme import print_x_factor_table
+
+        print_x_factor_table()
 
         x_choices = [
             questionary.Choice("1.00 - Método racional", checked=True),
-            questionary.Choice("1.25 - Urbano con gran pendiente", checked=True),
+            questionary.Choice("1.25 - Urbano alta pendiente", checked=True),
             questionary.Choice("1.67 - Método NRCS", checked=False),
-            questionary.Choice("2.25 - Uso mixto rural/urbano", checked=False),
-            questionary.Choice("3.33 - Área rural sinuosa", checked=False),
-            questionary.Choice("5.50 - Área rural (pendiente baja)", checked=False),
-            questionary.Choice("12.0 - Área rural (pendiente muy baja)", checked=False),
+            questionary.Choice("2.25 - Uso mixto", checked=False),
+            questionary.Choice("3.33 - Rural sinuoso", checked=False),
+            questionary.Choice("5.50 - Rural pend. baja", checked=False),
+            questionary.Choice("12.0 - Rural pend. muy baja", checked=False),
         ]
 
         res, x_selected = self.checkbox("Valores de X a analizar:", x_choices)

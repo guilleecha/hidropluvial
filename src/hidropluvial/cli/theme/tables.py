@@ -286,7 +286,7 @@ def print_analyses_summary_table(
     table.add_column("tp", justify="right", style=p.muted)
     table.add_column("Abst", justify="left")  # Abstraccion: C=0.5 o CN=75
     table.add_column("Tormenta", justify="left")
-    table.add_column("Dur", justify="right", style=p.number)  # Duracion
+    table.add_column("Dur", justify="right", style=p.number)  # Duracion (h)
     table.add_column("Tr", justify="right", style=p.number)
     table.add_column("P", justify="right", style=p.number)
     table.add_column("Pe", justify="right", style=p.number)
@@ -323,7 +323,7 @@ def print_analyses_summary_table(
 
         # Tormenta
         storm_type = storm.type.upper()[:6]
-        dur_min = f"{storm.duration_hr * 60:.0f}" if storm.duration_hr else "-"
+        dur_hr = f"{storm.duration_hr:.1f}" if storm.duration_hr else "-"
 
         # Precipitacion
         p_total = f"{storm.total_depth_mm:.1f}" if storm.total_depth_mm else "-"
@@ -349,7 +349,7 @@ def print_analyses_summary_table(
             tp_unit,
             abst_str,
             storm_type,
-            dur_min,
+            dur_hr,
             str(storm.return_period),
             p_total,
             pe,
@@ -370,7 +370,7 @@ def print_analyses_summary_table(
 
     # Leyenda de unidades
     console.print(
-        f"  [dim]Tc, tp, Dur: min | Abst: C o CN | P, Pe: mm | Qp: m3/s | Vol: hm3[/dim]"
+        f"  [dim]Tc, tp: min | Dur: h | Abst: C o CN | P, Pe: mm | Qp: m3/s | Vol: hm3[/dim]"
     )
 
 

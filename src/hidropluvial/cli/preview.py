@@ -207,7 +207,6 @@ def plot_hydrograph_comparison_terminal(
         plt.plot(
             time_list,
             flow_list,
-            label=label,
             color=color,
             marker="braille"
         )

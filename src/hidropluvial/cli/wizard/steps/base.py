@@ -53,6 +53,10 @@ class WizardState:
     bimodal_peak2: float = 0.75  # Posición del segundo pico (0-1)
     bimodal_vol_split: float = 0.5  # Fracción del volumen en el primer pico
 
+    # Parámetros NRCS (método de velocidades)
+    nrcs_segments: list = field(default_factory=list)  # Lista de segmentos TCSegment
+    p2_mm: Optional[float] = None  # Precipitación 2 años, 24h (mm) para flujo laminar
+
     # Salida
     output_name: Optional[str] = None
 

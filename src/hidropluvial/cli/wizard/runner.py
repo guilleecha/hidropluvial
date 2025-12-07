@@ -284,18 +284,19 @@ class AnalysisRunner:
             tc_hr = tc_result.tc_hr
 
         # Determinar duracion y dt
+        # Usar dt configurado por el usuario (default 5 min)
+        dt = self.config.dt_min
         if storm_code == "gz":
             duration_hr = 6.0
-            dt = 5.0
         elif storm_code == "blocks24" or storm_code == "scs_ii":
             duration_hr = 24.0
-            dt = 10.0
+            # Para tormentas de 24h, dt mínimo de 10 min si el usuario puso menos
+            if dt < 10.0:
+                dt = 10.0
         elif storm_code.startswith("huff"):
             duration_hr = max(tc_hr * 2, 2.0)  # Duración 2x Tc o mínimo 2 horas
-            dt = 5.0
         else:
             duration_hr = max(tc_hr, 1.0)
-            dt = 5.0
 
         # Generar tormenta
         if storm_code == "gz":
@@ -456,6 +457,7 @@ class AdditionalAnalysisRunner:
         amc: str = "II",
         lambda_coef: float = 0.2,
         t0_min: float = 5.0,
+        dt_min: float = 5.0,
     ):
         self.session = session
         self.manager = get_session_manager()
@@ -464,6 +466,7 @@ class AdditionalAnalysisRunner:
         self.amc = amc
         self.lambda_coef = lambda_coef
         self.t0_min = t0_min
+        self.dt_min = dt_min
 
     def run(
         self,
@@ -514,19 +517,19 @@ class AdditionalAnalysisRunner:
                         else:
                             tc_hr = tc_result.tc_hr
 
-                        # Determinar duracion
+                        # Determinar duracion y dt
+                        dt = self.dt_min
                         if storm_code == "gz":
                             duration_hr = 6.0
-                            dt = 5.0
                         elif storm_code == "blocks24" or storm_code == "scs_ii":
                             duration_hr = 24.0
-                            dt = 10.0
+                            # Para tormentas de 24h, dt mínimo de 10 min
+                            if dt < 10.0:
+                                dt = 10.0
                         elif storm_code.startswith("huff"):
                             duration_hr = max(tc_hr * 2, 2.0)
-                            dt = 5.0
                         else:
                             duration_hr = max(tc_hr, 1.0)
-                            dt = 5.0
 
                         # Generar tormenta
                         if storm_code == "gz":

@@ -107,6 +107,128 @@ class StepMetodosTc(WizardStep):
         return StepResult.NEXT
 
 
+class StepIntervaloTiempo(WizardStep):
+    """Paso: Intervalo de tiempo dt del hietograma."""
+
+    @property
+    def title(self) -> str:
+        return "Intervalo de Tiempo"
+
+    def execute(self) -> StepResult:
+        from hidropluvial.core.hydrograph import recommended_dt
+
+        self.echo(f"\n-- {self.title} --\n")
+
+        # Calcular dt recomendado basado en el Tc mínimo
+        tc_min_hr = self._get_min_tc_hr()
+        if tc_min_hr:
+            dt_rec_hr = recommended_dt(tc_min_hr)
+            dt_rec_min = dt_rec_hr * 60
+            # Redondear a valor práctico (1, 2, 5, 10, 15 min)
+            practical_values = [1, 2, 5, 10, 15, 30]
+            dt_practical = min(practical_values, key=lambda x: abs(x - dt_rec_min))
+            self.echo(f"  Tc mínimo estimado: {tc_min_hr * 60:.1f} min")
+            self.echo(f"  dt recomendado: {dt_rec_min:.1f} min → {dt_practical} min")
+        else:
+            dt_practical = 5
+
+        self.echo("\n  El intervalo dt afecta la forma del hidrograma:")
+        self.echo("    - dt pequeño → picos más altos, mayor precisión")
+        self.echo("    - dt grande  → picos más bajos, menor precisión")
+        self.echo(f"    - Máximo recomendado: dt ≤ 0.25 × Tp\n")
+
+        res, configurar = self.confirm(
+            f"¿Usar dt = {dt_practical} min? (recomendado)",
+            default=True,
+        )
+
+        if res != StepResult.NEXT:
+            return res
+
+        if configurar:
+            self.state.dt_min = float(dt_practical)
+            self.echo(f"\n  Configurado: dt = {dt_practical} min")
+            return StepResult.NEXT
+
+        # Opciones de dt
+        dt_choices = [
+            "1 min - Muy detallado (cuencas pequeñas)",
+            "2 min - Detallado",
+            "5 min - Estándar (default)",
+            "10 min - Tormentas largas (24h)",
+            "15 min - TR-55 tabular",
+            "Otro valor",
+        ]
+
+        res, dt_choice = self.select("Intervalo de tiempo dt:", dt_choices)
+
+        if res != StepResult.NEXT:
+            return res
+
+        if dt_choice:
+            if "1 min" in dt_choice:
+                self.state.dt_min = 1.0
+            elif "2 min" in dt_choice:
+                self.state.dt_min = 2.0
+            elif "5 min" in dt_choice:
+                self.state.dt_min = 5.0
+            elif "10 min" in dt_choice:
+                self.state.dt_min = 10.0
+            elif "15 min" in dt_choice:
+                self.state.dt_min = 15.0
+            elif "Otro" in dt_choice:
+                res, val = self.text(
+                    "Valor de dt (minutos, 1-30):",
+                    validate=lambda x: self._validate_dt(x),
+                    default="5",
+                )
+                if res != StepResult.NEXT:
+                    return res
+                if val:
+                    self.state.dt_min = float(val)
+
+        self.echo(f"\n  Configurado: dt = {self.state.dt_min} min")
+        return StepResult.NEXT
+
+    def _get_min_tc_hr(self) -> float | None:
+        """Estima el Tc mínimo basado en los métodos seleccionados."""
+        from hidropluvial.core import kirpich, desbordes, temez
+
+        tc_values = []
+
+        for method_str in self.state.tc_methods:
+            method = method_str.split()[0].lower()
+
+            if method == "kirpich" and self.state.length_m:
+                tc = kirpich(self.state.length_m, self.state.slope_pct / 100)
+                tc_values.append(tc)
+            elif method == "temez" and self.state.length_m:
+                tc = temez(self.state.length_m / 1000, self.state.slope_pct / 100)
+                tc_values.append(tc)
+            elif method == "desbordes" and self.state.c:
+                tc = desbordes(
+                    self.state.area_ha,
+                    self.state.slope_pct,
+                    self.state.c,
+                    self.state.t0_min,
+                )
+                tc_values.append(tc)
+
+        return min(tc_values) if tc_values else None
+
+    def _validate_dt(self, value: str) -> bool | str:
+        """Valida entrada de dt."""
+        try:
+            v = float(value)
+            if v < 1:
+                return "dt debe ser >= 1 minuto"
+            if v > 30:
+                return "dt debe ser <= 30 minutos"
+            return True
+        except ValueError:
+            return "Debe ser un número válido"
+
+
 class StepTormenta(WizardStep):
     """Paso: Tipo de tormenta y períodos de retorno."""
 

@@ -47,6 +47,7 @@ class WizardConfig:
     storm_codes: list[str] = field(default_factory=lambda: ["gz"])
     return_periods: list[int] = field(default_factory=list)
     x_factors: list[float] = field(default_factory=lambda: [1.0])
+    dt_min: float = 5.0  # Intervalo de tiempo del hietograma (minutos)
 
     # Salida
     output_name: Optional[str] = None
@@ -79,6 +80,7 @@ class WizardConfig:
             storm_codes=state.storm_codes,
             return_periods=state.return_periods,
             x_factors=state.x_factors,
+            dt_min=state.dt_min,
             output_name=state.output_name,
         )
 

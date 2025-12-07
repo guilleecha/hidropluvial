@@ -46,6 +46,7 @@ class WizardState:
     storm_codes: list[str] = field(default_factory=lambda: ["gz"])
     return_periods: list[int] = field(default_factory=list)
     x_factors: list[float] = field(default_factory=lambda: [1.0])
+    dt_min: float = 5.0  # Intervalo de tiempo del hietograma (minutos)
 
     # Salida
     output_name: Optional[str] = None
@@ -168,6 +169,7 @@ class WizardNavigator:
         from hidropluvial.cli.wizard.steps.escorrentia import StepMetodoEscorrentia
         from hidropluvial.cli.wizard.steps.tc_tormenta import (
             StepMetodosTc,
+            StepIntervaloTiempo,
             StepTormenta,
             StepSalida,
         )
@@ -178,6 +180,7 @@ class WizardNavigator:
             StepLongitud(self.state),
             StepMetodoEscorrentia(self.state),
             StepMetodosTc(self.state),
+            StepIntervaloTiempo(self.state),
             StepTormenta(self.state),
             StepSalida(self.state),
         ]

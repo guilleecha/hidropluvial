@@ -185,6 +185,18 @@ Los datos se almacenan en `~/.hidropluvial/hidropluvial.db` (SQLite).
 Para usuarios avanzados, también están disponibles comandos directos:
 
 ```bash
+# Gestión de cuencas
+hp basin list                     # Listar todas las cuencas
+hp basin show <id>                # Ver detalles de cuenca
+hp basin export <id> --format xlsx  # Exportar a Excel
+hp basin report <id> --pdf        # Generar reporte LaTeX/PDF
+hp basin preview <id>             # Ver gráficos en terminal
+
+# Gestión de proyectos
+hp project list                   # Listar proyectos
+hp project show <id>              # Ver proyecto
+hp project basin-add <id> "Nombre" --area 50 --slope 2.5 --p310 80
+
 # Consultas IDF
 hp idf departamentos              # Ver P₃,₁₀ por departamento
 hp idf uruguay 78 3 --tr 25       # Calcular intensidad
@@ -196,13 +208,6 @@ hp tc desbordes 62 3.41 0.62      # Desbordes (A ha, S%, C)
 # Escorrentía
 hp runoff cn 100 81               # Escorrentía SCS-CN
 hp runoff cn-table --group B      # Ver tabla CN
-
-# Gestión de proyectos
-hp project list                   # Listar proyectos
-hp project show <id>              # Ver proyecto
-hp project basin-add <id> "Nombre" --area 50 --slope 2.5 --p310 80
-hp project basin-list <id>        # Ver cuencas
-hp project basin-show <pid> <bid> # Ver cuenca específica
 ```
 
 > **Nota**: El wizard (`hp wizard`) es la forma recomendada de trabajar.

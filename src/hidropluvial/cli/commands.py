@@ -18,7 +18,11 @@ def show_commands():
 
 USO: hp <comando> [opciones]
 
-PROYECTOS (estructura multi-cuenca)
+MODO INTERACTIVO (RECOMENDADO)
+--------------------------------------------------------------
+  wizard                   Asistente guiado paso a paso
+
+PROYECTOS
 --------------------------------------------------------------
   project create <nombre>     Crear proyecto hidrologico
   project list                Listar proyectos disponibles
@@ -28,25 +32,31 @@ PROYECTOS (estructura multi-cuenca)
   project basin-add <id>      Agregar cuenca al proyecto
   project basin-list <id>     Listar cuencas del proyecto
   project basin-show <id>     Ver detalles de cuenca
-  project migrate             Migrar sesiones a proyecto
 
-SESIONES (legacy, cuenca individual)
+CUENCAS
 --------------------------------------------------------------
-  session create <nombre>     Crear sesion de analisis
-  session list                Listar sesiones guardadas
-  session tc <id>             Calcular tiempo de concentracion
-  session analyze <id>        Ejecutar analisis hidrologico
-  session summary <id>        Ver tabla resumen
-  session preview <id>        Ver hidrogramas en terminal
-  session report <id>         Generar reporte LaTeX
-  session export <id>         Exportar a Excel/CSV
-  session batch <yaml>        Analisis batch desde archivo
-  session delete <id>         Eliminar sesion
+  basin list [project_id]     Listar cuencas (todas o de proyecto)
+  basin show <id>             Ver detalles de cuenca
+  basin export <id>           Exportar a Excel/CSV
+  basin report <id>           Generar reporte LaTeX
+  basin preview <id>          Ver hidrogramas en terminal
+  basin compare <id1> <id2>   Comparar cuencas
 
 CURVAS IDF
 --------------------------------------------------------------
-  idf tabla-uy <estacion>     Tabla IDF para estacion Uruguay
-  idf intensidad <est> <d>    Intensidad para duracion especifica
+  idf departamentos           Ver P3,10 por departamento
+  idf uruguay <p3_10> <d>     Calcular intensidad
+
+TIEMPO DE CONCENTRACION
+--------------------------------------------------------------
+  tc kirpich <L> <S>          Metodo Kirpich (L en m, S en m/m)
+  tc desbordes <A> <S> <C>    Metodo Desbordes (A en ha, S en %)
+  tc temez <L> <S>            Metodo Temez (L en km, S en m/m)
+
+ESCORRENTIA
+--------------------------------------------------------------
+  runoff cn <P> <CN>          Escorrentia metodo SCS-CN
+  runoff cn-table             Ver tablas de CN
 
 TORMENTAS DE DISENO
 --------------------------------------------------------------
@@ -54,61 +64,29 @@ TORMENTAS DE DISENO
   storm gz <p3_10>            Tormenta metodologia GZ (6h)
   storm bimodal-uy <p3_10>    Tormenta bimodal Uruguay
 
-TIEMPO DE CONCENTRACION
+EJEMPLO RAPIDO
 --------------------------------------------------------------
-  tc kirpich <L> <S>          Metodo Kirpich (L en m, S en m/m)
-  tc desbordes <A> <S> <C>    Metodo Desbordes (A en ha, S en %)
+  # Iniciar wizard (recomendado)
+  hp wizard
 
-ESCORRENTIA
---------------------------------------------------------------
-  runoff cn <P> <CN>          Escorrentia metodo SCS-CN
-
-HIDROGRAMAS
---------------------------------------------------------------
-  hydrograph scs              Hidrograma unitario SCS
-  hydrograph gz               Hidrograma metodologia GZ
-
-EXPORTACION
---------------------------------------------------------------
-  export idf-csv <est>        Exportar tabla IDF a CSV
-  report idf <est>            Generar reporte IDF en LaTeX
-
-EJEMPLO RAPIDO (proyecto)
---------------------------------------------------------------
-  # Crear proyecto
+  # Crear proyecto y agregar cuenca
   hp project create "Estudio Arroyo XYZ" --desc "Drenaje zona norte"
+  hp project basin-add abc123 "Cuenca A" --area 50 --slope 2.5 --p310 80
 
-  # Agregar cuenca al proyecto
-  hp project basin-add abc123 "Subcuenca Norte" --area 50 --slope 2.5 --p3_10 80 --c 0.55
+  # Ver cuencas
+  hp basin list
+  hp basin show abc123
 
-  # Migrar sesiones existentes a proyecto
-  hp project migrate --name "Mis Analisis"
+  # Exportar y reportes
+  hp basin export abc123 --format xlsx
+  hp basin report abc123 --pdf
 
-EJEMPLO RAPIDO (sesion legacy)
---------------------------------------------------------------
-  # Crear sesion con datos de cuenca
-  hp session create "Mi Cuenca" --area 50 --slope 2.5 --p3_10 80 --c 0.55
+  # Ver hidrogramas interactivamente
+  hp basin preview abc123
 
-  # Calcular tiempo de concentracion
-  hp session tc abc123 --methods "kirpich,desbordes"
-
-  # Ejecutar analisis
-  hp session analyze abc123 --tc desbordes --storm gz --tr 10
-
-  # Ver hidrogramas en terminal
-  hp session preview abc123 --interactive          # Navegar con flechas
-  hp session preview abc123 --compare              # Comparar todos
-  hp session preview abc123 --compare --select 0,2 # Comparar indices
-  hp session preview abc123 --compare --tr 10      # Filtrar por Tr
-  hp session preview abc123 -i 0                   # Ver hidrograma #0
-  hp session preview abc123 -i 0 --hyeto           # Ver hietograma #0
-
-  # Generar reporte
-  hp session report abc123 -o mi_reporte
-
-MODO INTERACTIVO
---------------------------------------------------------------
-  hp wizard                   Asistente guiado paso a paso
+  # Calculos directos
+  hp tc kirpich 800 0.034
+  hp idf uruguay 78 3 --tr 25
 
 Usa 'hp <comando> --help' para ver opciones detalladas.
 """)

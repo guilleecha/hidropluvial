@@ -72,19 +72,21 @@ def runoff_cn(
 
 @runoff_app.command("rational")
 def runoff_rational(
-    c: Annotated[float, typer.Argument(help="Coeficiente de escorrentía (0-1)")],
+    c: Annotated[float, typer.Argument(help="Coeficiente de escorrentía (0-1), ya ajustado por Tr")],
     intensity: Annotated[float, typer.Argument(help="Intensidad en mm/hr")],
     area: Annotated[float, typer.Argument(help="Área en hectáreas")],
-    return_period: Annotated[int, typer.Option(help="Período de retorno")] = 10,
 ):
-    """Calcula caudal pico usando método racional."""
-    q = rational_peak_flow(c, intensity, area, return_period)
+    """Calcula caudal pico usando método racional.
+
+    El coeficiente C debe incluir el ajuste por período de retorno.
+    Use tablas como Ven Te Chow o DINAGUA que proporcionan C según Tr.
+    """
+    q = rational_peak_flow(c, intensity, area)
 
     typer.echo(f"\nMétodo Racional")
     typer.echo(f"C = {c:.2f}")
     typer.echo(f"i = {intensity:.2f} mm/hr")
     typer.echo(f"A = {area:.2f} ha")
-    typer.echo(f"T = {return_period} años")
     typer.echo(f"Q = {q:.3f} m3/s")
 
 

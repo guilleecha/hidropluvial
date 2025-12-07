@@ -89,7 +89,7 @@ class TestRunoffRational:
 
     def test_basic_calculation(self, capsys):
         """Test cálculo básico método racional."""
-        runoff_rational(c=0.5, intensity=50.0, area=10.0, return_period=10)
+        runoff_rational(c=0.5, intensity=50.0, area=10.0)
 
         captured = capsys.readouterr()
         assert "Método Racional" in captured.out
@@ -98,19 +98,12 @@ class TestRunoffRational:
         assert "A = 10.00 ha" in captured.out
         assert "Q =" in captured.out
 
-    def test_different_return_period(self, capsys):
-        """Test con período de retorno diferente."""
-        runoff_rational(c=0.5, intensity=50.0, area=10.0, return_period=25)
-
-        captured = capsys.readouterr()
-        assert "T = 25 años" in captured.out
-
     def test_high_c_more_flow(self, capsys):
         """Test que C alto produce más caudal."""
-        runoff_rational(c=0.9, intensity=50.0, area=10.0, return_period=10)
+        runoff_rational(c=0.9, intensity=50.0, area=10.0)
         captured1 = capsys.readouterr()
 
-        runoff_rational(c=0.3, intensity=50.0, area=10.0, return_period=10)
+        runoff_rational(c=0.3, intensity=50.0, area=10.0)
         captured2 = capsys.readouterr()
 
         # Ambos deben mostrar resultado
@@ -276,12 +269,6 @@ class TestRunoffAppCLI:
         assert result.exit_code == 0
         assert "Método Racional" in result.output
         assert "Q =" in result.output
-
-    def test_rational_with_return_period(self):
-        """Test rational con período de retorno."""
-        result = runner.invoke(runoff_app, ["rational", "0.5", "50", "10", "--return-period", "25"])
-        assert result.exit_code == 0
-        assert "T = 25" in result.output
 
     def test_show_tables_c_via_cli(self):
         """Test show-tables c via CLI."""

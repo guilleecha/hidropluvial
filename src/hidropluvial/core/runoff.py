@@ -354,33 +354,24 @@ def _apply_minimum_infiltration_check(
 # Método Racional
 # ============================================================================
 
-# Factores de ajuste por período de retorno (Cf)
-RATIONAL_CF = {
-    2: 1.00,
-    5: 1.00,
-    10: 1.00,
-    25: 1.10,
-    50: 1.20,
-    100: 1.25,
-}
-
-
 def rational_peak_flow(
     c: float,
     intensity_mmhr: float,
     area_ha: float,
-    return_period_yr: int = 10,
 ) -> float:
     """
     Calcula caudal pico usando método racional.
 
-    Q = 0.00278 × Cf × C × i × A  [Q: m³/s, i: mm/hr, A: ha]
+    Q = 0.00278 × C × i × A  [Q: m³/s, i: mm/hr, A: ha]
+
+    El coeficiente C debe incluir el ajuste por período de retorno.
+    Las tablas de C (ej: Ven Te Chow, DINAGUA) proporcionan valores
+    diferentes según el Tr.
 
     Args:
-        c: Coeficiente de escorrentía (0-1)
+        c: Coeficiente de escorrentía (0-1), ya ajustado por Tr
         intensity_mmhr: Intensidad de lluvia en mm/hr
         area_ha: Área de la cuenca en hectáreas
-        return_period_yr: Período de retorno en años
 
     Returns:
         Caudal pico en m³/s
@@ -392,16 +383,8 @@ def rational_peak_flow(
     if area_ha <= 0:
         raise ValueError("Área debe ser > 0")
 
-    # Obtener factor Cf
-    cf = RATIONAL_CF.get(return_period_yr, 1.0)
-    if return_period_yr > 100:
-        cf = 1.25
-
-    # Asegurar que Cf × C ≤ 1.0
-    c_effective = min(cf * c, 1.0)
-
     # Q = 0.00278 × C × i × A
-    Q = 0.00278 * c_effective * intensity_mmhr * area_ha
+    Q = 0.00278 * c * intensity_mmhr * area_ha
 
     return Q
 

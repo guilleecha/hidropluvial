@@ -15,7 +15,6 @@ from hidropluvial.core.runoff import (
     rational_peak_flow,
     composite_c,
     RATIONAL_C,
-    RATIONAL_CF,
     get_rational_c,
     get_minimum_infiltration_rate,
     MINIMUM_INFILTRATION_RATE,
@@ -167,12 +166,6 @@ class TestRationalMethod:
         expected = 0.00278 * 0.5 * 50 * 10
         assert q == pytest.approx(expected, rel=0.01)
 
-    def test_return_period_adjustment(self):
-        """Test ajuste por período de retorno."""
-        q_10 = rational_peak_flow(0.5, 50, 10, return_period_yr=10)
-        q_100 = rational_peak_flow(0.5, 50, 10, return_period_yr=100)
-        assert q_100 > q_10
-
     def test_invalid_c(self):
         """Test C fuera de rango."""
         with pytest.raises(ValueError):
@@ -300,18 +293,6 @@ class TestCompositeC:
         """Test area total cero."""
         with pytest.raises(ValueError, match="cero"):
             composite_c([0, 0], [0.5, 0.6])
-
-
-class TestRationalCF:
-    """Tests para factores de ajuste Cf."""
-
-    def test_cf_values(self):
-        """Test valores de Cf definidos."""
-        assert RATIONAL_CF[2] == 1.00
-        assert RATIONAL_CF[10] == 1.00
-        assert RATIONAL_CF[25] == 1.10
-        assert RATIONAL_CF[50] == 1.20
-        assert RATIONAL_CF[100] == 1.25
 
 
 class TestRationalCTable:

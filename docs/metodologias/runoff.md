@@ -182,51 +182,50 @@ Metodo clasico para estimar caudales pico en cuencas pequenas (< 80 ha). Asume q
 ### 3.2 Formula
 
 ```
-Q = 0.00278 × Cf × C × i × A
+Q = 0.00278 × C × i × A
 ```
 
 Donde:
 - `Q`: Caudal pico (m³/s)
-- `Cf`: Factor de ajuste por periodo de retorno
-- `C`: Coeficiente de escorrentia (0-1)
+- `C`: Coeficiente de escorrentia (0-1), ya ajustado por periodo de retorno
 - `i`: Intensidad de lluvia (mm/hr)
 - `A`: Area de la cuenca (hectareas)
 
-### 3.3 Factor de Ajuste por Periodo de Retorno (Cf)
+### 3.3 Coeficiente C y Periodo de Retorno
 
-| Periodo de Retorno | Cf |
-|--------------------|-----|
-| 2-10 anos | 1.00 |
-| 25 anos | 1.10 |
-| 50 anos | 1.20 |
-| 100 anos | 1.25 |
+El coeficiente C **ya incluye** el ajuste por periodo de retorno. Las tablas de
+coeficientes (Ven Te Chow, DINAGUA, HEC-22) proporcionan valores diferentes segun
+el Tr seleccionado.
+
+Ejemplo (Tabla Ven Te Chow - Asfalto):
+
+| Periodo de Retorno | C min | C max |
+|--------------------|-------|-------|
+| 2-10 anos | 0.73 | 0.77 |
+| 25 anos | 0.80 | 0.84 |
+| 50 anos | 0.82 | 0.87 |
+| 100 anos | 0.85 | 0.90 |
+
+Por lo tanto, **no se aplica** un factor Cf adicional en la formula.
 
 ### 3.4 Implementacion
 
 ```python
-# Archivo: src/hidropluvial/core/runoff.py (lineas 256-305)
-
-# Factores de ajuste por periodo de retorno (Cf)
-RATIONAL_CF = {
-    2: 1.00,
-    5: 1.00,
-    10: 1.00,
-    25: 1.10,
-    50: 1.20,
-    100: 1.25,
-}
-
+# Archivo: src/hidropluvial/core/runoff.py
 
 def rational_peak_flow(
     c: float,
     intensity_mmhr: float,
     area_ha: float,
-    return_period_yr: int = 10,
 ) -> float:
     """
     Calcula caudal pico usando metodo racional.
 
-    Q = 0.00278 × Cf × C × i × A  [Q: m³/s, i: mm/hr, A: ha]
+    Q = 0.00278 × C × i × A  [Q: m³/s, i: mm/hr, A: ha]
+
+    El coeficiente C debe incluir el ajuste por periodo de retorno.
+    Las tablas de C (ej: Ven Te Chow, DINAGUA) proporcionan valores
+    diferentes segun el Tr.
     """
     if not 0 < c <= 1:
         raise ValueError("Coeficiente C debe estar entre 0 y 1")
@@ -235,16 +234,8 @@ def rational_peak_flow(
     if area_ha <= 0:
         raise ValueError("Area debe ser > 0")
 
-    # Obtener factor Cf
-    cf = RATIONAL_CF.get(return_period_yr, 1.0)
-    if return_period_yr > 100:
-        cf = 1.25
-
-    # Asegurar que Cf × C ≤ 1.0
-    c_effective = min(cf * c, 1.0)
-
     # Q = 0.00278 × C × i × A
-    Q = 0.00278 * c_effective * intensity_mmhr * area_ha
+    Q = 0.00278 * c * intensity_mmhr * area_ha
 
     return Q
 ```

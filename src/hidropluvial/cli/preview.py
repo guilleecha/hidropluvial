@@ -13,8 +13,26 @@ import plotext as plt
 from hidropluvial.cli.formatters import format_flow
 
 
-# Caracteres para sparklines (8 niveles) - ASCII compatible
-SPARK_CHARS = " ._-=+*#@"
+# Caracteres para sparklines (8 niveles)
+# Unicode block elements: ▁▂▃▄▅▆▇█
+_SPARK_UNICODE = " \u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588"
+# ASCII fallback con densidad visual creciente
+_SPARK_ASCII = " .:-=ioM#"
+
+
+def _detect_unicode_support() -> bool:
+    """Detecta si el terminal soporta caracteres Unicode de bloques."""
+    import sys
+    try:
+        encoding = getattr(sys.stdout, 'encoding', None) or 'ascii'
+        "\u2588".encode(encoding)
+        return True
+    except (UnicodeEncodeError, LookupError):
+        return False
+
+
+# Seleccionar caracteres segun soporte del terminal
+SPARK_CHARS = _SPARK_UNICODE if _detect_unicode_support() else _SPARK_ASCII
 
 
 def sparkline(values: Sequence[float], width: int = 20) -> str:

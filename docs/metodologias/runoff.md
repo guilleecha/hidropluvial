@@ -445,6 +445,8 @@ cumulative_rain = np.array([0, 5, 15, 35, 50, 60, 65, 68])
 excess_basic = rainfall_excess_series(cumulative_rain, cn=69, lambda_coef=0.2)
 
 # Con verificacion fc (metodologia UdelaR)
+# La verificacion asegura que la abstraccion sea >= fc × dt
+# Si SCS-CN calcula menos, se ajusta, reduciendo la escorrentia
 excess_with_fc = rainfall_excess_series(
     cumulative_rain,
     cn=69,
@@ -455,6 +457,7 @@ excess_with_fc = rainfall_excess_series(
 
 print(f"Escorrentia total (sin fc): {sum(excess_basic):.2f} mm")
 print(f"Escorrentia total (con fc): {sum(excess_with_fc):.2f} mm")
+# La escorrentia con fc sera <= que sin fc
 ```
 
 ---

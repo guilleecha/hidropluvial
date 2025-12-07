@@ -7,7 +7,6 @@ from typing import Optional, Tuple
 import numpy as np
 import typer
 
-from hidropluvial.cli.session.base import get_session_manager
 from hidropluvial.cli.wizard.config import WizardConfig
 from hidropluvial.cli.theme import (
     get_console,
@@ -39,8 +38,16 @@ from hidropluvial.core.temporal import huff_distribution, scs_distribution
 from hidropluvial.core.idf import dinagua_depth
 from hidropluvial.config import StormMethod
 from hidropluvial.core.coefficients import get_c_for_tr_from_table
-from hidropluvial.session import Session, CoverageItem
-from hidropluvial.project import Project, Basin, get_project_manager
+from hidropluvial.models import (
+    Basin,
+    CoverageItem,
+    WeightedCoefficient,
+    TcResult,
+    StormResult,
+    HydrographResult,
+    AnalysisRun,
+)
+from hidropluvial.project import Project, get_project_manager
 
 
 def _get_amc_enum(amc_str: str) -> AntecedentMoistureCondition:
@@ -82,14 +89,14 @@ def _get_c_for_tr(config: WizardConfig, tr: int) -> float:
         return adjust_c_for_tr(config.c, tr, base_tr=2)
 
 
-def _get_c_for_tr_from_session(session: Session, c_base: float, tr: int) -> float:
+def _get_c_for_tr_from_basin(basin: Basin, c_base: float, tr: int) -> float:
     """
-    Obtiene el coeficiente C ajustado para un Tr desde datos de sesión.
+    Obtiene el coeficiente C ajustado para un Tr desde datos de cuenca.
 
-    Si la sesión tiene datos de ponderación (c_weighted), recalcula exacto.
+    Si la cuenca tiene datos de ponderación (c_weighted), recalcula exacto.
     Si no, usa el factor de ajuste promedio.
     """
-    c_weighted = session.cuenca.c_weighted
+    c_weighted = basin.c_weighted
 
     if c_weighted and c_weighted.table_used == "chow" and c_weighted.items:
         # Verificar que los items tengan table_index
@@ -116,9 +123,7 @@ class AnalysisRunner:
                        Si no se especifica, se crea un proyecto por defecto.
         """
         self.config = config
-        self.manager = get_session_manager()
         self.project_manager = get_project_manager()
-        self.session: Optional[Session] = None
         self.project: Optional[Project] = None
         self.basin: Optional[Basin] = None
         self.project_id = project_id
@@ -127,10 +132,9 @@ class AnalysisRunner:
         """
         Ejecuta el analisis completo y retorna (project, basin).
 
-        Siempre crea o usa un proyecto y guarda la cuenca tanto como
-        Session (compatibilidad) como Basin en el proyecto.
+        Crea o usa un proyecto y guarda la cuenca con todos sus análisis.
         """
-        self._create_session()
+        self._create_project_and_basin()
         self._calculate_tc()
         self._run_analyses()
 
@@ -139,13 +143,13 @@ class AnalysisRunner:
 
         self._print_summary()
 
-        # Crear/obtener proyecto y convertir session a basin
-        self._create_project_and_basin()
+        # Guardar proyecto con la cuenca actualizada
+        self.project_manager.save_project(self.project)
 
         return self.project, self.basin
 
     def _create_project_and_basin(self) -> None:
-        """Crea o obtiene el proyecto y convierte la session a basin."""
+        """Crea o obtiene el proyecto y crea la cuenca."""
         # Si hay project_id, usar ese proyecto
         if self.project_id:
             self.project = self.project_manager.get_project(self.project_id)
@@ -158,16 +162,8 @@ class AnalysisRunner:
             )
             print_success(f"Proyecto creado: {self.project.id}")
 
-        # Convertir session a basin y agregar al proyecto
-        self.basin = Basin.from_session(self.session)
-        self.project.add_basin(self.basin)
-        self.project_manager.save_project(self.project)
-
-    def _create_session(self) -> None:
-        """Crea la sesion."""
-        from hidropluvial.session import WeightedCoefficient
-
-        self.session = self.manager.create(
+        # Crear cuenca con datos del wizard
+        self.basin = Basin(
             name=self.config.nombre,
             area_ha=self.config.area_ha,
             slope_pct=self.config.slope_pct,
@@ -175,7 +171,6 @@ class AnalysisRunner:
             c=self.config.c,
             cn=self.config.cn,
             length_m=self.config.length_m,
-            cuenca_nombre=self.config.nombre,
         )
 
         # Guardar datos de ponderación de C si existen
@@ -190,16 +185,17 @@ class AnalysisRunner:
                 )
                 for d in self.config.c_weighted_data["items"]
             ]
-            weighted_coef = WeightedCoefficient(
+            self.basin.c_weighted = WeightedCoefficient(
                 type="c",
                 table_used=self.config.c_weighted_data["table_key"],
                 weighted_value=self.config.c,
                 items=items,
                 base_tr=self.config.c_weighted_data["base_tr"],
             )
-            self.manager.set_weighted_coefficient(self.session, weighted_coef)
 
-        print_success(f"Sesion creada: {self.session.id}")
+        self.project.add_basin(self.basin)
+        print_success(f"Cuenca creada: {self.basin.id}")
+
 
     def _calculate_tc(self) -> None:
         """Calcula tiempo de concentracion con los metodos seleccionados."""
@@ -229,8 +225,15 @@ class AnalysisRunner:
                 }
 
             if tc_hr:
-                result = self.manager.add_tc_result(self.session, method, tc_hr, **tc_params)
-                print_result_row(f"Tc ({method})", f"{result.tc_min:.1f}", "min")
+                tc_min = tc_hr * 60
+                result = TcResult(
+                    method=method,
+                    tc_hr=tc_hr,
+                    tc_min=tc_min,
+                    parameters=tc_params,
+                )
+                self.basin.add_tc_result(result)
+                print_result_row(f"Tc ({method})", f"{tc_min:.1f}", "min")
 
     def _run_analyses(self) -> None:
         """Ejecuta todos los analisis."""
@@ -243,7 +246,7 @@ class AnalysisRunner:
         if self.config.cn:
             runoff_methods.append("scs-cn")
 
-        for tc_result in self.session.tc_results:
+        for tc_result in self.basin.tc_results:
             for storm_code in self.config.storm_codes:
                 for tr in self.config.return_periods:
                     for runoff_method in runoff_methods:
@@ -394,69 +397,102 @@ class AnalysisRunner:
             tc_params["amc"] = self.config.amc
             tc_params["lambda"] = self.config.lambda_coef
 
-        # Guardar analisis
-        self.manager.add_analysis(
-            session=self.session,
-            tc_method=tc_result.method,
+        # Crear objetos de resultado
+        tc_result_obj = TcResult(
+            method=tc_result.method,
             tc_hr=tc_hr,
-            storm_type=storm_code,
+            tc_min=tc_hr * 60,
+            parameters=tc_params,
+        )
+
+        storm_result = StormResult(
+            type=storm_code,
             return_period=tr,
             duration_hr=duration_hr,
             total_depth_mm=hyetograph.total_depth_mm,
             peak_intensity_mmhr=hyetograph.peak_intensity_mmhr,
             n_intervals=len(hyetograph.time_min),
+            time_min=list(hyetograph.time_min),
+            intensity_mmhr=list(hyetograph.intensity_mmhr),
+        )
+
+        hydrograph_result = HydrographResult(
+            tc_method=tc_result.method,
+            tc_min=tc_hr * 60,
+            storm_type=storm_code,
+            return_period=tr,
+            x_factor=x if storm_code == "gz" else None,
             peak_flow_m3s=peak_flow,
             time_to_peak_hr=time_to_peak,
-            volume_m3=volume_m3,
-            runoff_mm=runoff_mm,
-            x_factor=x if storm_code == "gz" else None,
+            time_to_peak_min=time_to_peak * 60,
             tp_unit_hr=tp_unit_hr,
-            storm_time_min=list(hyetograph.time_min),
-            storm_intensity_mmhr=list(hyetograph.intensity_mmhr),
-            hydrograph_time_hr=[float(t) for t in hydrograph_time],
-            hydrograph_flow_m3s=[float(q) for q in hydrograph_flow],
-            **tc_params,
+            tp_unit_min=tp_unit_hr * 60 if tp_unit_hr else None,
+            volume_m3=volume_m3,
+            total_depth_mm=hyetograph.total_depth_mm,
+            runoff_mm=runoff_mm,
+            time_hr=[float(t) for t in hydrograph_time],
+            flow_m3s=[float(q) for q in hydrograph_flow],
         )
+
+        analysis = AnalysisRun(
+            tc=tc_result_obj,
+            storm=storm_result,
+            hydrograph=hydrograph_result,
+        )
+
+        self.basin.add_analysis(analysis)
 
     def _generate_report(self) -> None:
         """Genera reporte LaTeX."""
-        from hidropluvial.cli.session.report import session_report
+        from hidropluvial.cli.basin.report import generate_basin_report
+        from pathlib import Path
 
         print_info("Generando reporte...")
-        session_report(self.session.id, self.config.output_name, author=None, template_dir=None)
+        output_dir = Path("output") / self.config.output_name
+        generate_basin_report(
+            basin=self.basin,
+            output_dir=output_dir,
+            author="",
+            template_dir=None,
+            pdf=False,
+            clean=True,
+        )
 
     def _print_summary(self) -> None:
         """Imprime resumen final."""
         console = get_console()
         p = get_palette()
 
-        rows = self.manager.get_summary_table(self.session)
-        n_analyses = len(rows) if rows else 0
+        n_analyses = len(self.basin.analyses)
 
-        print_completion_banner(n_analyses, self.session.id)
+        print_completion_banner(n_analyses, self.basin.id)
 
-        if rows:
-            max_q = max(rows, key=lambda r: r['qpeak_m3s'])
+        if self.basin.analyses:
+            # Encontrar el análisis con mayor caudal pico
+            max_analysis = max(self.basin.analyses, key=lambda a: a.hydrograph.peak_flow_m3s)
 
             # Mostrar caudal máximo destacado
             text = Text()
             text.append("  Caudal maximo: ", style=p.label)
-            text.append(f"{max_q['qpeak_m3s']:.2f}", style=f"bold {p.accent}")
+            text.append(f"{max_analysis.hydrograph.peak_flow_m3s:.2f}", style=f"bold {p.accent}")
             text.append(" m3/s", style=p.unit)
             console.print(text)
 
             text = Text()
-            text.append(f"  ({max_q['tc_method']} + {max_q['storm']} Tr{max_q['tr']})", style=p.muted)
+            text.append(
+                f"  ({max_analysis.tc.method} + {max_analysis.storm.type} Tr{max_analysis.storm.return_period})",
+                style=p.muted
+            )
             console.print(text)
             console.print()
 
 
 class AdditionalAnalysisRunner:
-    """Ejecuta analisis adicionales sobre una sesion existente."""
+    """Ejecuta analisis adicionales sobre una cuenca existente."""
 
     def __init__(
         self,
-        session: Session,
+        basin: Basin,
         c: float = None,
         cn: float = None,
         amc: str = "II",
@@ -467,8 +503,7 @@ class AdditionalAnalysisRunner:
         bimodal_peak2: float = 0.75,
         bimodal_vol_split: float = 0.5,
     ):
-        self.session = session
-        self.manager = get_session_manager()
+        self.basin = basin
         self.c = c
         self.cn = cn
         self.amc = amc
@@ -496,8 +531,8 @@ class AdditionalAnalysisRunner:
             x_factors: Lista de factores X
             runoff_method: Método de escorrentía ('racional', 'scs-cn' o None para ambos)
         """
-        p3_10 = self.session.cuenca.p3_10
-        area = self.session.cuenca.area_ha
+        p3_10 = self.basin.p3_10
+        area = self.basin.area_ha
         n_analyses = 0
 
         # Determinar métodos de escorrentía a usar
@@ -510,7 +545,7 @@ class AdditionalAnalysisRunner:
             if self.cn:
                 runoff_methods.append("scs-cn")
 
-        for tc_result in self.session.tc_results:
+        for tc_result in self.basin.tc_results:
             if tc_result.method not in tc_methods:
                 continue
 
@@ -520,11 +555,11 @@ class AdditionalAnalysisRunner:
                         # Obtener C ajustado para el Tr del análisis (si usa método racional)
                         c_adjusted = None
                         if r_method == "racional" and self.c:
-                            c_adjusted = _get_c_for_tr_from_session(self.session, self.c, tr)
+                            c_adjusted = _get_c_for_tr_from_basin(self.basin, self.c, tr)
 
                         # Recalcular Tc si es método Desbordes (depende de C y t0)
                         if tc_result.method == "desbordes" and c_adjusted:
-                            tc_hr = desbordes(area, self.session.cuenca.slope_pct, c_adjusted, self.t0_min)
+                            tc_hr = desbordes(area, self.basin.slope_pct, c_adjusted, self.t0_min)
                         else:
                             tc_hr = tc_result.tc_hr
 
@@ -632,29 +667,50 @@ class AdditionalAnalysisRunner:
                             tc_params["amc"] = self.amc
                             tc_params["lambda"] = self.lambda_coef
 
-                        # Guardar analisis
-                        self.manager.add_analysis(
-                            session=self.session,
-                            tc_method=tc_result.method,
+                        # Crear objetos de resultado
+                        tc_result_obj = TcResult(
+                            method=tc_result.method,
                             tc_hr=tc_hr,
-                            storm_type=storm_code,
+                            tc_min=tc_hr * 60,
+                            parameters=tc_params,
+                        )
+
+                        storm_result = StormResult(
+                            type=storm_code,
                             return_period=tr,
                             duration_hr=duration_hr,
                             total_depth_mm=hyetograph.total_depth_mm,
                             peak_intensity_mmhr=hyetograph.peak_intensity_mmhr,
                             n_intervals=len(hyetograph.time_min),
+                            time_min=list(hyetograph.time_min),
+                            intensity_mmhr=list(hyetograph.intensity_mmhr),
+                        )
+
+                        hydrograph_result = HydrographResult(
+                            tc_method=tc_result.method,
+                            tc_min=tc_hr * 60,
+                            storm_type=storm_code,
+                            return_period=tr,
+                            x_factor=x if storm_code == "gz" else None,
                             peak_flow_m3s=peak_flow,
                             time_to_peak_hr=time_to_peak,
-                            volume_m3=volume_m3,
-                            runoff_mm=runoff_mm,
-                            x_factor=x if storm_code == "gz" else None,
+                            time_to_peak_min=time_to_peak * 60,
                             tp_unit_hr=tp_unit_hr,
-                            storm_time_min=list(hyetograph.time_min),
-                            storm_intensity_mmhr=list(hyetograph.intensity_mmhr),
-                            hydrograph_time_hr=[float(t) for t in hydrograph_time],
-                            hydrograph_flow_m3s=[float(q) for q in hydrograph_flow],
-                            **tc_params,
+                            tp_unit_min=tp_unit_hr * 60 if tp_unit_hr else None,
+                            volume_m3=volume_m3,
+                            total_depth_mm=hyetograph.total_depth_mm,
+                            runoff_mm=runoff_mm,
+                            time_hr=[float(t) for t in hydrograph_time],
+                            flow_m3s=[float(q) for q in hydrograph_flow],
                         )
+
+                        analysis = AnalysisRun(
+                            tc=tc_result_obj,
+                            storm=storm_result,
+                            hydrograph=hydrograph_result,
+                        )
+
+                        self.basin.add_analysis(analysis)
 
                         n_analyses += 1
 
@@ -663,6 +719,6 @@ class AdditionalAnalysisRunner:
                         break
 
         print_success(f"{n_analyses} analisis agregados")
-        print_info(f"Total en sesion: {len(self.session.analyses) + n_analyses} analisis")
+        print_info(f"Total en cuenca: {len(self.basin.analyses)} analisis")
 
         return n_analyses

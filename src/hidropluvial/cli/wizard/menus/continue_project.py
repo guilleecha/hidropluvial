@@ -22,79 +22,43 @@ class ContinueProjectMenu(BaseMenu):
         """Muestra el menu para continuar un proyecto."""
         projects = self.project_manager.list_projects()
 
-        # Tambien mostrar sesiones legacy si existen
-        sessions = self.manager.list_sessions()
-
-        if not projects and not sessions:
-            self.echo("\n  No hay proyectos ni cuencas guardadas.")
+        if not projects:
+            self.echo("\n  No hay proyectos guardados.")
             self.echo("  Usa 'hp wizard' y selecciona 'Nueva cuenca' para comenzar.\n")
             return
 
-        # Seleccionar proyecto o sesion legacy
-        selection = self._select_project_or_session(projects, sessions)
+        # Seleccionar proyecto
+        selection = self._select_project(projects)
         if not selection:
             return
 
-        sel_type, sel_id = selection
+        self.project = self.project_manager.get_project(selection)
+        if not self.project:
+            self.error(f"No se pudo cargar el proyecto {selection}")
+            return
+        self._show_project_menu()
 
-        if sel_type == "project":
-            self.project = self.project_manager.get_project(sel_id)
-            if not self.project:
-                self.error(f"No se pudo cargar el proyecto {sel_id}")
-                return
-            self._show_project_menu()
-
-        elif sel_type == "session":
-            # Cargar sesion legacy como Basin
-            session = self.manager.get_session(sel_id)
-            if not session:
-                self.error(f"No se pudo cargar la sesión {sel_id}")
-                return
-            # Convertir a Basin
-            self.basin = Basin.from_session(session)
-            self._show_basin_menu()
-
-    def _select_project_or_session(
-        self, projects: list[dict], sessions: list[dict]
-    ) -> Optional[tuple[str, str]]:
-        """Permite seleccionar un proyecto o sesion legacy."""
+    def _select_project(self, projects: list[dict]) -> Optional[str]:
+        """Permite seleccionar un proyecto."""
         choices = []
 
-        # Proyectos primero
-        if projects:
-            for p in projects:
-                n_basins = p.get("n_basins", 0)
-                n_analyses = p.get("total_analyses", 0)
-                choices.append(
-                    f"[Proyecto] {p['id']} - {p['name']} ({n_basins} cuencas, {n_analyses} analisis)"
-                )
-
-        # Sesiones legacy
-        if sessions:
-            if projects:
-                choices.append("--- Sesiones legacy (no migradas) ---")
-            for s in sessions:
-                n_analyses = s["n_analyses"]
-                choices.append(
-                    f"[Cuenca] {s['id']} - {s['name']} ({n_analyses} analisis)"
-                )
+        for p in projects:
+            n_basins = p.get("n_basins", 0)
+            n_analyses = p.get("total_analyses", 0)
+            choices.append(
+                f"{p['id']} - {p['name']} ({n_basins} cuencas, {n_analyses} analisis)"
+            )
 
         choices.append("← Volver al menu principal")
 
-        choice = self.select("Selecciona un proyecto o cuenca:", choices)
+        choice = self.select("Selecciona un proyecto:", choices)
 
-        if choice is None or "Volver" in choice or choice.startswith("---"):
+        if choice is None or "Volver" in choice:
             return None
 
         # Parsear seleccion
-        if "[Proyecto]" in choice:
-            project_id = choice.split(" - ")[0].replace("[Proyecto] ", "")
-            return ("project", project_id)
-        elif "[Cuenca]" in choice:
-            session_id = choice.split(" - ")[0].replace("[Cuenca] ", "")
-            return ("session", session_id)
-
-        return None
+        project_id = choice.split(" - ")[0]
+        return project_id
 
     def _show_project_menu(self) -> None:
         """Muestra el menu de acciones para el proyecto."""
@@ -121,17 +85,9 @@ class ContinueProjectMenu(BaseMenu):
                 return
             elif "otro proyecto" in action.lower():
                 projects = self.project_manager.list_projects()
-                sessions = self.manager.list_sessions()
-                selection = self._select_project_or_session(projects, sessions)
+                selection = self._select_project(projects)
                 if selection:
-                    sel_type, sel_id = selection
-                    if sel_type == "project":
-                        self.project = self.project_manager.get_project(sel_id)
-                    else:
-                        session = self.manager.get_session(sel_id)
-                        self.basin = Basin.from_session(session)
-                        self._show_basin_menu()
-                        return
+                    self.project = self.project_manager.get_project(selection)
                 else:
                     return
             else:
@@ -290,21 +246,18 @@ class ContinueProjectMenu(BaseMenu):
 
     def _handle_basin_action(self, action: str) -> None:
         """Maneja la accion seleccionada para la cuenca."""
-        # Convertir Basin a Session para usar funciones existentes
-        session = self.basin.to_session()
-
         if "tabla" in action.lower():
-            self._show_table(session)
+            self._show_table()
         elif "fichas" in action.lower():
             self._show_interactive_viewer()
         elif "Comparar" in action:
-            self._compare_hydrographs(session)
+            self._compare_hydrographs()
         elif "Agregar" in action and "analisis" in action.lower():
             self._add_analysis()
         elif "Filtrar" in action:
-            self._filter_results(session)
+            self._filter_results()
         elif "Exportar" in action:
-            self._export(session)
+            self._export()
         elif "Editar cuenca" in action:
             self._show_edit_submenu()
 
@@ -315,12 +268,10 @@ class ContinueProjectMenu(BaseMenu):
         except SystemExit:
             pass
 
-    def _show_table(self, session) -> None:
+    def _show_table(self) -> None:
         """Muestra tabla con sparklines."""
-        from hidropluvial.cli.session.preview import session_preview
-        # Guardar session temporal para usar CLI existente
-        self.manager.save(session)
-        self._safe_call(session_preview, session.id, analysis_idx=None, compare=False)
+        from hidropluvial.cli.basin.preview import basin_preview_table
+        self._safe_call(basin_preview_table, self.basin)
 
     def _show_interactive_viewer(self) -> None:
         """Muestra visor interactivo de hidrogramas."""
@@ -331,7 +282,7 @@ class ContinueProjectMenu(BaseMenu):
         from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
         interactive_hydrograph_viewer(self.basin.analyses, self.basin.name)
 
-    def _compare_hydrographs(self, session) -> None:
+    def _compare_hydrographs(self) -> None:
         """Compara hidrogramas con opcion de seleccionar cuales."""
         if not self.basin.analyses:
             self.echo("  No hay analisis disponibles.")
@@ -350,12 +301,14 @@ class ContinueProjectMenu(BaseMenu):
             if "Seleccionar" in mode:
                 selected = self._select_analyses_to_compare()
                 if selected:
-                    from hidropluvial.cli.session.preview import session_preview
-                    self._safe_call(session_preview, session.id, compare=True, select=selected)
+                    from hidropluvial.cli.basin.preview import basin_preview_compare
+                    indices = [int(i) for i in selected.split(",")]
+                    selected_analyses = [self.basin.analyses[i] for i in indices]
+                    self._safe_call(basin_preview_compare, selected_analyses, self.basin.name)
                 return
 
-        from hidropluvial.cli.session.preview import session_preview
-        self._safe_call(session_preview, session.id, compare=True)
+        from hidropluvial.cli.basin.preview import basin_preview_compare
+        self._safe_call(basin_preview_compare, self.basin.analyses, self.basin.name)
 
     def _select_analyses_to_compare(self) -> Optional[str]:
         """Permite seleccionar analisis para comparar."""
@@ -410,22 +363,20 @@ class ContinueProjectMenu(BaseMenu):
         """Agrega mas analisis a la cuenca."""
         from hidropluvial.cli.wizard.menus.add_analysis import AddAnalysisMenu
 
-        # Convertir a session para compatibilidad
-        session = self.basin.to_session()
-
         c = self.basin.c
         cn = self.basin.cn
         length = self.basin.length_m
 
-        menu = AddAnalysisMenu(session, c, cn, length)
+        # AddAnalysisMenu can work with Basin directly
+        menu = AddAnalysisMenu(self.basin, c, cn, length)
         menu.show()
 
-        # Recargar basin desde session actualizada
-        updated_session = self.manager.get_session(session.id)
-        if updated_session:
-            self.basin = Basin.from_session(updated_session)
+        # Reload basin from database if it's in a project
+        if self.project:
+            self.project = self.project_manager.get_project(self.project.id)
+            self.basin = self.project.get_basin(self.basin.id)
 
-    def _filter_results(self, session) -> None:
+    def _filter_results(self) -> None:
         """Filtra y muestra resultados."""
         if not self.basin.analyses:
             self.echo("  No hay analisis disponibles.")
@@ -446,34 +397,33 @@ class ContinueProjectMenu(BaseMenu):
         if filter_type is None or "Cancelar" in filter_type:
             return
 
+        from hidropluvial.cli.basin.preview import basin_preview_table
+
         if "retorno" in filter_type.lower():
             tr_choice = self.select("Selecciona Tr:", [str(t) for t in tr_values])
             if tr_choice:
-                from hidropluvial.cli.session.preview import session_preview
-                self._safe_call(session_preview, session.id, compare=True, tr=tr_choice)
+                self._safe_call(basin_preview_table, self.basin, tr=tr_choice)
         elif "Metodo" in filter_type:
             tc_choice = self.select("Selecciona metodo:", tc_methods)
             if tc_choice:
-                from hidropluvial.cli.session.preview import session_preview
-                self._safe_call(session_preview, session.id, compare=True, tc=tc_choice)
+                self._safe_call(basin_preview_table, self.basin, tc=tc_choice)
 
-    def _export(self, session) -> None:
+    def _export(self) -> None:
         """Exporta resultados."""
         from hidropluvial.cli.wizard.menus.export_menu import ExportMenu
-        export_menu = ExportMenu(session)
+        export_menu = ExportMenu(self.basin)
         export_menu.show()
 
     def _edit_basin(self) -> None:
         """Edita datos de la cuenca."""
-        session = self.basin.to_session()
         from hidropluvial.cli.wizard.menus.cuenca_editor import CuencaEditor
-        editor = CuencaEditor(session, self.manager)
+        editor = CuencaEditor(self.basin)
         result = editor.edit()
 
-        if result == "modified":
-            updated_session = self.manager.get_session(session.id)
-            if updated_session:
-                self.basin = Basin.from_session(updated_session)
+        if result == "modified" and self.project:
+            # Reload basin from project
+            self.project = self.project_manager.get_project(self.project.id)
+            self.basin = self.project.get_basin(self.basin.id)
 
     def _manage_notes(self) -> None:
         """Gestiona notas de la cuenca."""
@@ -485,9 +435,9 @@ class ContinueProjectMenu(BaseMenu):
 
         if new_notes is not None:
             self.basin.notes = new_notes
-            # Guardar via session
-            session = self.basin.to_session()
-            self.manager.set_session_notes(session, new_notes)
+            # Save basin in project
+            if self.project:
+                self.project_manager.save_project(self.project)
             self.echo("  Notas guardadas." if new_notes else "  Notas eliminadas.")
 
     def _delete_basin(self) -> bool:
@@ -499,10 +449,8 @@ class ContinueProjectMenu(BaseMenu):
                     self.project_manager.save_project(self.project)
                     self.echo(f"\n  Cuenca '{self.basin.name}' eliminada del proyecto.\n")
                     return True
+                else:
+                    self.error("No se pudo eliminar la cuenca")
             else:
-                # Es una sesion legacy
-                if self.manager.delete(self.basin.id):
-                    self.echo(f"\n  Cuenca {self.basin.id} eliminada.\n")
-                    return True
-            self.error("No se pudo eliminar la cuenca")
+                self.error("La cuenca no pertenece a ningun proyecto")
         return False

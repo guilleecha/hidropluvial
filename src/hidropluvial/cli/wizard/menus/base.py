@@ -8,9 +8,8 @@ from typing import Optional
 import typer
 import questionary
 
-from hidropluvial.cli.session.base import get_session_manager
 from hidropluvial.cli.wizard.styles import WIZARD_STYLE
-from hidropluvial.session import Session, SessionManager
+from hidropluvial.project import get_project_manager, ProjectManager
 from hidropluvial.cli.theme import (
     print_header, print_section, print_success, print_warning,
     print_error, print_info, print_note, print_basin_info, print_project_info,
@@ -21,13 +20,13 @@ class BaseMenu(ABC):
     """Clase base abstracta para menus interactivos."""
 
     def __init__(self):
-        self._manager: Optional[SessionManager] = None
+        self._manager: Optional[ProjectManager] = None
 
     @property
-    def manager(self) -> SessionManager:
-        """Lazy loading del session manager."""
+    def manager(self) -> ProjectManager:
+        """Lazy loading del project manager."""
         if self._manager is None:
-            self._manager = get_session_manager()
+            self._manager = get_project_manager()
         return self._manager
 
     @property
@@ -104,22 +103,21 @@ class BaseMenu(ABC):
             location=project.location if hasattr(project, 'location') else None,
         )
 
-    def session_info(self, session) -> None:
-        """Muestra información de sesión en panel estilizado."""
+    def session_info(self, basin) -> None:
+        """Muestra información de cuenca en panel estilizado (legacy compatibility)."""
         trs = None
-        if hasattr(session, 'analyses') and session.analyses:
-            trs = sorted(set(a.storm.return_period for a in session.analyses))
+        if hasattr(basin, 'analyses') and basin.analyses:
+            trs = sorted(set(a.storm.return_period for a in basin.analyses))
 
-        cuenca = session.cuenca
         print_basin_info(
-            basin_name=session.name,
-            basin_id=session.id,
-            area_ha=cuenca.area_ha if cuenca else None,
-            slope_pct=cuenca.slope_pct if cuenca else None,
-            n_analyses=len(session.analyses) if hasattr(session, 'analyses') else None,
+            basin_name=basin.name,
+            basin_id=basin.id,
+            area_ha=basin.area_ha,
+            slope_pct=basin.slope_pct,
+            n_analyses=len(basin.analyses) if hasattr(basin, 'analyses') else None,
             return_periods=trs,
-            c=cuenca.c if cuenca and hasattr(cuenca, 'c') else None,
-            cn=cuenca.cn if cuenca and hasattr(cuenca, 'cn') else None,
+            c=basin.c if hasattr(basin, 'c') else None,
+            cn=basin.cn if hasattr(basin, 'cn') else None,
         )
 
     def select(self, message: str, choices: list[str]) -> Optional[str]:
@@ -187,33 +185,36 @@ class BaseMenu(ABC):
 
 
 class SessionMenu(BaseMenu):
-    """Menu que opera sobre una sesion especifica."""
+    """Menu que opera sobre una cuenca especifica."""
 
-    def __init__(self, session: Session):
+    def __init__(self, basin):
         super().__init__()
-        self._session = session
+        from hidropluvial.models import Basin
+        self._basin = basin
 
     @property
-    def session(self) -> Session:
-        """Sesion actual."""
-        return self._session
+    def basin(self):
+        """Basin object."""
+        return self._basin
 
     def reload_session(self) -> None:
-        """Recarga la sesion desde el manager."""
-        self._session = self.manager.get_session(self._session.id)
+        """Recarga la cuenca desde el manager (no-op for now)."""
+        # Basin objects are typically managed by project, so this is a no-op
+        # Subclasses that need reloading should override this
+        pass
 
     def show_analysis_cards(self, analyses: list = None, name: str = None) -> None:
         """
         Muestra el visor interactivo de fichas de analisis.
 
         Args:
-            analyses: Lista de analisis (default: self.session.analyses)
-            name: Nombre a mostrar (default: self.session.name)
+            analyses: Lista de analisis (default: self.basin.analyses)
+            name: Nombre a mostrar (default: self.basin.name)
         """
         if analyses is None:
-            analyses = self.session.analyses
+            analyses = self._basin.analyses
         if name is None:
-            name = self.session.name
+            name = self._basin.name
 
         if not analyses:
             self.echo("  No hay analisis disponibles.")

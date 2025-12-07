@@ -9,8 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from hidropluvial.database import Database, get_database
-from hidropluvial.session import (
-    Session,
+from hidropluvial.models import (
     TcResult,
     StormResult,
     HydrographResult,
@@ -46,12 +45,10 @@ def migrate_json_to_sqlite(
         "projects_migrated": 0,
         "basins_migrated": 0,
         "analyses_migrated": 0,
-        "sessions_migrated": 0,
         "errors": [],
     }
 
     projects_dir = data_dir / "projects"
-    sessions_dir = data_dir / "sessions"
 
     # Migrar proyectos existentes
     if projects_dir.exists():
@@ -67,22 +64,6 @@ def migrate_json_to_sqlite(
 
             except Exception as e:
                 error_msg = f"Error migrando {json_path.name}: {e}"
-                stats["errors"].append(error_msg)
-                if verbose:
-                    print(f"  ERROR: {error_msg}")
-
-    # Migrar sesiones legacy (crear proyecto "Sesiones Migradas")
-    if sessions_dir.exists():
-        session_files = list(sessions_dir.glob("*.json"))
-        if session_files:
-            try:
-                result = _migrate_sessions(session_files, db, verbose, delete_json)
-                stats["sessions_migrated"] = result["sessions"]
-                stats["basins_migrated"] += result["basins"]
-                stats["analyses_migrated"] += result["analyses"]
-
-            except Exception as e:
-                error_msg = f"Error migrando sesiones: {e}"
                 stats["errors"].append(error_msg)
                 if verbose:
                     print(f"  ERROR: {error_msg}")
@@ -168,87 +149,6 @@ def _migrate_project_file(
     return result
 
 
-def _migrate_sessions(
-    session_files: list[Path],
-    db: Database,
-    verbose: bool,
-    delete_json: bool,
-) -> dict:
-    """Migra sesiones legacy a un nuevo proyecto."""
-    result = {"sessions": 0, "basins": 0, "analyses": 0}
-
-    if verbose:
-        print(f"Migrando {len(session_files)} sesiones legacy...")
-
-    # Crear proyecto contenedor
-    project = db.create_project(
-        name="Sesiones Migradas",
-        description="Proyecto creado automáticamente para sesiones legacy",
-    )
-
-    for json_path in session_files:
-        try:
-            with open(json_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
-            session = Session.model_validate(data)
-
-            # Crear cuenca desde sesión
-            basin = db.create_basin(
-                project_id=project["id"],
-                name=session.cuenca.nombre or session.name,
-                area_ha=session.cuenca.area_ha,
-                slope_pct=session.cuenca.slope_pct,
-                p3_10=session.cuenca.p3_10,
-                c=session.cuenca.c,
-                cn=session.cuenca.cn,
-                length_m=session.cuenca.length_m,
-                notes=session.notes,
-            )
-            result["sessions"] += 1
-            result["basins"] += 1
-
-            # Actualizar coeficientes ponderados
-            if session.cuenca.c_weighted or session.cuenca.cn_weighted:
-                db.update_basin(
-                    basin_id=basin["id"],
-                    c_weighted=session.cuenca.c_weighted.model_dump() if session.cuenca.c_weighted else None,
-                    cn_weighted=session.cuenca.cn_weighted.model_dump() if session.cuenca.cn_weighted else None,
-                )
-
-            # Migrar resultados de Tc
-            for tc_result in session.tc_results:
-                db.add_tc_result(
-                    basin_id=basin["id"],
-                    method=tc_result.method,
-                    tc_hr=tc_result.tc_hr,
-                    parameters=tc_result.parameters,
-                )
-
-            # Migrar análisis
-            for analysis in session.analyses:
-                db.add_analysis(
-                    basin_id=basin["id"],
-                    tc=analysis.tc,
-                    storm=analysis.storm,
-                    hydrograph=analysis.hydrograph,
-                    note=analysis.note,
-                )
-                result["analyses"] += 1
-
-            if delete_json:
-                json_path.unlink()
-
-        except Exception as e:
-            if verbose:
-                print(f"  Error con {json_path.name}: {e}")
-
-    if verbose:
-        print(f"  -> {result['basins']} cuencas, {result['analyses']} análisis")
-
-    return result
-
-
 def check_migration_needed(data_dir: Optional[Path] = None) -> dict:
     """
     Verifica si hay datos JSON que necesitan migración.
@@ -261,22 +161,15 @@ def check_migration_needed(data_dir: Optional[Path] = None) -> dict:
 
     result = {
         "projects_json": 0,
-        "sessions_json": 0,
         "migration_needed": False,
     }
 
     projects_dir = data_dir / "projects"
-    sessions_dir = data_dir / "sessions"
 
     if projects_dir.exists():
         result["projects_json"] = len(list(projects_dir.glob("*.json")))
 
-    if sessions_dir.exists():
-        result["sessions_json"] = len(list(sessions_dir.glob("*.json")))
-
-    result["migration_needed"] = (
-        result["projects_json"] > 0 or result["sessions_json"] > 0
-    )
+    result["migration_needed"] = result["projects_json"] > 0
 
     return result
 
@@ -309,12 +202,6 @@ def backup_json_data(
         backup_projects = backup_dir / "projects"
         shutil.copytree(projects_dir, backup_projects)
 
-    # Copiar sesiones
-    sessions_dir = data_dir / "sessions"
-    if sessions_dir.exists():
-        backup_sessions = backup_dir / "sessions"
-        shutil.copytree(sessions_dir, backup_sessions)
-
     return backup_dir
 
 
@@ -328,7 +215,7 @@ if __name__ == "__main__":
         print("No hay datos JSON para migrar.")
         sys.exit(0)
 
-    print(f"Encontrados: {status['projects_json']} proyectos, {status['sessions_json']} sesiones")
+    print(f"Encontrados: {status['projects_json']} proyectos")
     print()
 
     # Crear backup
@@ -347,7 +234,6 @@ if __name__ == "__main__":
     print(f"Proyectos: {stats['projects_migrated']}")
     print(f"Cuencas: {stats['basins_migrated']}")
     print(f"Análisis: {stats['analyses_migrated']}")
-    print(f"Sesiones legacy: {stats['sessions_migrated']}")
 
     if stats["errors"]:
         print(f"\nErrores ({len(stats['errors'])}):")

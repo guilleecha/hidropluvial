@@ -307,17 +307,14 @@ def _add_basin_to_project(project: Project) -> None:
 
 
 def _import_basin_to_project(project: Project) -> None:
-    """Importa una cuenca desde otro proyecto o sesion legacy."""
+    """Importa una cuenca desde otro proyecto."""
     project_manager = get_project_manager()
-    from hidropluvial.cli.session.base import get_session_manager
-    session_manager = get_session_manager()
 
-    # Listar proyectos y sesiones disponibles
+    # Listar proyectos disponibles
     other_projects = [p for p in project_manager.list_projects() if p['id'] != project.id]
-    sessions = session_manager.list_sessions()
 
-    if not other_projects and not sessions:
-        print_warning("No hay otros proyectos ni cuencas disponibles para importar")
+    if not other_projects:
+        print_warning("No hay otros proyectos disponibles para importar")
         return
 
     # Construir opciones
@@ -325,15 +322,16 @@ def _import_basin_to_project(project: Project) -> None:
 
     for p in other_projects:
         if p['n_basins'] > 0:
-            choices.append(f"[Proyecto] {p['id']} - {p['name']} ({p['n_basins']} cuencas)")
+            choices.append(f"{p['id']} - {p['name']} ({p['n_basins']} cuencas)")
 
-    for s in sessions:
-        choices.append(f"[Cuenca legacy] {s['id']} - {s['name']}")
+    if not choices:
+        print_warning("No hay otros proyectos con cuencas disponibles para importar")
+        return
 
     choices.append("Cancelar")
 
     choice = questionary.select(
-        "Selecciona origen de la cuenca:",
+        "Selecciona el proyecto origen:",
         choices=choices,
         style=WIZARD_STYLE,
     ).ask()
@@ -341,59 +339,43 @@ def _import_basin_to_project(project: Project) -> None:
     if choice is None or "Cancelar" in choice:
         return
 
-    if "[Proyecto]" in choice:
-        # Seleccionar cuenca del proyecto
-        source_id = choice.split(" - ")[0].replace("[Proyecto] ", "")
-        source_project = project_manager.get_project(source_id)
+    # Seleccionar cuenca del proyecto
+    source_id = choice.split(" - ")[0]
+    source_project = project_manager.get_project(source_id)
 
-        if not source_project or not source_project.basins:
-            print_warning("El proyecto no tiene cuencas")
-            return
+    if not source_project or not source_project.basins:
+        print_warning("El proyecto no tiene cuencas")
+        return
 
-        basin_choices = [
-            f"{b.id} - {b.name} ({len(b.analyses)} analisis)"
-            for b in source_project.basins
-        ]
-        basin_choices.append("Cancelar")
+    basin_choices = [
+        f"{b.id} - {b.name} ({len(b.analyses)} analisis)"
+        for b in source_project.basins
+    ]
+    basin_choices.append("Cancelar")
 
-        basin_choice = questionary.select(
-            "Selecciona cuenca a importar:",
-            choices=basin_choices,
-            style=WIZARD_STYLE,
-        ).ask()
+    basin_choice = questionary.select(
+        "Selecciona cuenca a importar:",
+        choices=basin_choices,
+        style=WIZARD_STYLE,
+    ).ask()
 
-        if basin_choice is None or "Cancelar" in basin_choice:
-            return
+    if basin_choice is None or "Cancelar" in basin_choice:
+        return
 
-        basin_id = basin_choice.split(" - ")[0]
-        source_basin = source_project.get_basin(basin_id)
+    basin_id = basin_choice.split(" - ")[0]
+    source_basin = source_project.get_basin(basin_id)
 
-        if source_basin:
-            # Copiar la cuenca (crear nueva instancia)
-            from hidropluvial.project import Basin
-            import json
+    if source_basin:
+        # Copiar la cuenca (crear nueva instancia)
+        from hidropluvial.project import Basin
 
-            # Clonar la cuenca con nuevo ID
-            basin_data = source_basin.model_dump()
-            basin_data['id'] = None  # Forzar nuevo ID
-            new_basin = Basin.model_validate(basin_data)
+        # Clonar la cuenca con nuevo ID
+        basin_data = source_basin.model_dump()
+        basin_data['id'] = None  # Forzar nuevo ID
+        new_basin = Basin.model_validate(basin_data)
 
-            project.add_basin(new_basin)
-            project_manager.save_project(project)
+        project.add_basin(new_basin)
+        project_manager.save_project(project)
 
-            print_success(f"Cuenca '{new_basin.name}' importada al proyecto '{project.name}'")
-            print_info(f"Nueva ID: {new_basin.id}")
-
-    elif "[Cuenca legacy]" in choice:
-        # Importar sesion legacy
-        session_id = choice.split(" - ")[0].replace("[Cuenca legacy] ", "")
-        session = session_manager.get_session(session_id)
-
-        if session:
-            from hidropluvial.project import Basin
-            basin = Basin.from_session(session)
-
-            project.add_basin(basin)
-            project_manager.save_project(project)
-
-            print_success(f"Cuenca '{basin.name}' importada al proyecto '{project.name}'")
+        print_success(f"Cuenca '{new_basin.name}' importada al proyecto '{project.name}'")
+        print_info(f"Nueva ID: {new_basin.id}")

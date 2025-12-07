@@ -24,6 +24,9 @@ from hidropluvial.cli.project.basin import (
 from hidropluvial.cli.project.migrate import (
     migrate_sessions,
 )
+from hidropluvial.cli.project.report import (
+    project_report,
+)
 
 # Crear sub-aplicación
 project_app = typer.Typer(help="Gestión de proyectos hidrológicos")
@@ -44,5 +47,8 @@ project_app.command("basin-import")(basin_import)
 
 # Comandos de migración
 project_app.command("migrate")(migrate_sessions)
+
+# Comandos de reporte
+project_app.command("report")(project_report)
 
 __all__ = ["project_app", "get_project_manager"]

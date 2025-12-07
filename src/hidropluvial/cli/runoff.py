@@ -25,7 +25,7 @@ from hidropluvial.cli.theme import (
 from hidropluvial.cli.validators import (
     validate_cn, validate_c_coefficient, validate_area, validate_amc,
 )
-from hidropluvial.session import WeightedCoefficient, CoverageItem
+from hidropluvial.models import WeightedCoefficient, CoverageItem
 
 # Crear sub-aplicación
 runoff_app = typer.Typer(help="Calculo de escorrentia")

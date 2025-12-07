@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 from hidropluvial.database import Database, reset_database
-from hidropluvial.session import TcResult, StormResult, HydrographResult
+from hidropluvial.models import TcResult, StormResult, HydrographResult
 
 
 @pytest.fixture

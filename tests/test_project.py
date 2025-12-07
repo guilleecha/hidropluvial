@@ -6,12 +6,8 @@ import pytest
 import tempfile
 from pathlib import Path
 
-from hidropluvial.project import (
-    Project,
-    Basin,
-    ProjectManager,
-)
-from hidropluvial.session import Session, CuencaConfig
+from hidropluvial.project import ProjectManager
+from hidropluvial.models import Project, Basin
 
 
 class TestBasin:
@@ -35,62 +31,9 @@ class TestBasin:
         assert basin.cn is None
         assert len(basin.id) == 8
 
-    def test_basin_from_session(self):
-        """Basin se puede crear desde Session legacy."""
-        session = Session(
-            name="Sesión Legacy",
-            cuenca=CuencaConfig(
-                nombre="Cuenca Original",
-                area_ha=100.0,
-                slope_pct=3.0,
-                p3_10=90.0,
-                c=0.6,
-                cn=75,
-            ),
-        )
-
-        basin = Basin.from_session(session)
-
-        assert basin.name == "Cuenca Original"
-        assert basin.area_ha == 100.0
-        assert basin.slope_pct == 3.0
-        assert basin.p3_10 == 90.0
-        assert basin.c == 0.6
-        assert basin.cn == 75
-
-    def test_basin_to_session(self):
-        """Basin se puede convertir a Session."""
-        basin = Basin(
-            name="Cuenca Test",
-            area_ha=50.0,
-            slope_pct=2.5,
-            p3_10=80.0,
-            c=0.55,
-        )
-
-        session = basin.to_session()
-
-        assert session.name == "Cuenca Test"
-        assert session.cuenca.area_ha == 50.0
-        assert session.cuenca.slope_pct == 2.5
-        assert session.cuenca.p3_10 == 80.0
-        assert session.cuenca.c == 0.55
-
-    def test_basin_cuenca_property(self):
-        """Basin expone propiedad cuenca para compatibilidad."""
-        basin = Basin(
-            name="Test",
-            area_ha=50.0,
-            slope_pct=2.5,
-            p3_10=80.0,
-            c=0.55,
-        )
-
-        cuenca = basin.cuenca
-
-        assert cuenca.nombre == "Test"
-        assert cuenca.area_ha == 50.0
-        assert cuenca.c == 0.55
+    # NOTE: Los métodos from_session, to_session y cuenca fueron eliminados
+    # como parte de la refactorización para eliminar la dependencia de Session.
+    # Basin ahora es un modelo independiente sin relación directa con Session.
 
 
 class TestProject:

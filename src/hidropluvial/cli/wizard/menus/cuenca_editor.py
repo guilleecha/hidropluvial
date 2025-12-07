@@ -21,12 +21,10 @@ from rich import box
 class CuencaEditor:
     """Editor para modificar parametros de una cuenca."""
 
-    def __init__(self, session, manager):
-        self.session = session
-        self.manager = manager
-        self.cuenca = session.cuenca
+    def __init__(self, basin):
+        self.basin = basin
         self._area_changed = False
-        self._original_area = self.cuenca.area_ha
+        self._original_area = self.basin.area_ha
 
     def echo(self, message: str) -> None:
         """Wrapper para print."""
@@ -63,10 +61,7 @@ class CuencaEditor:
         if not self._confirm_changes():
             return "cancelled"
 
-        if action == "clone":
-            return self._create_clone(new_values)
-        else:
-            return self._modify_in_place(new_values)
+        return self._modify_in_place(new_values)
 
     def _show_current_values(self) -> None:
         """Muestra los valores actuales de la cuenca."""
@@ -85,31 +80,31 @@ class CuencaEditor:
 
         # Área
         area_text = Text()
-        area_text.append(f"{self.cuenca.area_ha:.2f}", style=f"bold {p.number}")
+        area_text.append(f"{self.basin.area_ha:.2f}", style=f"bold {p.number}")
         area_text.append(" ha", style=p.unit)
         table.add_row("Área", area_text)
 
         # Pendiente
         slope_text = Text()
-        slope_text.append(f"{self.cuenca.slope_pct:.2f}", style=f"bold {p.number}")
+        slope_text.append(f"{self.basin.slope_pct:.2f}", style=f"bold {p.number}")
         slope_text.append(" %", style=p.unit)
         table.add_row("Pendiente", slope_text)
 
         # P3,10
         p310_text = Text()
-        p310_text.append(f"{self.cuenca.p3_10:.1f}", style=f"bold {p.number}")
+        p310_text.append(f"{self.basin.p3_10:.1f}", style=f"bold {p.number}")
         p310_text.append(" mm", style=p.unit)
         table.add_row("P3,10", p310_text)
 
-        if self.cuenca.c:
-            table.add_row("Coef. C", Text(f"{self.cuenca.c:.2f}", style=f"bold {p.number}"))
+        if self.basin.c:
+            table.add_row("Coef. C", Text(f"{self.basin.c:.2f}", style=f"bold {p.number}"))
 
-        if self.cuenca.cn:
-            table.add_row("CN", Text(str(self.cuenca.cn), style=f"bold {p.number}"))
+        if self.basin.cn:
+            table.add_row("CN", Text(str(self.basin.cn), style=f"bold {p.number}"))
 
-        if self.cuenca.length_m:
+        if self.basin.length_m:
             len_text = Text()
-            len_text.append(f"{self.cuenca.length_m:.0f}", style=f"bold {p.number}")
+            len_text.append(f"{self.basin.length_m:.0f}", style=f"bold {p.number}")
             len_text.append(" m", style=p.unit)
             table.add_row("Longitud", len_text)
 
@@ -128,11 +123,10 @@ class CuencaEditor:
 
     def _show_warnings(self) -> None:
         """Muestra advertencias si hay analisis existentes."""
-        n_analyses = len(self.session.analyses)
-        n_tc = len(self.session.tc_results)
+        n_analyses = len(self.basin.analyses) if self.basin.analyses else 0
 
-        if n_analyses > 0 or n_tc > 0:
-            print_warning(f"Esta sesión tiene {n_tc} cálculos de Tc y {n_analyses} análisis.")
+        if n_analyses > 0:
+            print_warning(f"Esta cuenca tiene {n_analyses} análisis.")
             print_warning("Los cambios INVALIDARÁN estos resultados.")
 
     def _ask_action(self) -> str:
@@ -140,8 +134,7 @@ class CuencaEditor:
         action = questionary.select(
             "\nQue deseas hacer?",
             choices=[
-                "Modificar sesion actual (elimina analisis existentes)",
-                "Crear nueva sesion con datos modificados (preserva original)",
+                "Modificar cuenca actual (elimina analisis existentes)",
                 "Cancelar",
             ],
             style=WIZARD_STYLE,
@@ -149,7 +142,7 @@ class CuencaEditor:
 
         if action is None or "Cancelar" in action:
             return "cancelled"
-        return "clone" if "nueva" in action.lower() else "modify"
+        return "modify"
 
     def _collect_new_values(self) -> dict:
         """Recolecta los nuevos valores del usuario (sin C/CN si area cambia)."""
@@ -158,7 +151,7 @@ class CuencaEditor:
         new_values = {}
 
         # Area
-        val = self._ask_float(f"Area (ha) [{self.cuenca.area_ha:.2f}]:", self.cuenca.area_ha)
+        val = self._ask_float(f"Area (ha) [{self.basin.area_ha:.2f}]:", self.basin.area_ha)
         if val is not None:
             new_values["area_ha"] = val
             self._area_changed = True
@@ -167,18 +160,18 @@ class CuencaEditor:
             self.echo(f"      Se solicitara recalcular o ingresar nuevos valores.\n")
 
         # Pendiente
-        val = self._ask_float(f"Pendiente (%) [{self.cuenca.slope_pct:.2f}]:", self.cuenca.slope_pct)
+        val = self._ask_float(f"Pendiente (%) [{self.basin.slope_pct:.2f}]:", self.basin.slope_pct)
         if val is not None:
             new_values["slope_pct"] = val
 
         # P3,10
-        val = self._ask_float(f"P3,10 (mm) [{self.cuenca.p3_10:.1f}]:", self.cuenca.p3_10)
+        val = self._ask_float(f"P3,10 (mm) [{self.basin.p3_10:.1f}]:", self.basin.p3_10)
         if val is not None:
             new_values["p3_10"] = val
 
         # Longitud
-        length_default = self.cuenca.length_m if self.cuenca.length_m else "N/A"
-        val = self._ask_float(f"Longitud (m) [{length_default}]:", self.cuenca.length_m or 0)
+        length_default = self.basin.length_m if self.basin.length_m else "N/A"
+        val = self._ask_float(f"Longitud (m) [{length_default}]:", self.basin.length_m or 0)
         if val is not None and val != 0:
             new_values["length_m"] = val
 
@@ -190,11 +183,11 @@ class CuencaEditor:
 
     def _collect_c_cn_values(self, new_values: dict) -> None:
         """Recolecta valores de C y CN (area no cambio)."""
-        area = self.cuenca.area_ha
+        area = self.basin.area_ha
 
         # Preguntar si quiere modificar C
-        if self.cuenca.c:
-            c_result = self._ask_coefficient_edit("C", self.cuenca.c, area)
+        if self.basin.c:
+            c_result = self._ask_coefficient_edit("C", self.basin.c, area)
             if c_result is not None:
                 new_values["c"] = c_result
         else:
@@ -210,8 +203,8 @@ class CuencaEditor:
                     new_values["c"] = c_result
 
         # Preguntar si quiere modificar CN
-        if self.cuenca.cn:
-            cn_result = self._ask_cn_edit(self.cuenca.cn, area)
+        if self.basin.cn:
+            cn_result = self._ask_cn_edit(self.basin.cn, area)
             if cn_result is not None:
                 new_values["cn"] = cn_result
         else:
@@ -385,16 +378,16 @@ class CuencaEditor:
         console.print(panel)
 
         # Preguntar que hacer con C (si existia)
-        if self.cuenca.c:
-            c_result = self._handle_coefficient_change("C", self.cuenca.c, new_area)
+        if self.basin.c:
+            c_result = self._handle_coefficient_change("C", self.basin.c, new_area)
             if c_result == "cancelled":
                 return "cancelled"
             if c_result is not None:
                 new_values["c"] = c_result
 
         # Preguntar que hacer con CN (si existia)
-        if self.cuenca.cn:
-            cn_result = self._handle_cn_change(self.cuenca.cn, new_area)
+        if self.basin.cn:
+            cn_result = self._handle_cn_change(self.basin.cn, new_area)
             if cn_result == "cancelled":
                 return "cancelled"
             if cn_result is not None:
@@ -434,7 +427,7 @@ class CuencaEditor:
 
         if "Ingresar" in choice:
             val = self._ask_float(f"Nuevo valor de {coef_name} (0.1-1.0):", current_value)
-            return val if val else current_value
+            return val if val is not None else current_value
 
         return None
 
@@ -709,17 +702,17 @@ class CuencaEditor:
         """Muestra los cambios a aplicar."""
         self.echo(f"\n  Cambios a aplicar:")
         if "area_ha" in new_values:
-            self.echo(f"    Area: {self.cuenca.area_ha} -> {new_values['area_ha']} ha")
+            self.echo(f"    Area: {self.basin.area_ha} -> {new_values['area_ha']} ha")
         if "slope_pct" in new_values:
-            self.echo(f"    Pendiente: {self.cuenca.slope_pct} -> {new_values['slope_pct']}%")
+            self.echo(f"    Pendiente: {self.basin.slope_pct} -> {new_values['slope_pct']}%")
         if "p3_10" in new_values:
-            self.echo(f"    P3,10: {self.cuenca.p3_10} -> {new_values['p3_10']} mm")
+            self.echo(f"    P3,10: {self.basin.p3_10} -> {new_values['p3_10']} mm")
         if "c" in new_values:
-            self.echo(f"    C: {self.cuenca.c} -> {new_values['c']}")
+            self.echo(f"    C: {self.basin.c} -> {new_values['c']}")
         if "cn" in new_values:
-            self.echo(f"    CN: {self.cuenca.cn} -> {new_values['cn']}")
+            self.echo(f"    CN: {self.basin.cn} -> {new_values['cn']}")
         if "length_m" in new_values:
-            self.echo(f"    Longitud: {self.cuenca.length_m} -> {new_values['length_m']} m")
+            self.echo(f"    Longitud: {self.basin.length_m} -> {new_values['length_m']} m")
 
     def _confirm_changes(self) -> bool:
         """Confirma los cambios."""
@@ -729,54 +722,37 @@ class CuencaEditor:
             style=WIZARD_STYLE,
         ).ask()
 
-    def _create_clone(self, new_values: dict) -> str:
-        """Crea una nueva sesion con los valores modificados."""
-        new_name = questionary.text(
-            "Nombre para la nueva sesion:",
-            default=f"{self.session.name} (modificado)",
-            style=WIZARD_STYLE,
-        ).ask()
-
-        new_session, changes = self.manager.clone_with_modified_cuenca(
-            self.session,
-            new_name=new_name,
-            **new_values,
-        )
-
-        self.echo(f"\n  Nueva sesion creada: {new_session.id}")
-        self.echo(f"    Nombre: {new_session.name}")
-        self.echo(f"\n  Sesion original '{self.session.id}' sin modificar.")
-        self.echo(f"\n  Usa 'hp session tc {new_session.id}' para calcular Tc")
-        self.echo(f"  Usa 'hp wizard' para continuar con la nueva sesion\n")
-        return "new_session"
-
     def _modify_in_place(self, new_values: dict) -> str:
-        """Modifica la sesion actual."""
-        changes = self.manager.update_cuenca_in_place(
-            self.session,
-            **new_values,
-            clear_analyses=True,
-        )
+        """Modifica la cuenca actual."""
+        # Apply changes to basin
+        for key, value in new_values.items():
+            setattr(self.basin, key, value)
+
+        # Clear analyses since basin parameters changed
+        self.basin.analyses = []
+
+        changes = []
+        if "area_ha" in new_values:
+            changes.append(f"Area actualizada a {new_values['area_ha']:.2f} ha")
+        if "slope_pct" in new_values:
+            changes.append(f"Pendiente actualizada a {new_values['slope_pct']:.2f}%")
+        if "p3_10" in new_values:
+            changes.append(f"P3,10 actualizada a {new_values['p3_10']:.1f} mm")
+        if "c" in new_values:
+            changes.append(f"C actualizado a {new_values['c']:.2f}")
+        if "cn" in new_values:
+            changes.append(f"CN actualizado a {new_values['cn']}")
+        if "length_m" in new_values:
+            changes.append(f"Longitud actualizada a {new_values['length_m']:.0f} m")
+        changes.append("Analisis eliminados (parametros de cuenca cambiaron)")
 
         if changes:
-            self.echo(f"\n  Sesion actualizada.")
+            self.echo(f"\n  Cuenca actualizada.")
             self.echo(f"\n  Cambios aplicados:")
             for change in changes:
                 self.echo(f"    - {change}")
 
-            self.echo(f"\n  Debes recalcular Tc y ejecutar nuevos analisis.")
-
-            # Ofrecer recalcular Tc inmediatamente
-            if questionary.confirm(
-                "Recalcular Tc ahora?",
-                default=True,
-                style=WIZARD_STYLE,
-            ).ask():
-                from hidropluvial.cli.session.base import session_tc
-                methods = "desbordes"
-                if self.session.cuenca.length_m:
-                    methods = "kirpich,desbordes"
-                session_tc(self.session.id, methods=methods)
+            self.echo(f"\n  Debes ejecutar nuevos analisis con los parametros actualizados.")
 
             return "modified"
 

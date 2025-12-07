@@ -9,7 +9,7 @@ from pathlib import Path
 import questionary
 
 from hidropluvial.cli.wizard.menus.base import BaseMenu, SessionMenu
-from hidropluvial.session import Session
+from hidropluvial.models import Basin
 
 
 def get_output_dir(session_name: str, base_dir: str = "outputs") -> Path:
@@ -29,16 +29,16 @@ def get_output_dir(session_name: str, base_dir: str = "outputs") -> Path:
 
 
 class ExportMenu(SessionMenu):
-    """Menu para exportar una sesion con opciones de filtrado."""
+    """Menu para exportar una cuenca con opciones de filtrado."""
 
     def show(self) -> None:
         """Muestra el menu de exportacion."""
-        if not self.session.analyses:
-            self.echo("\n  La sesion no tiene analisis para exportar.\n")
+        if not self.basin.analyses:
+            self.echo("\n  La cuenca no tiene analisis para exportar.\n")
             return
 
-        self.header("EXPORTAR SESION")
-        self._show_session_info()
+        self.header("EXPORTAR CUENCA")
+        self._show_basin_info()
 
         # Preguntar formato
         format_choice = self.select(
@@ -56,9 +56,9 @@ class ExportMenu(SessionMenu):
 
         # Preguntar si filtrar
         use_filter = False
-        if len(self.session.analyses) > 1:
+        if len(self.basin.analyses) > 1:
             use_filter = self.confirm(
-                f"Filtrar analisis? (hay {len(self.session.analyses)} disponibles)",
+                f"Filtrar analisis? (hay {len(self.basin.analyses)} disponibles)",
                 default=False,
             )
 
@@ -73,11 +73,11 @@ class ExportMenu(SessionMenu):
                 return
 
         # Directorio de salida organizado
-        output_dir = get_output_dir(self.session.name)
+        output_dir = get_output_dir(self.basin.name)
         self.echo(f"\n  Directorio de salida: {output_dir.absolute()}")
 
         # Nombre base para archivos
-        default_name = self.session.name.lower().replace(" ", "_")
+        default_name = self.basin.name.lower().replace(" ", "_")
 
         # Exportar segun formato
         if "Excel" in format_choice or "Ambos" in format_choice:
@@ -86,15 +86,14 @@ class ExportMenu(SessionMenu):
         if "LaTeX" in format_choice or "Ambos" in format_choice:
             self._export_latex(output_dir, default_name, selected_indices)
 
-    def _show_session_info(self) -> None:
-        """Muestra informacion de la sesion."""
-        self.echo(f"\n  Sesion: {self.session.name}")
-        self.echo(f"  Cuenca: {self.session.cuenca.nombre}")
-        self.echo(f"  Analisis: {len(self.session.analyses)}")
+    def _show_basin_info(self) -> None:
+        """Muestra informacion de la cuenca."""
+        self.echo(f"\n  Cuenca: {self.basin.name}")
+        self.echo(f"  Analisis: {len(self.basin.analyses)}")
 
         # Mostrar resumen de analisis
-        tr_values = sorted(set(a.storm.return_period for a in self.session.analyses))
-        tc_methods = sorted(set(a.hydrograph.tc_method for a in self.session.analyses))
+        tr_values = sorted(set(a.storm.return_period for a in self.basin.analyses))
+        tc_methods = sorted(set(a.hydrograph.tc_method for a in self.basin.analyses))
 
         self.echo(f"  Periodos de retorno: {tr_values}")
         self.echo(f"  Metodos Tc: {tc_methods}")
@@ -106,7 +105,7 @@ class ExportMenu(SessionMenu):
 
         # Crear opciones con checkbox
         choices = []
-        for i, a in enumerate(self.session.analyses):
+        for i, a in enumerate(self.basin.analyses):
             hydro = a.hydrograph
             storm = a.storm
             x_str = f" X={hydro.x_factor:.2f}" if hydro.x_factor else ""
@@ -125,7 +124,7 @@ class ExportMenu(SessionMenu):
         indices = []
         for sel in selected:
             analysis_id = sel.split(":")[0]
-            for i, a in enumerate(self.session.analyses):
+            for i, a in enumerate(self.basin.analyses):
                 if a.id == analysis_id:
                     indices.append(i)
                     break
@@ -134,46 +133,23 @@ class ExportMenu(SessionMenu):
 
     def _export_excel(self, output_dir: Path, base_name: str, selected_indices: Optional[list[int]]) -> None:
         """Exporta a Excel con filtrado opcional."""
-        from hidropluvial.cli.session.export import (
-            _get_cuenca_dataframe,
-            _get_tc_dataframe,
-            _get_notes_dataframe,
-        )
-        import pandas as pd
+        from hidropluvial.cli.basin.export import export_to_excel
 
         output_path = output_dir / f"{base_name}.xlsx"
 
         # Filtrar analisis si es necesario
         if selected_indices is not None:
-            analyses_to_export = [self.session.analyses[i] for i in selected_indices]
+            analyses_to_export = [self.basin.analyses[i] for i in selected_indices]
+            # Create a filtered basin for export
+            from copy import deepcopy
+            filtered_basin = deepcopy(self.basin)
+            filtered_basin.analyses = analyses_to_export
+            basin_to_export = filtered_basin
         else:
-            analyses_to_export = self.session.analyses
+            basin_to_export = self.basin
 
         try:
-            with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-                # Hoja 1: Datos de la cuenca
-                cuenca_data = _get_cuenca_dataframe(self.session)
-                cuenca_data.to_excel(writer, sheet_name="Cuenca", index=False)
-
-                # Hoja 2: Resultados de Tc
-                if self.session.tc_results:
-                    tc_data = _get_tc_dataframe(self.session)
-                    tc_data.to_excel(writer, sheet_name="Tiempo Concentracion", index=False)
-
-                # Hoja 3: Resumen de analisis (filtrado)
-                summary_data = self._get_filtered_summary(analyses_to_export)
-                summary_data.to_excel(writer, sheet_name="Resumen Analisis", index=False)
-
-                # Hoja 4: Tabla pivote
-                pivot_data = self._get_filtered_pivot(analyses_to_export)
-                if pivot_data is not None:
-                    pivot_data.to_excel(writer, sheet_name="Por Periodo Retorno", index=True)
-
-                # Hoja 5: Notas
-                notes_data = _get_notes_dataframe(self.session)
-                if notes_data is not None:
-                    notes_data.to_excel(writer, sheet_name="Notas", index=False)
-
+            export_to_excel(basin_to_export, output_path)
             self.echo(f"\n  Excel exportado: {output_path.name}")
 
         except Exception as e:
@@ -182,6 +158,7 @@ class ExportMenu(SessionMenu):
     def _export_latex(self, output_dir: Path, base_name: str, selected_indices: Optional[list[int]]) -> None:
         """Exporta a LaTeX con filtrado opcional."""
         import os
+        from hidropluvial.cli.basin.report import generate_basin_report
 
         # Cambiar al directorio de salida para que los archivos se generen ahí
         original_dir = os.getcwd()
@@ -189,11 +166,18 @@ class ExportMenu(SessionMenu):
         try:
             os.chdir(output_dir)
 
-            from hidropluvial.cli.session.report import session_report
-            session_report(self.session.id, base_name, author=None, template_dir=None)
-            self.echo(f"\n  Reporte LaTeX generado en: {output_dir}")
+            # Filtrar analisis si es necesario
             if selected_indices is not None:
-                self.echo("  (Nota: El filtrado de analisis aun no aplica al reporte LaTeX)")
+                from copy import deepcopy
+                filtered_basin = deepcopy(self.basin)
+                filtered_basin.analyses = [self.basin.analyses[i] for i in selected_indices]
+                basin_to_export = filtered_basin
+                self.echo("  (Nota: El filtrado de analisis se aplica al reporte LaTeX)")
+            else:
+                basin_to_export = self.basin
+
+            generate_basin_report(basin_to_export, base_name, author=None, template_dir=None)
+            self.echo(f"\n  Reporte LaTeX generado en: {output_dir}")
         except SystemExit:
             pass  # Capturar typer.Exit
         except Exception as e:
@@ -315,39 +299,61 @@ class ExportBasinSelector(BaseMenu):
     """Menu para seleccionar cuenca y exportar desde gestion de proyectos."""
 
     def show(self) -> None:
-        """Muestra selector de sesion para exportar."""
-        sessions = self.manager.list_sessions()
+        """Muestra selector de proyecto/cuenca para exportar."""
+        from hidropluvial.project import ProjectManager
 
-        if not sessions:
-            self.echo("\n  No hay sesiones disponibles.\n")
+        project_manager = ProjectManager()
+        projects = project_manager.list_projects()
+
+        if not projects:
+            self.echo("\n  No hay proyectos disponibles.\n")
             return
 
-        # Filtrar sesiones con analisis
-        sessions_with_analyses = [s for s in sessions if s['n_analyses'] > 0]
+        self.header("EXPORTAR CUENCA")
 
-        if not sessions_with_analyses:
-            self.echo("\n  No hay sesiones con analisis para exportar.\n")
-            return
-
-        self.header("EXPORTAR SESION")
-
-        # Seleccionar sesion
-        choices = [
-            f"{s['id']} - {s['name']} ({s['n_analyses']} analisis)"
-            for s in sessions_with_analyses
+        # Seleccionar proyecto
+        project_choices = [
+            f"{p['id']} - {p['name']} ({p['n_basins']} cuencas)"
+            for p in projects
         ]
-        choices.append("← Cancelar")
+        project_choices.append("← Cancelar")
 
-        choice = self.select("Selecciona sesion a exportar:", choices)
+        project_choice = self.select("Selecciona proyecto:", project_choices)
 
-        if choice is None or "Cancelar" in choice:
+        if project_choice is None or "Cancelar" in project_choice:
             return
 
-        session_id = choice.split(" - ")[0]
-        session = self.manager.get_session(session_id)
+        project_id = project_choice.split(" - ")[0]
+        project = project_manager.get_project(project_id)
 
-        if session:
-            export_menu = ExportMenu(session)
+        if not project or not project.basins:
+            self.echo("\n  Este proyecto no tiene cuencas.\n")
+            return
+
+        # Filtrar cuencas con analisis
+        basins_with_analyses = [b for b in project.basins if b.analyses]
+
+        if not basins_with_analyses:
+            self.echo("\n  No hay cuencas con analisis para exportar.\n")
+            return
+
+        # Seleccionar cuenca
+        basin_choices = [
+            f"{b.id} - {b.name} ({len(b.analyses)} analisis)"
+            for b in basins_with_analyses
+        ]
+        basin_choices.append("← Cancelar")
+
+        basin_choice = self.select("Selecciona cuenca a exportar:", basin_choices)
+
+        if basin_choice is None or "Cancelar" in basin_choice:
+            return
+
+        basin_id = basin_choice.split(" - ")[0]
+        basin = project.get_basin(basin_id)
+
+        if basin:
+            export_menu = ExportMenu(basin)
             export_menu.show()
 
 

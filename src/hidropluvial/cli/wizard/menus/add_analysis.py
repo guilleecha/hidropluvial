@@ -9,20 +9,19 @@ import questionary
 from hidropluvial.cli.wizard.menus.base import SessionMenu
 from hidropluvial.cli.wizard.runner import AdditionalAnalysisRunner
 from hidropluvial.core import kirpich, desbordes, temez
-from hidropluvial.session import Session
 
 
 class AddAnalysisMenu(SessionMenu):
-    """Menu para agregar analisis adicionales a una sesion."""
+    """Menu para agregar analisis adicionales a una cuenca."""
 
     def __init__(
         self,
-        session: Session,
+        basin,
         c: Optional[float] = None,
         cn: Optional[int] = None,
         length: Optional[float] = None,
     ):
-        super().__init__(session)
+        super().__init__(basin)
         self.c = c
         self.cn = cn
         self.length = length
@@ -31,7 +30,7 @@ class AddAnalysisMenu(SessionMenu):
         """Muestra menu de opciones para agregar analisis."""
         while True:
             self.echo("\n-- Agregar Analisis --\n")
-            self.echo(f"  Sesion: {self.session.name} ({len(self.session.analyses)} analisis)\n")
+            self.echo(f"  Cuenca: {self.basin.name} ({len(self.basin.analyses)} analisis)\n")
 
             que_agregar = self.select(
                 "Que tipo de analisis quieres agregar?",
@@ -47,7 +46,7 @@ class AddAnalysisMenu(SessionMenu):
             if que_agregar is None or "Volver" in que_agregar:
                 return
 
-            tc_existentes = [tc.method for tc in self.session.tc_results]
+            tc_existentes = [tc.method for tc in self.basin.tc_results]
 
             if "tormenta" in que_agregar.lower():
                 self._add_storm(tc_existentes)
@@ -94,7 +93,7 @@ class AddAnalysisMenu(SessionMenu):
         if storm_code == "gz":
             x_factors = self._ask_x_factors()
 
-        runner = AdditionalAnalysisRunner(self.session, self.c, self.cn)
+        runner = AdditionalAnalysisRunner(self.basin, self.c, self.cn)
         runner.run(tc_existentes, storm_code, [int(tr) for tr in return_periods], x_factors)
 
     def _get_storm_code(self, storm_type: str) -> str:
@@ -133,7 +132,7 @@ class AddAnalysisMenu(SessionMenu):
         if not return_periods:
             return
 
-        runner = AdditionalAnalysisRunner(self.session, self.c, self.cn)
+        runner = AdditionalAnalysisRunner(self.basin, self.c, self.cn)
         runner.run(tc_existentes, "gz", [int(tr) for tr in return_periods], [1.0, 1.25])
 
     def _add_x_factors(self, tc_existentes: list[str]) -> None:
@@ -151,7 +150,7 @@ class AddAnalysisMenu(SessionMenu):
             return
 
         x_factors = [float(x) for x in x_selected]
-        runner = AdditionalAnalysisRunner(self.session, self.c, self.cn)
+        runner = AdditionalAnalysisRunner(self.basin, self.c, self.cn)
         runner.run(tc_existentes, "gz", [2, 10, 25], x_factors)
 
     def _add_tc_method(self, tc_existentes: list[str]) -> None:
@@ -169,11 +168,11 @@ class AddAnalysisMenu(SessionMenu):
         method = new_tc.lower()
         tc_hr, tc_params = self._calculate_tc_with_params(method)
         if tc_hr:
-            result = self.manager.add_tc_result(self.session, method, tc_hr, **tc_params)
+            result = self.manager.add_tc_result(self.basin, method, tc_hr, **tc_params)
             self.echo(f"  + Tc ({method}): {result.tc_min:.1f} min")
 
             # Ejecutar analisis con nuevo Tc
-            runner = AdditionalAnalysisRunner(self.session, self.c, self.cn)
+            runner = AdditionalAnalysisRunner(self.basin, self.c, self.cn)
             runner.run([method], "gz", [2, 10, 25], [1.0, 1.25])
 
     def _get_available_tc_methods(self, tc_existentes: list[str]) -> list[str]:
@@ -190,16 +189,16 @@ class AddAnalysisMenu(SessionMenu):
     def _calculate_tc_with_params(self, method: str) -> tuple[Optional[float], dict]:
         """Calcula Tc segun el metodo y retorna parametros usados."""
         if method == "kirpich" and self.length:
-            tc_hr = kirpich(self.length, self.session.cuenca.slope_pct / 100)
+            tc_hr = kirpich(self.length, self.basin.slope_pct / 100)
             return tc_hr, {"length_m": self.length}
         elif method == "temez" and self.length:
-            tc_hr = temez(self.length / 1000, self.session.cuenca.slope_pct / 100)
+            tc_hr = temez(self.length / 1000, self.basin.slope_pct / 100)
             return tc_hr, {"length_m": self.length}
         elif method == "desbordes" and self.c:
             tc_hr = desbordes(
-                self.session.cuenca.area_ha,
-                self.session.cuenca.slope_pct,
+                self.basin.area_ha,
+                self.basin.slope_pct,
                 self.c,
             )
-            return tc_hr, {"c": self.c, "area_ha": self.session.cuenca.area_ha}
+            return tc_hr, {"c": self.c, "area_ha": self.basin.area_ha}
         return None, {}

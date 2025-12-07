@@ -11,11 +11,11 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Iterator, Any
+from typing import Optional, Iterator, Any, TypeVar
 
 from pydantic import BaseModel
 
-from hidropluvial.session import (
+from hidropluvial.models import (
     TcResult,
     StormResult,
     HydrographResult,
@@ -23,6 +23,39 @@ from hidropluvial.session import (
     WeightedCoefficient,
     CoverageItem,
 )
+
+
+# ============================================================================
+# Helpers para JSON
+# ============================================================================
+
+T = TypeVar("T")
+
+
+def _json_loads(value: Optional[str], default: T = None) -> T | Any:
+    """
+    Deserializa JSON de forma segura.
+
+    Args:
+        value: String JSON o None
+        default: Valor por defecto si value es None o vacío
+
+    Returns:
+        Objeto deserializado o default
+    """
+    if not value:
+        return default
+    return json.loads(value)
+
+
+def _json_list(value: Optional[str]) -> list:
+    """Deserializa JSON a lista, retorna lista vacía si es None."""
+    return _json_loads(value, [])
+
+
+def _json_dict(value: Optional[str]) -> dict:
+    """Deserializa JSON a dict, retorna dict vacío si es None."""
+    return _json_loads(value, {})
 
 
 # ============================================================================
@@ -262,7 +295,7 @@ class Database:
             "author": row["author"],
             "location": row["location"],
             "notes": row["notes"],
-            "tags": json.loads(row["tags"]) if row["tags"] else [],
+            "tags": _json_list(row["tags"]),
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }
@@ -445,8 +478,8 @@ class Database:
             "p3_10": row["p3_10"],
             "c": row["c"],
             "cn": row["cn"],
-            "c_weighted": json.loads(row["c_weighted"]) if row["c_weighted"] else None,
-            "cn_weighted": json.loads(row["cn_weighted"]) if row["cn_weighted"] else None,
+            "c_weighted": _json_loads(row["c_weighted"]),
+            "cn_weighted": _json_loads(row["cn_weighted"]),
             "notes": row["notes"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
@@ -458,7 +491,7 @@ class Database:
             "method": row["method"],
             "tc_hr": row["tc_hr"],
             "tc_min": row["tc_min"],
-            "parameters": json.loads(row["parameters"]) if row["parameters"] else {},
+            "parameters": _json_dict(row["parameters"]),
         }
 
     def get_project_basins(self, project_id: str) -> list[dict]:
@@ -757,7 +790,7 @@ class Database:
                 "method": row["tc_method"],
                 "tc_hr": row["tc_hr"],
                 "tc_min": row["tc_min"],
-                "parameters": json.loads(row["tc_parameters"]) if row["tc_parameters"] else {},
+                "parameters": _json_dict(row["tc_parameters"]),
             },
             "storm": {
                 "type": row["storm_type"],
@@ -766,8 +799,8 @@ class Database:
                 "total_depth_mm": row["total_depth_mm"],
                 "peak_intensity_mmhr": row["peak_intensity_mmhr"],
                 "n_intervals": row["n_intervals"],
-                "time_min": json.loads(storm_ts["time_min"]) if storm_ts else [],
-                "intensity_mmhr": json.loads(storm_ts["intensity_mmhr"]) if storm_ts else [],
+                "time_min": _json_list(storm_ts["time_min"]) if storm_ts else [],
+                "intensity_mmhr": _json_list(storm_ts["intensity_mmhr"]) if storm_ts else [],
             },
             "hydrograph": {
                 "tc_method": row["tc_method"],
@@ -785,8 +818,8 @@ class Database:
                 "volume_m3": row["volume_m3"],
                 "total_depth_mm": row["total_depth_mm"],
                 "runoff_mm": row["runoff_mm"],
-                "time_hr": json.loads(hydro_ts["time_hr"]) if hydro_ts else [],
-                "flow_m3s": json.loads(hydro_ts["flow_m3s"]) if hydro_ts else [],
+                "time_hr": _json_list(hydro_ts["time_hr"]) if hydro_ts else [],
+                "flow_m3s": _json_list(hydro_ts["flow_m3s"]) if hydro_ts else [],
             },
         }
 

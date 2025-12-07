@@ -237,15 +237,16 @@ def print_analyses_summary_table(
     Imprime tabla resumen de analisis con formato Rich.
 
     Muestra informacion clave de cada analisis:
-    - Idx: Indice para referencia
+    - #: Indice para referencia
     - Metodo Tc: Metodo de tiempo de concentracion
     - Tormenta: Tipo de tormenta
     - Tr: Periodo de retorno (anos)
     - Tc: Tiempo de concentracion (min)
+    - X: Factor morfologico
+    - tp: Tiempo pico del hidrograma unitario (min)
     - P: Precipitacion total (mm)
     - Pe: Escorrentia efectiva (mm)
     - Qp: Caudal pico (m3/s) - destacado
-    - Tp: Tiempo al pico (min)
     - Vol: Volumen (hm3)
     - Hidrograma: Sparkline visual
 
@@ -281,10 +282,11 @@ def print_analyses_summary_table(
     table.add_column("Tormenta", justify="left")
     table.add_column("Tr", justify="right", style=p.number)
     table.add_column("Tc", justify="right", style=p.number)
+    table.add_column("X", justify="right", style=p.number)
+    table.add_column("tp", justify="right", style=p.muted)  # tiempo pico HU
     table.add_column("P", justify="right", style=p.number)
     table.add_column("Pe", justify="right", style=p.number)
     table.add_column("Qp", justify="right")  # Estilo especial
-    table.add_column("Tp", justify="right", style=p.number)
     table.add_column("Vol", justify="right", style=p.number)
     if show_sparkline:
         table.add_column("Hidrograma", justify="left")
@@ -299,9 +301,10 @@ def print_analyses_summary_table(
 
         # Formatear valores
         tc_min = f"{tc.tc_min:.0f}" if tc.tc_min else "-"
+        x_str = f"{hydro.x_factor:.2f}" if hydro.x_factor else "-"
+        tp_unit = f"{hydro.tp_unit_min:.0f}" if hydro.tp_unit_min else "-"
         p_total = f"{storm.total_depth_mm:.1f}" if storm.total_depth_mm else "-"
         pe = f"{hydro.runoff_mm:.1f}" if hydro.runoff_mm else "-"
-        tp = f"{hydro.time_to_peak_min:.0f}" if hydro.time_to_peak_min else "-"
         vol = format_volume_hm3(hydro.volume_m3)
 
         # Qp con formato especial - destacar el maximo
@@ -315,21 +318,17 @@ def print_analyses_summary_table(
         # Tipo de tormenta abreviado
         storm_type = storm.type.upper()[:6]
 
-        # X factor si existe
-        method_str = tc.method
-        if hydro.x_factor:
-            method_str = f"{tc.method} X={hydro.x_factor:.2f}"
-
         row = [
             str(idx),
-            method_str[:18],
+            tc.method[:12],
             storm_type,
             str(storm.return_period),
             tc_min,
+            x_str,
+            tp_unit,
             p_total,
             pe,
             qp_text,
-            tp,
             vol,
         ]
 
@@ -346,7 +345,7 @@ def print_analyses_summary_table(
 
     # Leyenda de unidades
     console.print(
-        f"  [dim]Tc: min | P: mm | Pe: mm | Qp: m3/s | Tp: min | Vol: hm3[/dim]"
+        f"  [dim]Tc, tp: min | X: factor morfologico | P, Pe: mm | Qp: m3/s | Vol: hm3[/dim]"
     )
 
 

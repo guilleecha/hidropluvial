@@ -27,6 +27,7 @@ Flujo de trabajo:
 - NumPy/SciPy (cálculos)
 - Matplotlib PGF (gráficos)
 - Jinja2 (templates LaTeX)
+- SQLite (persistencia)
 
 ## Estructura del Proyecto
 ```
@@ -60,6 +61,28 @@ python -m hidropluvial --help
 5. ✅ Hidrogramas (`core/hydrograph.py`)
 6. ✅ Gráficos TikZ (`reports/charts.py`)
 7. Templates Jinja2 para reportes (`reports/templates/`)
+
+## Base de Datos
+
+HidroPluvial usa SQLite para persistencia de datos:
+
+```
+~/.hidropluvial/
+├── hidropluvial.db    # Base de datos SQLite
+├── projects/          # (legacy) Archivos JSON
+└── sessions/          # (legacy) Sesiones JSON
+```
+
+### Módulos de datos
+- `database.py` - Capa de acceso a datos SQLite
+- `migration.py` - Migración de JSON a SQLite
+- `project.py` - Modelos Pydantic (Project, Basin)
+- `session.py` - Modelos legacy (Session, AnalysisRun)
+
+### Migración de datos existentes
+```bash
+python -m hidropluvial.migration
+```
 
 ## Configuración MCP
 El archivo `.mcp.json` en la raíz contiene la configuración de servidores MCP (GitHub, Context7).

@@ -391,6 +391,25 @@ En el wizard se puede especificar el directorio de salida:
 ? Directorio de salida (Enter para 'outputs/'): ./resultados
 ```
 
+### Almacenamiento de Datos
+
+HidroPluvial guarda todos los proyectos y cuencas en una base de datos local:
+
+```
+~/.hidropluvial/
+└── hidropluvial.db    # Base de datos SQLite
+```
+
+**Ubicación en Windows:** `C:\Users\<tu_usuario>\.hidropluvial\`
+
+La base de datos se crea automáticamente la primera vez que se usa la aplicación.
+
+**Backup de datos:**
+```bash
+# Copiar la base de datos para hacer backup
+copy "%USERPROFILE%\.hidropluvial\hidropluvial.db" backup_hidropluvial.db
+```
+
 ---
 
 ## Referencia Rápida

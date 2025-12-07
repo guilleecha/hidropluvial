@@ -423,11 +423,13 @@ class TestRainfallExcessSeriesWithFc:
         assert len(excess) == len(cumulative)
         assert all(excess >= 0)
 
-    def test_fc_increases_runoff(self):
-        """Test que fc puede aumentar la escorrentía."""
-        # Para una tormenta larga con baja intensidad al final,
-        # la verificación fc debería aumentar la escorrentía
-        # (porque el suelo no puede absorber menos de fc×dt)
+    def test_fc_can_reduce_runoff(self):
+        """Test que fc puede reducir la escorrentía.
+
+        La verificación fc asegura que la abstracción sea al menos fc×dt.
+        Si SCS-CN calcula abstracción < fc×dt, se fuerza a fc×dt,
+        lo que reduce la escorrentía.
+        """
         cumulative = np.array([0, 5, 10, 15, 20, 25, 30, 35, 40])
         cn = 69  # CN relativamente bajo
 
@@ -436,8 +438,8 @@ class TestRainfallExcessSeriesWithFc:
             cumulative, cn=cn, dt_min=60, soil_group="B"
         )
 
-        # La suma con fc debería ser >= que sin fc
-        assert sum(excess_with_fc) >= sum(excess_basic) - 0.01
+        # La suma con fc debería ser <= que sin fc (puede reducir escorrentía)
+        assert sum(excess_with_fc) <= sum(excess_basic) + 0.01
 
     def test_fc_group_a_higher_abstraction(self):
         """Test que grupo A tiene mayor abstracción mínima."""

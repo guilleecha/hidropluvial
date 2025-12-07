@@ -309,8 +309,13 @@ def _apply_minimum_infiltration_check(
     """
     Aplica verificación de tasa mínima de infiltración.
 
-    Si la tasa de abstracción calculada es menor que fc, se ajusta para que
-    la abstracción sea igual a fc × dt, incrementando la escorrentía.
+    Verifica que la abstracción calculada por SCS-CN sea >= fc × dt.
+    Si la abstracción es menor que el mínimo físico (fc × dt), se ajusta
+    la abstracción al mínimo, lo que REDUCE la escorrentía.
+
+    Esto puede ocurrir cuando el método SCS-CN sobreestima la escorrentía
+    en intervalos donde la precipitación es baja pero el suelo aún tiene
+    capacidad de infiltrar al menos fc.
 
     Metodología: HHA - FING UdelaR (2019)
     "Se controla que el déficit supere la tasa mínima"
@@ -338,14 +343,16 @@ def _apply_minimum_infiltration_check(
     # Abstracción incremental calculada = P_incr - Q_incr
     abstraction_incr = precip_incr - excess_mm
 
-    # Ajustar donde la abstracción sea menor que el mínimo
-    # Si abstracción < fc × dt, entonces la escorrentía debe aumentar
+    # Ajustar donde la abstracción sea menor que el mínimo físico
+    # Si abstracción < fc × dt, forzar abstracción = fc × dt → escorrentía disminuye
     adjusted_excess = excess_mm.copy()
     for i in range(len(excess_mm)):
         if abstraction_incr[i] < min_abstraction_mm and precip_incr[i] > 0:
-            # La abstracción máxima es la precipitación del intervalo
+            # La abstracción debe ser al menos fc × dt, pero no mayor que P
             actual_abstraction = min(min_abstraction_mm, precip_incr[i])
-            adjusted_excess[i] = precip_incr[i] - actual_abstraction
+            # Nueva escorrentía = P - abstracción_ajustada
+            # Esto será menor o igual que la escorrentía original
+            adjusted_excess[i] = max(0.0, precip_incr[i] - actual_abstraction)
 
     return adjusted_excess
 

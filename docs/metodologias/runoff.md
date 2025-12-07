@@ -289,9 +289,9 @@ Segun la metodologia HHA-FING UdelaR (2019), se debe verificar que la tasa de ab
 en cada intervalo de tiempo no sea menor que una tasa minima de infiltracion (fc) que
 depende del grupo hidrologico del suelo.
 
-Esta verificacion es importante para tormentas largas donde el metodo SCS-CN puro
-podria subestimar la escorrentia al no considerar que el suelo tiene una capacidad
-maxima de infiltracion cuando esta saturado.
+El valor fc representa la capacidad minima de infiltracion que el suelo siempre mantiene,
+incluso en condiciones de saturacion parcial. Si el metodo SCS-CN calcula una abstraccion
+menor que fc × dt, significa que esta sobreestimando la escorrentia para ese intervalo.
 
 ### 4.2 Valores de fc por Grupo Hidrologico
 
@@ -306,8 +306,11 @@ maxima de infiltracion cuando esta saturado.
 
 En cada intervalo de tiempo:
 1. Se calcula la abstraccion incremental: `Fa_incr = P_incr - Q_incr`
-2. Se calcula la tasa de abstraccion: `fa = Fa_incr / dt`
-3. Si `fa < fc`, entonces se ajusta la escorrentia para que `fa = fc`
+2. Se compara con la abstraccion minima: `Fa_min = fc × dt`
+3. Si `Fa_incr < Fa_min`, se ajusta la abstraccion a `Fa_min`
+4. La escorrentia corregida sera: `Q_corr = P_incr - Fa_min` (menor que Q original)
+
+Esta verificacion puede **reducir** la escorrentia cuando el SCS-CN la sobreestima.
 
 ```python
 # Archivo: src/hidropluvial/core/runoff.py

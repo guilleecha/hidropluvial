@@ -581,7 +581,7 @@ Parámetro & Valor \\
         content += f"Tipo tormenta & {storm.type.upper()} \\\\\n"
         content += f"Período de retorno & {storm.return_period} años \\\\\n"
         content += f"Precipitación total & {storm.total_depth_mm:.1f} mm \\\\\n"
-        content += f"Duración & {storm.duration_min:.0f} min \\\\\n"
+        content += f"Duración & {storm.duration_hr * 60:.0f} min \\\\\n"
         content += "\\midrule\n"
         content += f"Caudal pico & {hydro.peak_flow_m3s:.3f} m³/s \\\\\n"
         content += f"Tiempo al pico & {hydro.time_to_peak_min:.1f} min \\\\\n"

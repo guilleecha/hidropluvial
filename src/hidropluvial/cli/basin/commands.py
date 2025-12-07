@@ -141,7 +141,7 @@ def basin_show(
     print_field("Pendiente", f"{basin.slope_pct:.2f} %")
     if basin.length_m:
         print_field("Longitud cauce", f"{basin.length_m:.0f} m")
-    print_field("P₃,₁₀", f"{basin.p3_10:.1f} mm")
+    print_field("P3,10", f"{basin.p3_10:.1f} mm")
 
     if basin.c or basin.cn:
         typer.echo()

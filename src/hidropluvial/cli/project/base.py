@@ -173,23 +173,23 @@ def project_edit(
 
     if name is not None and name != project.name:
         project.name = name
-        changes.append(f"Nombre → {name}")
+        changes.append(f"Nombre: {name}")
 
     if description is not None and description != project.description:
         project.description = description
-        changes.append(f"Descripción → {description}")
+        changes.append(f"Descripcion: {description}")
 
     if author is not None and author != project.author:
         project.author = author
-        changes.append(f"Autor → {author}")
+        changes.append(f"Autor: {author}")
 
     if location is not None and location != project.location:
         project.location = location
-        changes.append(f"Ubicación → {location}")
+        changes.append(f"Ubicacion: {location}")
 
     if notes is not None and notes != project.notes:
         project.notes = notes
-        changes.append(f"Notas → {notes}")
+        changes.append(f"Notas: {notes}")
 
     if not changes:
         typer.echo("\n  No se realizaron cambios.\n")

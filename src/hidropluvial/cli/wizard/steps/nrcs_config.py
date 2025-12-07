@@ -99,8 +99,8 @@ class NRCSConfigMixin:
             # Relación aproximada: P2,24h ≈ P3,10 × 0.5 (factor conservador)
             # Basado en curvas IDF DINAGUA: Tr=2 tiene CT≈0.6 vs Tr=10 con CT=1.0
             p2_estimated = self.state.p3_10 * 0.5
-            self.echo(f"  Estimación desde P₃,₁₀ = {self.state.p3_10} mm:")
-            self.echo(f"    P₂,₂₄ₕ ≈ {p2_estimated:.1f} mm (factor 0.5)")
+            self.echo(f"  Estimacion desde P3,10 = {self.state.p3_10} mm:")
+            self.echo(f"    P2,24h = {p2_estimated:.1f} mm (factor 0.5)")
 
         p2_choices = []
         if p2_estimated:

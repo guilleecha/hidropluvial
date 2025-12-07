@@ -138,14 +138,14 @@ class StepIntervaloTiempo(WizardStep):
             practical_values = [1, 2, 5, 10, 15, 30]
             dt_practical = min(practical_values, key=lambda x: abs(x - dt_rec_min))
             self.echo(f"  Tc mínimo estimado: {tc_min_hr * 60:.1f} min")
-            self.echo(f"  dt recomendado: {dt_rec_min:.1f} min → {dt_practical} min")
+            self.echo(f"  dt recomendado: {dt_rec_min:.1f} min -> {dt_practical} min")
         else:
             dt_practical = 5
 
         self.echo("\n  El intervalo dt afecta la forma del hidrograma:")
-        self.echo("    - dt pequeño → picos más altos, mayor precisión")
-        self.echo("    - dt grande  → picos más bajos, menor precisión")
-        self.echo(f"    - Máximo recomendado: dt ≤ 0.25 × Tp\n")
+        self.echo("    - dt pequeno: picos mas altos, mayor precision")
+        self.echo("    - dt grande:  picos mas bajos, menor precision")
+        self.echo(f"    - Maximo recomendado: dt <= 0.25 x Tp\n")
 
         res, configurar = self.confirm(
             f"¿Usar dt = {dt_practical} min? (recomendado)",

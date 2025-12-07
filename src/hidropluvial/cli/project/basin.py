@@ -170,7 +170,7 @@ def basin_show(
             text.append(f" {a.storm.type.upper()} ", style=p.label)
             text.append(f"Tr{a.storm.return_period}", style=p.secondary)
             text.append(x_str, style=p.muted)
-            text.append(f" → Qp=", style=p.label)
+            text.append(f" Qp=", style=p.label)
             text.append(f"{a.hydrograph.peak_flow_m3s:.3f}", style=f"bold {p.accent}")
             text.append(" m³/s", style=p.unit)
             console.print(text)

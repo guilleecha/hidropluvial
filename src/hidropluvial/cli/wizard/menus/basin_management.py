@@ -399,7 +399,7 @@ class BasinManagementMenu(BaseMenu):
                         f"  [{a.id}] {h.tc_method} {s.type.upper()} Tr{s.return_period} "
                         f"Qp={h.peak_flow_m3s:.2f} m³/s{note}"
                     )
-                self.echo()
+                self.echo("")
 
             action = self.select(
                 "¿Qué deseas hacer?",

@@ -401,7 +401,8 @@ class TestStormSCS:
             )
 
         captured = capsys.readouterr()
-        assert "Tipo" in captured.err
+        # Rich prints to stdout, not stderr
+        assert "Tipo" in captured.out
 
     def test_export_json(self, capsys):
         """Test exportar SCS a JSON."""

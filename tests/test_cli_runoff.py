@@ -62,7 +62,8 @@ class TestRunoffCN:
             runoff_cn(rainfall=100.0, cn=75, lambda_coef=0.2, amc="X")
 
         captured = capsys.readouterr()
-        assert "AMC debe ser I, II o III" in captured.err
+        # Rich prints to stdout, not stderr
+        assert "AMC debe ser I, II o III" in captured.out
 
     def test_custom_lambda(self, capsys):
         """Test con lambda personalizado."""

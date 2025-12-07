@@ -18,7 +18,10 @@ from hidropluvial.core import (
 )
 from hidropluvial.cli.theme import (
     print_header, print_separator, print_field, print_note,
-    print_success, get_console, get_palette,
+    print_success, print_error, get_console, get_palette,
+)
+from hidropluvial.cli.validators import (
+    validate_p310, validate_duration, validate_return_period, validate_area,
 )
 
 # Crear sub-aplicación
@@ -40,8 +43,15 @@ def idf_uruguay(
     Calcula intensidad usando método DINAGUA Uruguay.
 
     Ejemplo:
-        hidropluvial idf uruguay 83 2 --tr 100 --area 25
+        hp idf uruguay 83 2 --tr 10
+        hp idf uruguay 78 3 --tr 100 --area 25
     """
+    # Validar entradas
+    validate_p310(p3_10)
+    validate_duration(duration)
+    if area is not None:
+        validate_area(area)
+
     result = dinagua_intensity(p3_10, return_period, duration, area)
 
     print_header("METODO DINAGUA URUGUAY")
@@ -68,8 +78,15 @@ def idf_tabla_uruguay(
     Genera tabla IDF completa usando método DINAGUA Uruguay.
 
     Ejemplo:
-        hidropluvial idf tabla-uy 83 --area 25 -o tabla_idf.json
+        hp idf tabla-uy 83
+        hp idf tabla-uy 83 --area 25
+        hp idf tabla-uy 78 -o tabla_idf.json
     """
+    # Validar entradas
+    validate_p310(p3_10)
+    if area is not None:
+        validate_area(area)
+
     result = generate_dinagua_idf_table(p3_10, area_km2=area)
 
     if output:
@@ -153,7 +170,21 @@ def idf_intensity(
     c: Annotated[float, typer.Option(help="Constante c")] = 15.0,
     n: Annotated[float, typer.Option(help="Exponente n")] = 0.75,
 ):
-    """Calcula intensidad de lluvia desde curva IDF (método Sherman)."""
+    """
+    Calcula intensidad de lluvia desde curva IDF (método Sherman).
+
+    Fórmula: i = k * T^m / (d + c)^n
+
+    Ejemplo:
+        hp idf sherman 60 10
+        hp idf sherman 30 25 --k 1800 --m 0.20
+    """
+    # Validar entradas
+    if duration <= 0:
+        print_error(f"La duración debe ser positiva (recibido: {duration})")
+        raise typer.Exit(1)
+    validate_return_period(return_period)
+
     coeffs = ShermanCoefficients(k=k, m=m, c=c, n=n)
     intensity = get_intensity(duration, return_period, "sherman", coeffs)
     depth = get_depth(duration, return_period, "sherman", coeffs)
@@ -172,7 +203,13 @@ def idf_table(
     n: Annotated[float, typer.Option(help="Exponente n")] = 0.75,
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Archivo de salida JSON")] = None,
 ):
-    """Genera tabla completa de curvas IDF (método Sherman)."""
+    """
+    Genera tabla completa de curvas IDF (método Sherman).
+
+    Ejemplo:
+        hp idf table
+        hp idf table --k 1800 --m 0.20 -o tabla.json
+    """
     coeffs = ShermanCoefficients(k=k, m=m, c=c, n=n)
     durations = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 360, 720, 1440]
     periods = [2, 5, 10, 25, 50, 100]

@@ -22,6 +22,10 @@ from hidropluvial.cli.theme import (
     print_header, print_section, print_separator, print_field,
     print_success, print_error, get_console, get_palette,
 )
+from hidropluvial.cli.validators import (
+    validate_area, validate_length, validate_slope, validate_p310,
+    validate_cn, validate_c_coefficient, validate_x_factor, validate_tc_method,
+)
 
 # Crear sub-aplicación
 hydrograph_app = typer.Typer(help="Generación de hidrogramas")
@@ -48,8 +52,19 @@ def hydrograph_scs(
     Integra: Tc -> IDF -> Hietograma -> Escorrentía -> Hidrograma
 
     Ejemplo:
-        hidropluvial hydrograph scs --area 1 --length 1000 --slope 0.0223 --p3_10 83 --cn 81 --tr 25
+        hp hydrograph scs -a 1 -l 1000 -s 0.02 -p 83 --cn 81 --tr 25
+        hp hydrograph scs -a 2 -l 2000 -s 0.015 -p 78 --cn 75 --tc-method temez
     """
+    # Validar entradas
+    validate_area(area)
+    validate_length(length)
+    validate_slope(slope)
+    validate_p310(p3_10)
+    validate_cn(cn)
+    validate_tc_method(tc_method)
+    if c_escorrentia is not None:
+        validate_c_coefficient(c_escorrentia)
+
     # Convertir pendiente si viene en porcentaje
     if slope > 1:
         slope = slope / 100
@@ -183,8 +198,18 @@ def hydrograph_gz(
         2.25 - Uso mixto rural/urbano
 
     Ejemplo:
-        hidropluvial hydrograph gz --area 100 --slope 2.23 --c 0.62 --p3_10 83 --tr 2 --x 1.0
+        hp hydrograph gz -a 100 -s 2.23 --c 0.62 -p 83 --tr 2 --x 1.0
+        hp hydrograph gz -a 50 -s 1.5 --c 0.5 -p 78 --tr 10 --x 1.67
     """
+    # Validar entradas
+    validate_area(area_ha)
+    if slope_pct <= 0:
+        print_error(f"La pendiente debe ser positiva (recibido: {slope_pct})")
+        raise typer.Exit(1)
+    validate_c_coefficient(c)
+    validate_p310(p3_10)
+    validate_x_factor(x_factor)
+
     from hidropluvial.core import desbordes, triangular_uh_x
 
     # PASO 1: Tiempo de concentración (Método Desbordes)

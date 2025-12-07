@@ -20,7 +20,10 @@ from hidropluvial.core.coefficients import (
 )
 from hidropluvial.cli.theme import (
     print_c_table_chow, print_c_table_fhwa, print_c_table_simple,
-    print_cn_table, print_info,
+    print_cn_table, print_info, print_error,
+)
+from hidropluvial.cli.validators import (
+    validate_cn, validate_c_coefficient, validate_area, validate_amc,
 )
 from hidropluvial.session import WeightedCoefficient, CoverageItem
 
@@ -45,16 +48,26 @@ def runoff_cn(
     lambda_coef: Annotated[float, typer.Option("--lambda", "-l", help="Coeficiente λ")] = 0.2,
     amc: Annotated[str, typer.Option(help="AMC: I (seco), II (promedio), III (húmedo)")] = "II",
 ):
-    """Calcula escorrentía usando método SCS-CN."""
+    """
+    Calcula escorrentía usando método SCS-CN.
+
+    Ejemplo:
+        hp runoff cn 80 75
+        hp runoff cn 100 85 --amc III
+        hp runoff cn 50 65 --lambda 0.05
+    """
+    # Validar entradas
+    validate_cn(cn)
+    validate_amc(amc)
+    if rainfall <= 0:
+        print_error(f"La precipitación debe ser positiva (recibido: {rainfall})")
+        raise typer.Exit(1)
+
     amc_map = {
         "I": AntecedentMoistureCondition.DRY,
         "II": AntecedentMoistureCondition.AVERAGE,
         "III": AntecedentMoistureCondition.WET,
     }
-
-    if amc.upper() not in amc_map:
-        typer.echo("Error: AMC debe ser I, II o III", err=True)
-        raise typer.Exit(1)
 
     result = calculate_scs_runoff(rainfall, cn, lambda_coef, amc_map[amc.upper()])
 
@@ -76,11 +89,23 @@ def runoff_rational(
     intensity: Annotated[float, typer.Argument(help="Intensidad en mm/hr")],
     area: Annotated[float, typer.Argument(help="Área en hectáreas")],
 ):
-    """Calcula caudal pico usando método racional.
+    """
+    Calcula caudal pico usando método racional.
 
     El coeficiente C debe incluir el ajuste por período de retorno.
     Use tablas como Ven Te Chow o DINAGUA que proporcionan C según Tr.
+
+    Ejemplo:
+        hp runoff rational 0.6 50 25
+        hp runoff rational 0.45 80 100
     """
+    # Validar entradas
+    validate_c_coefficient(c)
+    validate_area(area)
+    if intensity <= 0:
+        print_error(f"La intensidad debe ser positiva (recibido: {intensity})")
+        raise typer.Exit(1)
+
     q = rational_peak_flow(c, intensity, area)
 
     typer.echo(f"\nMétodo Racional")

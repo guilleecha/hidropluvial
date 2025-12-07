@@ -14,7 +14,10 @@ from hidropluvial.core import (
     generate_hyetograph,
     generate_hyetograph_dinagua,
 )
-from hidropluvial.cli.theme import print_header, print_field, print_separator
+from hidropluvial.cli.theme import print_header, print_field, print_separator, print_error
+from hidropluvial.cli.validators import (
+    validate_p310, validate_duration, validate_return_period, validate_area,
+)
 
 # Crear sub-aplicación
 storm_app = typer.Typer(help="Generación de tormentas de diseño")
@@ -37,10 +40,17 @@ def storm_uruguay(
     """
     Genera hietograma usando método DINAGUA Uruguay.
 
-    Ejemplos:
-        hidropluvial storm uruguay 83 2 --tr 100 --area 25
-        hidropluvial storm uruguay 78 6 --tr 50 -m scs -o hietograma.json
+    Ejemplo:
+        hp storm uruguay 83 2 --tr 100
+        hp storm uruguay 83 2 --tr 100 --area 25
+        hp storm uruguay 78 6 --tr 50 -m scs -o hietograma.json
     """
+    # Validar entradas
+    validate_p310(p3_10)
+    validate_duration(duration)
+    if area is not None:
+        validate_area(area)
+
     if method == "blocks":
         result = alternating_blocks_dinagua(
             p3_10, return_period, duration, dt, area
@@ -84,7 +94,17 @@ def storm_bimodal(
     Genera hietograma bimodal (doble pico).
 
     Útil para cuencas urbanas mixtas y tormentas frontales.
+
+    Ejemplo:
+        hp storm bimodal 80
+        hp storm bimodal 100 --duration 4 --peak1 0.3 --peak2 0.7
     """
+    # Validar entradas
+    if depth <= 0:
+        print_error(f"La profundidad debe ser positiva (recibido: {depth})")
+        raise typer.Exit(1)
+    validate_duration(duration)
+
     result = bimodal_storm(
         depth, duration, dt, peak1, peak2, split
     )
@@ -120,9 +140,15 @@ def storm_bimodal_uy(
     y el periodo de retorno.
 
     Ejemplo:
-        hidropluvial storm bimodal-uy 83 --tr 2
-        hidropluvial storm bimodal-uy 83 --tr 20 --peak1 0.3 --peak2 0.7
+        hp storm bimodal-uy 83 --tr 2
+        hp storm bimodal-uy 83 --tr 20 --peak1 0.3 --peak2 0.7
     """
+    # Validar entradas
+    validate_p310(p3_10)
+    validate_duration(duration)
+    if area is not None:
+        validate_area(area)
+
     from hidropluvial.core import bimodal_dinagua
 
     result = bimodal_dinagua(
@@ -170,10 +196,16 @@ def storm_gz(
     - Curvas IDF DINAGUA
 
     Ejemplo:
-        hidropluvial storm gz 83 --tr 2
-        hidropluvial storm gz 83 --tr 20
-        hidropluvial storm gz 83 --tr 100
+        hp storm gz 83 --tr 2
+        hp storm gz 83 --tr 20
+        hp storm gz 83 --tr 100
     """
+    # Validar entradas
+    validate_p310(p3_10)
+    validate_duration(duration)
+    if area is not None:
+        validate_area(area)
+
     # Pico en la primera hora: 1/6 = 0.167
     peak_position = 1.0 / 6.0
 
@@ -213,7 +245,19 @@ def storm_scs(
     storm_type: Annotated[str, typer.Option(help="Tipo: I, IA, II, III")] = "II",
     output: Annotated[Optional[str], typer.Option("--output", "-o")] = None,
 ):
-    """Genera hietograma usando distribución SCS."""
+    """
+    Genera hietograma usando distribución SCS.
+
+    Ejemplo:
+        hp storm scs 100
+        hp storm scs 80 --storm-type III --duration 12
+    """
+    # Validar entradas
+    if depth <= 0:
+        print_error(f"La profundidad debe ser positiva (recibido: {depth})")
+        raise typer.Exit(1)
+    validate_duration(duration)
+
     type_map = {
         "I": StormMethod.SCS_TYPE_I,
         "IA": StormMethod.SCS_TYPE_IA,
@@ -222,7 +266,7 @@ def storm_scs(
     }
 
     if storm_type.upper() not in type_map:
-        typer.echo(f"Error: Tipo inválido. Use: I, IA, II, III", err=True)
+        print_error(f"Tipo inválido: {storm_type}. Use: I, IA, II, III")
         raise typer.Exit(1)
 
     result = generate_hyetograph(
@@ -256,7 +300,20 @@ def storm_chicago(
     m_coef: Annotated[float, typer.Option(help="Exponente m IDF")] = 0.22,
     output: Annotated[Optional[str], typer.Option("--output", "-o")] = None,
 ):
-    """Genera hietograma usando método de tormenta Chicago."""
+    """
+    Genera hietograma usando método de tormenta Chicago.
+
+    Ejemplo:
+        hp storm chicago 100
+        hp storm chicago 80 --duration 3 --return-period 50
+    """
+    # Validar entradas
+    if depth <= 0:
+        print_error(f"La profundidad debe ser positiva (recibido: {depth})")
+        raise typer.Exit(1)
+    validate_duration(duration)
+    validate_return_period(return_period)
+
     coeffs = ShermanCoefficients(k=k, m=m_coef, c=c, n=n)
 
     result = generate_hyetograph(

@@ -167,8 +167,8 @@ class TestHydrographSCS:
             )
 
         captured = capsys.readouterr()
-        # Rich prints errors to stdout
-        assert "desconocido" in captured.out
+        # Rich prints errors to stdout - validator uses "inválido"
+        assert "invalid_method" in captured.out
 
     def test_invalid_uh_method(self, capsys):
         """Test metodo UH invalido."""
@@ -514,7 +514,7 @@ class TestHydrographAppCLI:
             ]
         )
         assert result.exit_code == 1
-        assert "Método Tc desconocido" in result.output
+        assert "invalid" in result.output
 
     def test_gz_command_via_cli(self):
         """Test comando gz via CLI."""

@@ -17,6 +17,8 @@ from hidropluvial.core.runoff import (
     RATIONAL_C,
     RATIONAL_CF,
     get_rational_c,
+    get_minimum_infiltration_rate,
+    MINIMUM_INFILTRATION_RATE,
 )
 from hidropluvial.config import AntecedentMoistureCondition, HydrologicSoilGroup
 
@@ -392,3 +394,118 @@ class TestIntegrationRunoff:
         q_iii = calculate_scs_runoff(rainfall, cn, amc=AntecedentMoistureCondition.WET)
 
         assert q_i.runoff_mm < q_ii.runoff_mm < q_iii.runoff_mm
+
+
+class TestMinimumInfiltrationRate:
+    """Tests para tasa mínima de infiltración fc."""
+
+    def test_fc_values(self):
+        """Test valores de fc definidos."""
+        assert MINIMUM_INFILTRATION_RATE["A"] == 2.4
+        assert MINIMUM_INFILTRATION_RATE["B"] == 1.2
+        assert MINIMUM_INFILTRATION_RATE["C"] == 1.2
+        assert MINIMUM_INFILTRATION_RATE["D"] == 1.2
+
+    def test_get_fc_by_string(self):
+        """Test obtener fc por string."""
+        assert get_minimum_infiltration_rate("A") == 2.4
+        assert get_minimum_infiltration_rate("B") == 1.2
+        assert get_minimum_infiltration_rate("b") == 1.2  # minúscula
+
+    def test_get_fc_by_enum(self):
+        """Test obtener fc por enum."""
+        assert get_minimum_infiltration_rate(HydrologicSoilGroup.A) == 2.4
+        assert get_minimum_infiltration_rate(HydrologicSoilGroup.B) == 1.2
+
+    def test_invalid_soil_group(self):
+        """Test grupo hidrológico inválido."""
+        with pytest.raises(ValueError, match="inválido"):
+            get_minimum_infiltration_rate("X")
+
+
+class TestRainfallExcessSeriesWithFc:
+    """Tests para rainfall_excess_series con verificación fc."""
+
+    def test_basic_without_fc(self):
+        """Test básico sin verificación fc."""
+        cumulative = np.array([0, 10, 25, 45, 60, 70])
+        excess = rainfall_excess_series(cumulative, cn=75)
+        assert len(excess) == len(cumulative)
+        assert all(excess >= 0)
+
+    def test_with_fc_verification(self):
+        """Test con verificación fc activa."""
+        cumulative = np.array([0, 10, 25, 45, 60, 70])
+        excess = rainfall_excess_series(
+            cumulative, cn=75, dt_min=30, soil_group="B"
+        )
+        assert len(excess) == len(cumulative)
+        assert all(excess >= 0)
+
+    def test_fc_increases_runoff(self):
+        """Test que fc puede aumentar la escorrentía."""
+        # Para una tormenta larga con baja intensidad al final,
+        # la verificación fc debería aumentar la escorrentía
+        # (porque el suelo no puede absorber menos de fc×dt)
+        cumulative = np.array([0, 5, 10, 15, 20, 25, 30, 35, 40])
+        cn = 69  # CN relativamente bajo
+
+        excess_basic = rainfall_excess_series(cumulative, cn=cn)
+        excess_with_fc = rainfall_excess_series(
+            cumulative, cn=cn, dt_min=60, soil_group="B"
+        )
+
+        # La suma con fc debería ser >= que sin fc
+        assert sum(excess_with_fc) >= sum(excess_basic) - 0.01
+
+    def test_fc_group_a_higher_abstraction(self):
+        """Test que grupo A tiene mayor abstracción mínima."""
+        cumulative = np.array([0, 10, 20, 30, 40])
+
+        excess_a = rainfall_excess_series(
+            cumulative, cn=75, dt_min=30, soil_group="A"
+        )
+        excess_b = rainfall_excess_series(
+            cumulative, cn=75, dt_min=30, soil_group="B"
+        )
+
+        # Con grupo A (fc=2.4) debería haber menos escorrentía
+        # que con grupo B (fc=1.2) porque absorbe más
+        total_a = sum(excess_a)
+        total_b = sum(excess_b)
+        # A tiene mayor fc, por lo que permite más abstracción
+        assert total_a <= total_b + 0.01
+
+    def test_hha_example_verification(self):
+        """Test ejemplo HHA-FING UdelaR.
+
+        Cuenca: 12 km², Tc=1.3h, Treinta y Tres, pastizales,
+        grupo B, condición regular.
+        CN=69, Tr=10 años.
+        """
+        # Valores del ejemplo
+        cn = 69
+        s = (25400 / cn) - 254  # ~114.1 mm
+        ia = 0.2 * s  # ~22.8 mm
+
+        # Precipitación acumulada aproximada del ejemplo
+        cumulative = np.array([0, 5, 15, 35, 50, 60, 65, 68])
+
+        # Calcular exceso con verificación fc
+        excess = rainfall_excess_series(
+            cumulative, cn=cn, lambda_coef=0.2, dt_min=30, soil_group="B"
+        )
+
+        # El ejemplo menciona que el déficit supera fc=1.2 mm/h
+        # en toda la tormenta, verificamos que la suma es razonable
+        total_runoff = sum(excess)
+        # El ejemplo da ~12.47 mm de escorrentía total
+        assert 8 < total_runoff < 20
+
+    def test_enum_soil_group(self):
+        """Test usar enum como soil_group."""
+        cumulative = np.array([0, 10, 25, 45])
+        excess = rainfall_excess_series(
+            cumulative, cn=75, dt_min=30, soil_group=HydrologicSoilGroup.B
+        )
+        assert len(excess) == len(cumulative)

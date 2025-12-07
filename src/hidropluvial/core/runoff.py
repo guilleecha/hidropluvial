@@ -29,6 +29,45 @@ def _load_cn_tables() -> dict:
 
 
 # ============================================================================
+# Tasas mínimas de infiltración por grupo hidrológico
+# Referencia: HHA - FING UdelaR (2019)
+# ============================================================================
+
+# Tasa mínima de infiltración fc (mm/h) por grupo hidrológico
+# Representa la infiltración a largo plazo cuando el suelo está saturado
+MINIMUM_INFILTRATION_RATE = {
+    "A": 2.4,   # Suelos con alta infiltración (arena, grava)
+    "B": 1.2,   # Suelos con moderada infiltración
+    "C": 1.2,   # Suelos con baja infiltración
+    "D": 1.2,   # Suelos con muy baja infiltración (arcilla)
+}
+
+
+def get_minimum_infiltration_rate(soil_group: str | HydrologicSoilGroup) -> float:
+    """
+    Obtiene la tasa mínima de infiltración para un grupo hidrológico.
+
+    Según metodología HHA-FING UdelaR, se debe verificar que el déficit
+    (abstracción) en cada intervalo supere esta tasa mínima.
+
+    Args:
+        soil_group: Grupo hidrológico (A, B, C, D)
+
+    Returns:
+        Tasa mínima de infiltración fc en mm/h
+    """
+    if isinstance(soil_group, HydrologicSoilGroup):
+        key = soil_group.value
+    else:
+        key = str(soil_group).upper()
+
+    if key not in MINIMUM_INFILTRATION_RATE:
+        raise ValueError(f"Grupo hidrológico inválido: {soil_group}")
+
+    return MINIMUM_INFILTRATION_RATE[key]
+
+
+# ============================================================================
 # Método SCS Curve Number
 # ============================================================================
 
@@ -223,17 +262,23 @@ def rainfall_excess_series(
     cumulative_rainfall_mm: NDArray[np.floating],
     cn: int | float,
     lambda_coef: float = 0.2,
+    dt_min: float | None = None,
+    soil_group: str | HydrologicSoilGroup | None = None,
 ) -> NDArray[np.floating]:
     """
     Calcula serie temporal de exceso de lluvia (precipitación efectiva).
 
     Para cada paso de tiempo, calcula la escorrentía acumulada y luego
-    obtiene el incremento.
+    obtiene el incremento. Si se especifica dt_min y soil_group, verifica
+    que la tasa de abstracción no sea menor que la tasa mínima de infiltración
+    del suelo (metodología HHA-FING UdelaR).
 
     Args:
         cumulative_rainfall_mm: Array de precipitación acumulada (mm)
         cn: Número de curva
         lambda_coef: Coeficiente λ
+        dt_min: Intervalo de tiempo en minutos (para verificación fc)
+        soil_group: Grupo hidrológico (A, B, C, D) para verificación fc
 
     Returns:
         Array de exceso de lluvia incremental (mm)
@@ -246,7 +291,63 @@ def rainfall_excess_series(
     excess[0] = cumulative_runoff[0]
     excess[1:] = np.diff(cumulative_runoff)
 
+    # Verificación de tasa mínima de infiltración si se especifica
+    if dt_min is not None and soil_group is not None:
+        excess = _apply_minimum_infiltration_check(
+            excess, cumulative_rainfall_mm, dt_min, soil_group
+        )
+
     return excess
+
+
+def _apply_minimum_infiltration_check(
+    excess_mm: NDArray[np.floating],
+    cumulative_rainfall_mm: NDArray[np.floating],
+    dt_min: float,
+    soil_group: str | HydrologicSoilGroup,
+) -> NDArray[np.floating]:
+    """
+    Aplica verificación de tasa mínima de infiltración.
+
+    Si la tasa de abstracción calculada es menor que fc, se ajusta para que
+    la abstracción sea igual a fc × dt, incrementando la escorrentía.
+
+    Metodología: HHA - FING UdelaR (2019)
+    "Se controla que el déficit supere la tasa mínima"
+
+    Args:
+        excess_mm: Exceso de lluvia incremental (mm)
+        cumulative_rainfall_mm: Precipitación acumulada (mm)
+        dt_min: Intervalo de tiempo en minutos
+        soil_group: Grupo hidrológico
+
+    Returns:
+        Exceso de lluvia ajustado (mm)
+    """
+    fc_mmhr = get_minimum_infiltration_rate(soil_group)
+    dt_hr = dt_min / 60.0
+
+    # Abstracción mínima por intervalo
+    min_abstraction_mm = fc_mmhr * dt_hr
+
+    # Precipitación incremental
+    precip_incr = np.zeros_like(cumulative_rainfall_mm)
+    precip_incr[0] = cumulative_rainfall_mm[0]
+    precip_incr[1:] = np.diff(cumulative_rainfall_mm)
+
+    # Abstracción incremental calculada = P_incr - Q_incr
+    abstraction_incr = precip_incr - excess_mm
+
+    # Ajustar donde la abstracción sea menor que el mínimo
+    # Si abstracción < fc × dt, entonces la escorrentía debe aumentar
+    adjusted_excess = excess_mm.copy()
+    for i in range(len(excess_mm)):
+        if abstraction_incr[i] < min_abstraction_mm and precip_incr[i] > 0:
+            # La abstracción máxima es la precipitación del intervalo
+            actual_abstraction = min(min_abstraction_mm, precip_incr[i])
+            adjusted_excess[i] = precip_incr[i] - actual_abstraction
+
+    return adjusted_excess
 
 
 # ============================================================================

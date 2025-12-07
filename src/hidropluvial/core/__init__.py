@@ -56,6 +56,8 @@ from hidropluvial.core.runoff import (
     rainfall_excess_series,
     rational_peak_flow,
     composite_c,
+    get_minimum_infiltration_rate,
+    MINIMUM_INFILTRATION_RATE,
 )
 
 from hidropluvial.core.coefficients import (
@@ -126,6 +128,8 @@ __all__ = [
     "rainfall_excess_series",
     "rational_peak_flow",
     "composite_c",
+    "get_minimum_infiltration_rate",
+    "MINIMUM_INFILTRATION_RATE",
     # Coefficients
     "adjust_c_for_tr",
     "recalculate_weighted_c_for_tr",

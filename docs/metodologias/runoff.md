@@ -290,23 +290,81 @@ def composite_c(
 
 ---
 
-## 4. Serie Temporal de Exceso de Lluvia
+## 4. Tasa Minima de Infiltracion (fc)
+
+### 4.1 Contexto
+
+Segun la metodologia HHA-FING UdelaR (2019), se debe verificar que la tasa de abstraccion
+en cada intervalo de tiempo no sea menor que una tasa minima de infiltracion (fc) que
+depende del grupo hidrologico del suelo.
+
+Esta verificacion es importante para tormentas largas donde el metodo SCS-CN puro
+podria subestimar la escorrentia al no considerar que el suelo tiene una capacidad
+maxima de infiltracion cuando esta saturado.
+
+### 4.2 Valores de fc por Grupo Hidrologico
+
+| Grupo | fc (mm/h) | Descripcion |
+|-------|-----------|-------------|
+| A | 2.4 | Suelos con alta infiltracion (arena, grava) |
+| B | 1.2 | Suelos con moderada infiltracion |
+| C | 1.2 | Suelos con baja infiltracion |
+| D | 1.2 | Suelos con muy baja infiltracion (arcilla) |
+
+### 4.3 Verificacion
+
+En cada intervalo de tiempo:
+1. Se calcula la abstraccion incremental: `Fa_incr = P_incr - Q_incr`
+2. Se calcula la tasa de abstraccion: `fa = Fa_incr / dt`
+3. Si `fa < fc`, entonces se ajusta la escorrentia para que `fa = fc`
+
+```python
+# Archivo: src/hidropluvial/core/runoff.py
+
+MINIMUM_INFILTRATION_RATE = {
+    "A": 2.4,   # mm/h
+    "B": 1.2,   # mm/h
+    "C": 1.2,   # mm/h
+    "D": 1.2,   # mm/h
+}
+
+def get_minimum_infiltration_rate(soil_group: str) -> float:
+    """
+    Obtiene la tasa minima de infiltracion para un grupo hidrologico.
+    """
+    return MINIMUM_INFILTRATION_RATE[soil_group.upper()]
+```
+
+---
+
+## 5. Serie Temporal de Exceso de Lluvia
 
 Para hidrogramas, se necesita calcular la precipitacion efectiva en cada intervalo:
 
 ```python
-# Archivo: src/hidropluvial/core/runoff.py (lineas 222-249)
+# Archivo: src/hidropluvial/core/runoff.py
 
 def rainfall_excess_series(
     cumulative_rainfall_mm: NDArray[np.floating],
     cn: int | float,
     lambda_coef: float = 0.2,
+    dt_min: float | None = None,
+    soil_group: str | None = None,
 ) -> NDArray[np.floating]:
     """
     Calcula serie temporal de exceso de lluvia (precipitacion efectiva).
 
     Para cada paso de tiempo, calcula la escorrentia acumulada y luego
-    obtiene el incremento.
+    obtiene el incremento. Si se especifica dt_min y soil_group, verifica
+    que la tasa de abstraccion no sea menor que la tasa minima de infiltracion
+    del suelo (metodologia HHA-FING UdelaR).
+
+    Args:
+        cumulative_rainfall_mm: Precipitacion acumulada (mm)
+        cn: Numero de curva
+        lambda_coef: Coeficiente λ
+        dt_min: Intervalo de tiempo (minutos) - para verificacion fc
+        soil_group: Grupo hidrologico (A, B, C, D) - para verificacion fc
     """
     # Escorrentia acumulada para cada valor de precipitacion acumulada
     cumulative_runoff = scs_runoff(cumulative_rainfall_mm, cn, lambda_coef)
@@ -316,14 +374,20 @@ def rainfall_excess_series(
     excess[0] = cumulative_runoff[0]
     excess[1:] = np.diff(cumulative_runoff)
 
+    # Verificacion de tasa minima de infiltracion si se especifica
+    if dt_min is not None and soil_group is not None:
+        excess = _apply_minimum_infiltration_check(
+            excess, cumulative_rainfall_mm, dt_min, soil_group
+        )
+
     return excess
 ```
 
 ---
 
-## 5. Ejemplos de Uso
+## 6. Ejemplos de Uso
 
-### 5.1 Escorrentia SCS-CN
+### 6.1 Escorrentia SCS-CN
 
 ```python
 from hidropluvial.core.runoff import calculate_scs_runoff
@@ -343,7 +407,7 @@ print(f"Abstraccion inicial: {result.initial_abstraction_mm:.2f} mm")
 print(f"Retencion: {result.retention_mm:.2f} mm")
 ```
 
-### 5.2 Caudal Pico (Metodo Racional)
+### 6.2 Caudal Pico (Metodo Racional)
 
 ```python
 from hidropluvial.core.runoff import rational_peak_flow
@@ -359,7 +423,7 @@ Q = rational_peak_flow(
 print(f"Caudal pico: {Q:.3f} m³/s")
 ```
 
-### 5.3 CN Compuesto
+### 6.3 CN Compuesto
 
 ```python
 from hidropluvial.core.runoff import composite_cn
@@ -374,7 +438,34 @@ print(f"CN compuesto: {cn_total:.1f}")
 
 ---
 
-## 6. Tablas de CN
+### 6.4 Escorrentia con Verificacion fc
+
+```python
+from hidropluvial.core.runoff import rainfall_excess_series
+import numpy as np
+
+# Precipitacion acumulada de una tormenta (mm)
+cumulative_rain = np.array([0, 5, 15, 35, 50, 60, 65, 68])
+
+# Sin verificacion fc (SCS-CN puro)
+excess_basic = rainfall_excess_series(cumulative_rain, cn=69, lambda_coef=0.2)
+
+# Con verificacion fc (metodologia UdelaR)
+excess_with_fc = rainfall_excess_series(
+    cumulative_rain,
+    cn=69,
+    lambda_coef=0.2,
+    dt_min=30,        # intervalo de 30 minutos
+    soil_group="B",   # grupo hidrologico B -> fc=1.2 mm/h
+)
+
+print(f"Escorrentia total (sin fc): {sum(excess_basic):.2f} mm")
+print(f"Escorrentia total (con fc): {sum(excess_with_fc):.2f} mm")
+```
+
+---
+
+## 7. Tablas de CN
 
 El modulo incluye tablas de CN segun TR-55 en `data/cn_tables.json`. Para obtener valores:
 
@@ -392,12 +483,13 @@ print(f"CN: {cn}")
 
 ---
 
-## 7. Referencias
+## 8. Referencias
 
 - NRCS. (1986). "Urban Hydrology for Small Watersheds". Technical Release 55 (TR-55).
 - Chow, V.T., Maidment, D.R., Mays, L.W. (1988). "Applied Hydrology". McGraw-Hill.
 - HEC-22. (2013). "Urban Drainage Design Manual". FHWA.
 - Hawkins, R.H. et al. (2002). "Curve Number Hydrology: State of the Practice". ASCE.
+- HHA-FING UdelaR. (2019). "Hidrologia e Hidraulica Aplicadas". Facultad de Ingenieria, Universidad de la Republica, Uruguay.
 
 ---
 

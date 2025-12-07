@@ -190,17 +190,22 @@ def plot_hydrograph_comparison_terminal(
     # Colores para cada serie
     colors = ["blue", "red", "green", "yellow", "cyan", "magenta"]
 
+    # Calcular limites para posicionar leyenda
+    max_time = 0
+    max_flow = 0
+
     for i, analysis in enumerate(analyses):
         color = colors[i % len(colors)]
-        label = analysis.get("label", f"Serie {i+1}")
 
         time_list = list(analysis["time_hr"])
         flow_list = list(analysis["flow_m3s"])
 
+        max_time = max(max_time, max(time_list) if time_list else 0)
+        max_flow = max(max_flow, max(flow_list) if flow_list else 0)
+
         plt.plot(
             time_list,
             flow_list,
-            label=label,
             color=color,
             marker="braille"
         )
@@ -208,6 +213,16 @@ def plot_hydrograph_comparison_terminal(
     plt.title("Comparacion de Hidrogramas")
     plt.xlabel("Tiempo (h)")
     plt.ylabel("Q (m3/s)")
+
+    # Leyenda manual en esquina superior derecha
+    if show_legend and analyses:
+        for i, analysis in enumerate(analyses):
+            color = colors[i % len(colors)]
+            label = analysis.get("label", f"Serie {i+1}")
+            # Posicionar en esquina superior derecha
+            x_pos = max_time * 0.98
+            y_pos = max_flow * (0.98 - i * 0.06)
+            plt.text(label, x=x_pos, y=y_pos, color=color, alignment="right")
 
     plt.theme("clear")
     plt.show()

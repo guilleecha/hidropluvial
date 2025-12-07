@@ -174,6 +174,7 @@ def _filter_analyses(
 def basin_preview_compare(
     analyses: list,
     basin_name: str = "",
+    all_analyses: list = None,
     width: int = 70,
     height: int = 18,
 ) -> None:
@@ -183,6 +184,7 @@ def basin_preview_compare(
     Args:
         analyses: Lista de AnalysisRun a comparar
         basin_name: Nombre de la cuenca (para título)
+        all_analyses: Lista completa de análisis (para obtener índice original)
         width: Ancho del gráfico
         height: Alto del gráfico
     """
@@ -193,7 +195,13 @@ def basin_preview_compare(
         print("  No hay análisis para comparar.")
         return
 
+    if all_analyses is None:
+        all_analyses = analyses
+
     console = get_console()
+    console.print()
+    console.print(f"  Cuenca: [bold]{basin_name}[/bold]")
+    console.print(f"  Comparando {len(analyses)} hidrogramas")
     console.print()
 
     # Preparar datos para gráfico
@@ -201,23 +209,34 @@ def basin_preview_compare(
     for a in analyses:
         hydro = a.hydrograph
         storm = a.storm
-        x_str = f" X={hydro.x_factor:.1f}" if hydro.x_factor else ""
-        label = f"{hydro.tc_method} {storm.type} Tr{storm.return_period}{x_str}"
 
-        comparison_data.append({
-            "time_hr": hydro.time_hr,
-            "flow_m3s": hydro.flow_m3s,
-            "label": label[:25],  # Limitar longitud
-        })
+        # Obtener índice original
+        try:
+            orig_idx = all_analyses.index(a)
+        except ValueError:
+            orig_idx = analyses.index(a)
+
+        x_str = f" X={hydro.x_factor:.1f}" if hydro.x_factor else ""
+        label = f"[{orig_idx}] {hydro.tc_method} {storm.type} Tr{storm.return_period}{x_str}"
+
+        if hydro.time_hr and hydro.flow_m3s:
+            comparison_data.append({
+                "time_hr": hydro.time_hr,
+                "flow_m3s": hydro.flow_m3s,
+                "label": label[:30],
+            })
 
     # Mostrar tabla de comparación
-    print_comparison_table(analyses, title=f"Comparacion - {basin_name}")
+    print_comparison_table(analyses, all_analyses, title=f"Comparacion - {basin_name}")
 
     # Mostrar gráfico
-    console.print()
-    plot_hydrograph_comparison_terminal(
-        comparison_data,
-        width=width,
-        height=height,
-        show_legend=True,
-    )
+    if comparison_data:
+        console.print()
+        plot_hydrograph_comparison_terminal(
+            comparison_data,
+            width=width,
+            height=height,
+            show_legend=True,
+        )
+    else:
+        console.print("  No hay datos de hidrogramas disponibles.")

@@ -10,6 +10,7 @@ from hidropluvial.cli.theme.palette import get_console, get_palette
 from hidropluvial.cli.theme.styled import (
     styled_header, styled_label, styled_success, styled_warning,
     styled_error, styled_info, styled_note, styled_note_box,
+    styled_suggestion, styled_suggestion_box,
 )
 
 
@@ -92,6 +93,18 @@ def print_note_box(lines: list[str], title: str = "NOTA") -> None:
     """Imprime un panel de nota con múltiples líneas."""
     console = get_console()
     console.print(styled_note_box(lines, title))
+
+
+def print_suggestion(text: str) -> None:
+    """Imprime una sugerencia/recomendación destacada."""
+    console = get_console()
+    console.print(styled_suggestion(text))
+
+
+def print_suggestion_box(lines: list[str], title: str = "SUGERENCIA") -> None:
+    """Imprime un panel de sugerencia con múltiples líneas."""
+    console = get_console()
+    console.print(styled_suggestion_box(lines, title))
 
 
 def print_section(title: str) -> None:

@@ -143,7 +143,7 @@ class StepMetodoEscorrentia(WizardStep):
             return res
 
         if "directamente" in metodo:
-            self.echo("  Tip: C típicos -> Urbano denso: 0.7-0.9, Residencial: 0.4-0.7, Rural: 0.2-0.4")
+            self.suggestion("C típicos: Urbano denso 0.7-0.9, Residencial 0.4-0.7, Rural 0.2-0.4")
             res, c_val = self.text(
                 "Coeficiente de escorrentía C (0.1-0.95):",
                 validate=lambda x: validate_range(x, 0.1, 0.95),
@@ -328,7 +328,7 @@ class StepMetodoEscorrentia(WizardStep):
             return res
 
         if "directamente" in metodo:
-            self.echo("  Tip: CN típicos -> Urbano: 85-95, Residencial: 70-85, Bosque: 55-70")
+            self.suggestion("CN típicos: Urbano 85-95, Residencial 70-85, Bosque 55-70")
             res, cn_val = self.text(
                 "Curva Número CN (30-98):",
                 validate=lambda x: validate_range(x, 30, 98),

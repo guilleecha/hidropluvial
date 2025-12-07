@@ -73,7 +73,7 @@ class StepDatosCuenca(WizardStep):
         self.state.slope_pct = float(slope)
 
         # P3,10
-        self.echo("\n  Tip: Consulta la tabla IDF de DINAGUA para tu estación")
+        self.suggestion("Consulta la tabla IDF de DINAGUA para tu estación")
         default_p3 = str(self.state.p3_10) if self.state.p3_10 > 0 else ""
         res, p3_10 = self.text(
             "Precipitación P(3h, Tr=10) en mm:",

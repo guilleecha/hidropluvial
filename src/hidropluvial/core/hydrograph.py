@@ -84,19 +84,107 @@ def scs_time_base(tp_hr: float) -> float:
     return 2.67 * tp_hr
 
 
-def recommended_dt(tc_hr: float) -> float:
+def recommended_dt(
+    tc_hr: float,
+    storm_method: str | None = None,
+    min_dt_min: float = 5.0,
+) -> float:
     """
-    Calcula intervalo de tiempo recomendado.
+    Calcula intervalo de tiempo recomendado con límite mínimo.
 
     ΔD ≤ 0.25 × Tp (recomendado: ΔD = 0.133 × Tc)
 
+    Límites mínimos por metodología:
+    - SCS 24h (Type I/IA/II/III): 15 min (resolución original NRCS)
+    - Bloques Alternados: 5 min
+    - DINAGUA: 5 min
+    - Bimodal: 5 min
+    - Default: 5 min
+
     Args:
         tc_hr: Tiempo de concentración en horas
+        storm_method: Método de tormenta (opcional, para ajustar mínimo)
+        min_dt_min: Límite mínimo absoluto en minutos (default 5)
 
     Returns:
         Intervalo recomendado en horas
     """
-    return 0.133 * tc_hr
+    # Calcular dt teórico
+    dt_hr = 0.133 * tc_hr
+
+    # Determinar límite mínimo según metodología
+    method_min_dt_min = min_dt_min  # default 5 min
+
+    if storm_method:
+        storm_lower = storm_method.lower()
+        # SCS 24h usa resolución mínima de 15 min (original NRCS: 30 min)
+        if any(x in storm_lower for x in ['scs', 'type_i', 'type_ii', 'nrcs', '24h']):
+            method_min_dt_min = 15.0
+        # Bloques alternados puede usar 5 min
+        elif 'block' in storm_lower or 'alternan' in storm_lower:
+            method_min_dt_min = 5.0
+        # DINAGUA usa 5 min mínimo
+        elif 'dinagua' in storm_lower:
+            method_min_dt_min = 5.0
+
+    # Usar el mayor entre el mínimo de metodología y el mínimo absoluto
+    effective_min_hr = max(method_min_dt_min, min_dt_min) / 60.0
+
+    # Aplicar límite mínimo
+    return max(dt_hr, effective_min_hr)
+
+
+def get_dt_limits(storm_method: str | None = None) -> dict:
+    """
+    Obtiene los límites de dt recomendados según la metodología.
+
+    Returns:
+        Diccionario con:
+        - min_dt_min: Límite mínimo en minutos
+        - recommended_range: Rango recomendado (min, max) en minutos
+        - reason: Razón del límite
+    """
+    if storm_method:
+        storm_lower = storm_method.lower()
+
+        # SCS 24h distributions
+        if any(x in storm_lower for x in ['scs', 'type_i', 'type_ii', 'nrcs', '24h']):
+            return {
+                "min_dt_min": 15.0,
+                "recommended_range": (15.0, 30.0),
+                "reason": "NRCS 24h usa resolución original de 30 min, mínimo interpolado 15 min",
+            }
+
+        # Bloques alternados
+        if 'block' in storm_lower or 'alternan' in storm_lower:
+            return {
+                "min_dt_min": 5.0,
+                "recommended_range": (5.0, 15.0),
+                "reason": "Bloques alternados permite mayor resolución, mínimo 5 min",
+            }
+
+        # DINAGUA
+        if 'dinagua' in storm_lower:
+            return {
+                "min_dt_min": 5.0,
+                "recommended_range": (5.0, 10.0),
+                "reason": "DINAGUA GZ usa intervalos de 5-10 min típicamente",
+            }
+
+        # Bimodal
+        if 'bimodal' in storm_lower:
+            return {
+                "min_dt_min": 5.0,
+                "recommended_range": (5.0, 15.0),
+                "reason": "Tormentas bimodales permiten 5-15 min",
+            }
+
+    # Default
+    return {
+        "min_dt_min": 5.0,
+        "recommended_range": (5.0, 15.0),
+        "reason": "Límite mínimo general de 5 min para evitar picos irreales de IDF",
+    }
 
 
 # ============================================================================

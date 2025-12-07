@@ -134,18 +134,19 @@ class StepIntervaloTiempo(WizardStep):
         if tc_min_hr:
             dt_rec_hr = recommended_dt(tc_min_hr)
             dt_rec_min = dt_rec_hr * 60
-            # Redondear a valor práctico (1, 2, 5, 10, 15 min)
-            practical_values = [1, 2, 5, 10, 15, 30]
+            # Redondear a valor práctico (5, 10, 15, 30 min) - mínimo 5 min
+            practical_values = [5, 10, 15, 30]
             dt_practical = min(practical_values, key=lambda x: abs(x - dt_rec_min))
             self.echo(f"  Tc mínimo estimado: {tc_min_hr * 60:.1f} min")
-            self.echo(f"  dt recomendado: {dt_rec_min:.1f} min -> {dt_practical} min")
+            self.suggestion(f"dt recomendado: {dt_practical} min (teórico: {dt_rec_min:.1f} min)")
         else:
             dt_practical = 5
 
         self.echo("\n  El intervalo dt afecta la forma del hidrograma:")
         self.echo("    - dt pequeno: picos mas altos, mayor precision")
         self.echo("    - dt grande:  picos mas bajos, menor precision")
-        self.echo(f"    - Maximo recomendado: dt <= 0.25 x Tp\n")
+        self.echo("    - Limite minimo: 5 min (evita picos irreales de IDF)")
+        self.echo("    - Maximo recomendado: dt <= 0.25 x Tp\n")
 
         res, configurar = self.confirm(
             f"¿Usar dt = {dt_practical} min? (recomendado)",
@@ -160,14 +161,13 @@ class StepIntervaloTiempo(WizardStep):
             self.echo(f"\n  Configurado: dt = {dt_practical} min")
             return StepResult.NEXT
 
-        # Opciones de dt
+        # Opciones de dt (mínimo 5 min para evitar picos irreales)
         dt_choices = [
-            "1 min - Muy detallado (cuencas pequeñas)",
-            "2 min - Detallado",
             "5 min - Estándar (default)",
-            "10 min - Tormentas largas (24h)",
-            "15 min - TR-55 tabular",
-            "Otro valor",
+            "10 min - Tormentas largas",
+            "15 min - NRCS 24h / TR-55 tabular",
+            "30 min - Tormentas 24h tradicional",
+            "Otro valor (5-30 min)",
         ]
 
         res, dt_choice = self.select("Intervalo de tiempo dt:", dt_choices)
@@ -176,19 +176,17 @@ class StepIntervaloTiempo(WizardStep):
             return res
 
         if dt_choice:
-            if "1 min" in dt_choice:
-                self.state.dt_min = 1.0
-            elif "2 min" in dt_choice:
-                self.state.dt_min = 2.0
-            elif "5 min" in dt_choice:
+            if "5 min" in dt_choice:
                 self.state.dt_min = 5.0
             elif "10 min" in dt_choice:
                 self.state.dt_min = 10.0
             elif "15 min" in dt_choice:
                 self.state.dt_min = 15.0
+            elif "30 min" in dt_choice:
+                self.state.dt_min = 30.0
             elif "Otro" in dt_choice:
                 res, val = self.text(
-                    "Valor de dt (minutos, 1-30):",
+                    "Valor de dt (minutos, 5-30):",
                     validate=lambda x: self._validate_dt(x),
                     default="5",
                 )
@@ -234,11 +232,11 @@ class StepIntervaloTiempo(WizardStep):
         return min(tc_values) if tc_values else None
 
     def _validate_dt(self, value: str) -> bool | str:
-        """Valida entrada de dt."""
+        """Valida entrada de dt (mínimo 5 min para evitar picos irreales)."""
         try:
             v = float(value)
-            if v < 1:
-                return "dt debe ser >= 1 minuto"
+            if v < 5:
+                return "dt debe ser >= 5 minutos (evita picos irreales de IDF)"
             if v > 30:
                 return "dt debe ser <= 30 minutos"
             return True

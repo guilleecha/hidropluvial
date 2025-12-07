@@ -33,6 +33,7 @@ class ColorPalette:
     info: str         # Información
     muted: str        # Texto secundario/atenuado
     note: str         # Notas informativas (cyan distintivo)
+    suggestion: str   # Sugerencias y recomendaciones
 
     # Colores para datos
     number: str       # Números y valores
@@ -60,6 +61,7 @@ THEME_DEFAULT = ColorPalette(
     info="#5f87af",         # Azul info
     muted="#808080",        # Gris
     note="#5fd7d7",         # Cyan brillante para notas
+    suggestion="#5faf5f",   # Verde sugerencia (distintivo)
     number="#d7af5f",       # Amarillo para números
     unit="#87af87",         # Verde para unidades
     label="#afafaf",        # Gris claro para etiquetas
@@ -81,6 +83,7 @@ THEME_MONOKAI = ColorPalette(
     info="#66d9ef",         # Cyan
     muted="#75715e",        # Gris/marrón
     note="#66d9ef",         # Cyan Monokai para notas
+    suggestion="#a6e22e",   # Verde lima sugerencia
     number="#fd971f",       # Naranja
     unit="#a6e22e",         # Verde
     label="#f8f8f2",        # Blanco
@@ -102,6 +105,7 @@ THEME_NORD = ColorPalette(
     info="#5e81ac",         # Azul
     muted="#4c566a",        # Gris
     note="#88c0d0",         # Cyan Nord para notas
+    suggestion="#a3be8c",   # Verde Nord sugerencia
     number="#d08770",       # Naranja
     unit="#a3be8c",         # Verde
     label="#d8dee9",        # Gris claro
@@ -123,6 +127,7 @@ THEME_MINIMAL = ColorPalette(
     info="#5fafff",         # Azul
     muted="#606060",        # Gris oscuro
     note="#5fafff",         # Azul para notas
+    suggestion="#87d787",   # Verde suave sugerencia
     number="#ffffff",       # Blanco
     unit="#909090",         # Gris
     label="#909090",        # Gris
@@ -180,6 +185,7 @@ class CLITheme:
                 "info": p.info,
                 "muted": p.muted,
                 "note": p.note,
+                "suggestion": p.suggestion,
                 "number": p.number,
                 "unit": p.unit,
                 "label": p.label,

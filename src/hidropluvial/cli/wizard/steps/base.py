@@ -11,7 +11,10 @@ import typer
 import questionary
 
 from hidropluvial.cli.wizard.styles import WIZARD_STYLE
-from hidropluvial.cli.theme import print_step, print_info, print_warning, print_error, print_note
+from hidropluvial.cli.theme import (
+    print_step, print_info, print_warning, print_error, print_note,
+    print_suggestion,
+)
 
 
 class StepResult(Enum):
@@ -85,6 +88,10 @@ class WizardStep(ABC):
     def error(self, msg: str) -> None:
         """Imprime mensaje de error con estilo."""
         print_error(msg)
+
+    def suggestion(self, msg: str) -> None:
+        """Imprime sugerencia/recomendación con estilo."""
+        print_suggestion(msg)
 
     def select(self, message: str, choices: list[str], back_option: bool = True) -> tuple[StepResult, Optional[str]]:
         """

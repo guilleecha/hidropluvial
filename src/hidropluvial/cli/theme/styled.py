@@ -96,6 +96,34 @@ def styled_note(text: str) -> Text:
     return result
 
 
+def styled_suggestion(text: str) -> Text:
+    """Sugerencia o recomendación con icono distintivo."""
+    p = get_palette()
+    result = Text()
+    result.append(">> ", style=f"bold {p.suggestion}")
+    result.append(text, style=p.suggestion)
+    return result
+
+
+def styled_suggestion_box(lines: list[str], title: str = "SUGERENCIA") -> Panel:
+    """Crea un panel de sugerencia con múltiples líneas."""
+    p = get_palette()
+    content = Text()
+    for i, line in enumerate(lines):
+        if i > 0:
+            content.append("\n")
+        content.append(line, style=p.suggestion)
+
+    return Panel(
+        content,
+        title=f"[bold {p.suggestion}]{title}[/]",
+        title_align="left",
+        border_style=p.suggestion,
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+
+
 def styled_note_box(lines: list[str], title: str = "NOTA") -> Panel:
     """Crea un panel de nota con múltiples líneas."""
     p = get_palette()

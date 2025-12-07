@@ -41,6 +41,8 @@ from hidropluvial.cli.theme.styled import (
     styled_muted,
     styled_note,
     styled_note_box,
+    styled_suggestion,
+    styled_suggestion_box,
     create_summary_panel,
 )
 
@@ -57,6 +59,8 @@ from hidropluvial.cli.theme.printing import (
     print_info,
     print_note,
     print_note_box,
+    print_suggestion,
+    print_suggestion_box,
     print_section,
     print_subheader,
     print_result_row,
@@ -112,6 +116,8 @@ __all__ = [
     "styled_muted",
     "styled_note",
     "styled_note_box",
+    "styled_suggestion",
+    "styled_suggestion_box",
     "create_summary_panel",
     # printing
     "format_number",
@@ -125,6 +131,8 @@ __all__ = [
     "print_info",
     "print_note",
     "print_note_box",
+    "print_suggestion",
+    "print_suggestion_box",
     "print_section",
     "print_subheader",
     "print_result_row",

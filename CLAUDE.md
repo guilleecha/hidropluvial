@@ -12,13 +12,13 @@ Flujo de trabajo:
 2. Cuando esté estable, merge a `master`
 3. Crear tags de versión en `master`
 
-## Documentación Principal
-- **LEER PRIMERO:** `docs/SPEC.md` - Especificación técnica completa
-- `docs/DESARROLLO.md` - Estado del proyecto, estructura, configuración MCP
-- `docs/METODOLOGIAS.md` - Fundamentos teóricos de los métodos implementados
+## Documentación
 - `docs/MANUAL_USUARIO.md` - Guía práctica con ejemplos
 - `docs/INSTALACION.md` - Guía de instalación desde cero
-- `docs/guia_graficos.md` - Guía de generación de gráficos TikZ/PGFPlots
+- `docs/METODOLOGIAS.md` - Fundamentos teóricos
+- `docs/COEFICIENTES.md` - Tablas de C y CN
+- `docs/metodologias/` - Documentación técnica detallada por módulo
+- `docs/internal/` - Documentación interna (SPEC, guías de desarrollo)
 
 ## Stack Tecnológico
 - Python 3.11+
@@ -50,7 +50,8 @@ pip install -e .
 pytest
 
 # Ejecutar CLI
-python -m hidropluvial --help
+hp --help
+hp wizard
 ```
 
 ## Prioridad de Desarrollo
@@ -86,4 +87,4 @@ python -m hidropluvial.migration
 
 ## Configuración MCP
 El archivo `.mcp.json` en la raíz contiene la configuración de servidores MCP (GitHub, Context7).
-**No se versiona** para proteger credenciales. Ver `docs/DESARROLLO.md` para detalles.
+**No se versiona** para proteger credenciales.

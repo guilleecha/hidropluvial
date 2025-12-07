@@ -823,3 +823,159 @@ class TestIntegration:
             )
 
             assert result.total_depth_mm == pytest.approx(60.0, rel=0.02)
+
+
+class TestCustomDepthStorm:
+    """Tests para custom_depth_storm - precipitación personalizada."""
+
+    def test_uniform_distribution(self):
+        """Test distribución uniforme."""
+        from hidropluvial.core.temporal import custom_depth_storm
+
+        result = custom_depth_storm(
+            total_depth_mm=60.0,
+            duration_hr=2.0,
+            dt_min=10.0,
+            distribution="uniform",
+        )
+
+        assert result.method == "custom_uniform"
+        assert result.total_depth_mm == pytest.approx(60.0, rel=0.01)
+        # Distribución uniforme: todas las profundidades iguales
+        depths = np.array(result.depth_mm)
+        assert np.allclose(depths, depths[0], rtol=0.01)
+
+    def test_triangular_distribution(self):
+        """Test distribución triangular."""
+        from hidropluvial.core.temporal import custom_depth_storm
+
+        result = custom_depth_storm(
+            total_depth_mm=50.0,
+            duration_hr=3.0,
+            dt_min=15.0,
+            distribution="triangular",
+        )
+
+        assert result.method == "custom_triangular"
+        assert result.total_depth_mm == pytest.approx(50.0, rel=0.01)
+        # El pico debe estar cerca del centro
+        depths = np.array(result.depth_mm)
+        peak_idx = np.argmax(depths)
+        n = len(depths)
+        assert abs(peak_idx - n // 2) <= 1
+
+    def test_alternating_blocks_distribution(self):
+        """Test distribución bloques alternantes."""
+        from hidropluvial.core.temporal import custom_depth_storm
+
+        result = custom_depth_storm(
+            total_depth_mm=80.0,
+            duration_hr=6.0,
+            dt_min=10.0,
+            distribution="alternating_blocks",
+            peak_position=0.5,
+        )
+
+        assert result.method == "custom_alternating_blocks"
+        assert result.total_depth_mm == pytest.approx(80.0, rel=0.01)
+        # El pico debe estar cerca del centro
+        depths = np.array(result.depth_mm)
+        peak_idx = np.argmax(depths)
+        n = len(depths)
+        assert abs(peak_idx - n // 2) <= 2
+
+    def test_scs_type_ii_distribution(self):
+        """Test distribución SCS Tipo II."""
+        from hidropluvial.core.temporal import custom_depth_storm
+
+        result = custom_depth_storm(
+            total_depth_mm=100.0,
+            duration_hr=24.0,
+            dt_min=30.0,
+            distribution="scs_type_ii",
+        )
+
+        assert result.method == "custom_scs_type_ii"
+        assert result.total_depth_mm == pytest.approx(100.0, rel=0.02)
+
+    def test_huff_distribution(self):
+        """Test distribución Huff."""
+        from hidropluvial.core.temporal import custom_depth_storm
+
+        result = custom_depth_storm(
+            total_depth_mm=70.0,
+            duration_hr=4.0,
+            dt_min=15.0,
+            distribution="huff_q2",
+            huff_quartile=2,
+        )
+
+        assert "huff" in result.method
+        assert result.total_depth_mm == pytest.approx(70.0, rel=0.02)
+
+    def test_invalid_distribution_raises(self):
+        """Distribución inválida debe lanzar error."""
+        from hidropluvial.core.temporal import custom_depth_storm
+
+        with pytest.raises(ValueError, match="Distribución desconocida"):
+            custom_depth_storm(
+                total_depth_mm=50.0,
+                duration_hr=2.0,
+                dt_min=10.0,
+                distribution="invalid_method",
+            )
+
+
+class TestCustomHyetograph:
+    """Tests para custom_hyetograph - hietograma personalizado."""
+
+    def test_basic_creation(self):
+        """Test creación básica de hietograma personalizado."""
+        from hidropluvial.core.temporal import custom_hyetograph
+
+        time_min = [2.5, 7.5, 12.5, 17.5, 22.5, 27.5]
+        depth_mm = [5.0, 15.0, 25.0, 20.0, 10.0, 5.0]
+
+        result = custom_hyetograph(time_min, depth_mm)
+
+        assert result.method == "custom_event"
+        assert result.total_depth_mm == pytest.approx(80.0, rel=0.01)
+        assert len(result.time_min) == 6
+        assert len(result.depth_mm) == 6
+
+    def test_peak_intensity_correct(self):
+        """Test intensidad pico calculada correctamente."""
+        from hidropluvial.core.temporal import custom_hyetograph
+
+        time_min = [2.5, 7.5, 12.5]  # dt = 5 min
+        depth_mm = [10.0, 30.0, 10.0]
+
+        result = custom_hyetograph(time_min, depth_mm)
+
+        # Intensidad pico = 30 mm / 5 min * 60 = 360 mm/hr
+        assert result.peak_intensity_mmhr == pytest.approx(360.0, rel=0.01)
+
+    def test_cumulative_correct(self):
+        """Test acumulado calculado correctamente."""
+        from hidropluvial.core.temporal import custom_hyetograph
+
+        time_min = [5.0, 10.0, 15.0, 20.0]
+        depth_mm = [10.0, 20.0, 15.0, 5.0]
+
+        result = custom_hyetograph(time_min, depth_mm)
+
+        assert result.cumulative_mm == pytest.approx([10.0, 30.0, 45.0, 50.0], rel=0.01)
+
+    def test_mismatched_lengths_raises(self):
+        """Longitudes diferentes deben lanzar error."""
+        from hidropluvial.core.temporal import custom_hyetograph
+
+        with pytest.raises(ValueError, match="misma longitud"):
+            custom_hyetograph([5.0, 10.0], [10.0, 20.0, 30.0])
+
+    def test_minimum_intervals_required(self):
+        """Mínimo 2 intervalos requeridos."""
+        from hidropluvial.core.temporal import custom_hyetograph
+
+        with pytest.raises(ValueError, match="al menos 2"):
+            custom_hyetograph([5.0], [10.0])

@@ -1,5 +1,5 @@
 """
-Menu para agregar analisis adicionales.
+Menú para agregar analisis adicionales.
 
 Permite seleccionar exactamente qué análisis agregar, similar al wizard inicial,
 detectando y descartando duplicados de análisis ya existentes.
@@ -29,7 +29,7 @@ def _get_analysis_key(analysis) -> Tuple[str, str, int, float]:
 
 
 class AddAnalysisMenu(SessionMenu):
-    """Menu para agregar analisis adicionales a una cuenca."""
+    """Menú para agregar analisis adicionales a una cuenca."""
 
     def __init__(
         self,
@@ -48,10 +48,10 @@ class AddAnalysisMenu(SessionMenu):
             self._existing_keys.add(_get_analysis_key(a))
 
     def show(self) -> None:
-        """Muestra menu de opciones para agregar analisis."""
+        """Muestra menú de opciones para agregar análisis."""
         while True:
             self.echo("\n-- Agregar Analisis --\n")
-            self.echo(f"  Cuenca: {self.basin.name} ({len(self.basin.analyses)} analisis)\n")
+            self.echo(f"  Cuenca: {self.basin.name} ({len(self.basin.analyses)} análisis)\n")
 
             que_agregar = self.select(
                 "¿Cómo quieres agregar análisis?",
@@ -227,13 +227,13 @@ class AddAnalysisMenu(SessionMenu):
 
         storm_code = self._get_storm_code(storm_type)
 
-        # Periodos de retorno
+        # Períodos de retorno
         tr_choices = [
             questionary.Choice("2", checked=True),
             questionary.Choice("10", checked=True),
             questionary.Choice("25", checked=False),
         ]
-        return_periods = self.checkbox("Periodos de retorno:", tr_choices)
+        return_periods = self.checkbox("Períodos de retorno:", tr_choices)
 
         if not return_periods:
             return
@@ -316,7 +316,7 @@ class AddAnalysisMenu(SessionMenu):
         return len(new_analyses)
 
     def _add_return_periods(self, tc_existentes: list[str]) -> None:
-        """Agrega analisis con nuevos periodos de retorno."""
+        """Agrega analisis con nuevos períodos de retorno."""
         tr_choices = [
             questionary.Choice("2", checked=False),
             questionary.Choice("5", checked=False),
@@ -325,7 +325,7 @@ class AddAnalysisMenu(SessionMenu):
             questionary.Choice("50", checked=True),
             questionary.Choice("100", checked=False),
         ]
-        return_periods = self.checkbox("Periodos de retorno adicionales:", tr_choices)
+        return_periods = self.checkbox("Períodos de retorno adicionales:", tr_choices)
 
         if not return_periods:
             return
@@ -375,14 +375,14 @@ class AddAnalysisMenu(SessionMenu):
             self.success(f"Se agregaron {count} análisis")
 
     def _add_tc_method(self, tc_existentes: list[str]) -> None:
-        """Agrega nuevo metodo de Tc y ejecuta analisis."""
+        """Agrega nuevo método de Tc y ejecuta análisis."""
         tc_choices = self._get_available_tc_methods(tc_existentes)
 
         if not tc_choices:
-            self.echo("  No hay metodos de Tc adicionales disponibles.")
+            self.echo("  No hay métodos de Tc adicionales disponibles.")
             return
 
-        new_tc = self.select("Metodo de Tc:", tc_choices + ["← Cancelar"])
+        new_tc = self.select("Método de Tc:", tc_choices + ["← Cancelar"])
         if new_tc is None or "Cancelar" in new_tc:
             return
 
@@ -409,7 +409,7 @@ class AddAnalysisMenu(SessionMenu):
                 self.success(f"Se agregaron {count} análisis")
 
     def _get_available_tc_methods(self, tc_existentes: list[str]) -> list[str]:
-        """Retorna metodos de Tc disponibles."""
+        """Retorna métodos de Tc disponibles."""
         tc_choices = []
         tc_lower = [tc.lower() for tc in tc_existentes]
         if self.c and "desbordes" not in tc_lower:
@@ -421,7 +421,7 @@ class AddAnalysisMenu(SessionMenu):
         return tc_choices
 
     def _calculate_tc_with_params(self, method: str) -> tuple[Optional[float], dict]:
-        """Calcula Tc segun el metodo y retorna parametros usados."""
+        """Calcula Tc segun el método y retorna parametros usados."""
         if method == "kirpich" and self.length:
             tc_hr = kirpich(self.length, self.basin.slope_pct / 100)
             return tc_hr, {"length_m": self.length}

@@ -72,6 +72,16 @@ from hidropluvial.cli.theme.printing import (
     print_completion_banner,
 )
 
+# Desde icons
+from hidropluvial.cli.theme.icons import (
+    IconSet,
+    ICONS_UNICODE,
+    ICONS_ASCII,
+    get_icons,
+    supports_unicode,
+    icon,
+)
+
 # Desde tables
 from hidropluvial.cli.theme.tables import (
     create_results_table,
@@ -158,4 +168,11 @@ __all__ = [
     "print_cn_table",
     "print_summary_table",
     "print_x_factor_table",
+    # icons
+    "IconSet",
+    "ICONS_UNICODE",
+    "ICONS_ASCII",
+    "get_icons",
+    "supports_unicode",
+    "icon",
 ]

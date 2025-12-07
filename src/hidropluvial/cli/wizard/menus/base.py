@@ -8,7 +8,17 @@ from typing import Optional
 import typer
 import questionary
 
-from hidropluvial.cli.wizard.styles import WIZARD_STYLE
+from hidropluvial.cli.wizard.styles import (
+    WIZARD_STYLE,
+    get_select_kwargs,
+    get_checkbox_kwargs,
+    get_confirm_kwargs,
+    get_text_kwargs,
+    back_choice,
+    cancel_choice,
+    menu_separator,
+    get_icons,
+)
 from hidropluvial.project import get_project_manager, ProjectManager
 from hidropluvial.cli.theme import (
     print_header, print_section, print_success, print_warning,
@@ -33,6 +43,11 @@ class BaseMenu(ABC):
     def style(self):
         """Estilo de questionary."""
         return WIZARD_STYLE
+
+    @property
+    def icons(self):
+        """Iconos del tema."""
+        return get_icons()
 
     @abstractmethod
     def show(self) -> None:
@@ -108,37 +123,49 @@ class BaseMenu(ABC):
         )
 
     def select(self, message: str, choices: list[str]) -> Optional[str]:
-        """Muestra un menu de seleccion."""
+        """Muestra un menu de seleccion con iconos y colores."""
         return questionary.select(
             message,
             choices=choices,
-            style=self.style,
+            **get_select_kwargs(),
         ).ask()
 
     def checkbox(self, message: str, choices: list) -> Optional[list]:
-        """Muestra un menu de checkbox."""
+        """Muestra un menu de checkbox con iconos y colores."""
         return questionary.checkbox(
             message,
             choices=choices,
-            style=self.style,
+            **get_checkbox_kwargs(),
         ).ask()
 
     def confirm(self, message: str, default: bool = True) -> bool:
-        """Muestra confirmacion."""
+        """Muestra confirmacion con estilo."""
         result = questionary.confirm(
             message,
             default=default,
-            style=self.style,
+            **get_confirm_kwargs(),
         ).ask()
         return result if result is not None else False
 
     def text(self, message: str, default: str = "") -> Optional[str]:
-        """Solicita texto."""
+        """Solicita texto con estilo."""
         return questionary.text(
             message,
             default=default,
-            style=self.style,
+            **get_text_kwargs(),
         ).ask()
+
+    def back_option(self, text: str = "Volver") -> str:
+        """Genera texto para opción de volver."""
+        return back_choice(text)
+
+    def cancel_option(self, text: str = "Cancelar") -> str:
+        """Genera texto para opción de cancelar."""
+        return cancel_choice(text)
+
+    def separator(self, text: str = "") -> questionary.Separator:
+        """Crea un separador de menú."""
+        return menu_separator(text)
 
     def ask_float(self, prompt: str, current: Optional[float]) -> Optional[float]:
         """Solicita un valor float, retorna None si no cambia."""

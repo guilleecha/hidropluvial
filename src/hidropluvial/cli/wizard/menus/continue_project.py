@@ -49,7 +49,7 @@ class ContinueProjectMenu(BaseMenu):
                 f"{p['id']} - {p['name']} ({n_basins} cuencas, {n_analyses} analisis)"
             )
 
-        choices.append("← Volver al menu principal")
+        choices.append(self.back_option("Volver al menu principal"))
 
         choice = self.select("Selecciona un proyecto:", choices)
 
@@ -76,8 +76,8 @@ class ContinueProjectMenu(BaseMenu):
                     "Agregar nueva cuenca al proyecto",
                     "Editar metadatos del proyecto",
                     "Eliminar proyecto",
-                    "← Volver (elegir otro proyecto)",
-                    "← Salir al menu principal",
+                    self.back_option("Volver (elegir otro proyecto)"),
+                    self.back_option("Salir al menu principal"),
                 ],
             )
 
@@ -133,7 +133,7 @@ class ContinueProjectMenu(BaseMenu):
         choices = []
         for b in self.project.basins:
             choices.append(f"{b.id} - {b.name} ({len(b.analyses)} analisis)")
-        choices.append("← Cancelar")
+        choices.append(self.cancel_option())
 
         choice = self.select("Selecciona una cuenca:", choices)
 
@@ -219,8 +219,8 @@ class ContinueProjectMenu(BaseMenu):
                     "Filtrar resultados",
                     "Exportar (Excel/LaTeX)",
                     "Editar cuenca...",
-                    "← Volver (elegir otra cuenca)",
-                    "← Salir al menu principal",
+                    self.back_option("Volver (elegir otra cuenca)"),
+                    self.back_option("Salir al menu principal"),
                 ],
             )
 
@@ -292,7 +292,7 @@ class ContinueProjectMenu(BaseMenu):
         if n > 2:
             mode = self.select(
                 "Que hidrogramas comparar?",
-                choices=["Todos", "Seleccionar cuales", "← Cancelar"],
+                choices=["Todos", "Seleccionar cuales", self.cancel_option()],
             )
 
             if mode is None or "Cancelar" in mode:
@@ -344,7 +344,7 @@ class ContinueProjectMenu(BaseMenu):
                     "Editar datos (area, pendiente, C, CN)",
                     "Editar notas",
                     "Eliminar cuenca",
-                    "← Volver",
+                    self.back_option(),
                 ],
             )
 
@@ -390,7 +390,7 @@ class ContinueProjectMenu(BaseMenu):
             choices=[
                 f"Periodo de retorno: {tr_values}",
                 f"Metodo Tc: {tc_methods}",
-                "← Cancelar",
+                self.cancel_option(),
             ],
         )
 

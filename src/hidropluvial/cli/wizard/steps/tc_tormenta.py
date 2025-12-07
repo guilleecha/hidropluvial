@@ -2,11 +2,14 @@
 Pasos del wizard para tiempo de concentración y tormentas.
 """
 
+from typing import Optional
+
 import questionary
 
 from hidropluvial.cli.wizard.styles import validate_positive_float
 from hidropluvial.cli.wizard.steps.base import WizardStep, WizardState, StepResult
 from hidropluvial.cli.wizard.steps.nrcs_config import NRCSConfigMixin
+from hidropluvial.cli.theme import print_info, print_suggestion
 
 
 class StepMetodosTc(NRCSConfigMixin, WizardStep):
@@ -262,6 +265,7 @@ class StepTormenta(WizardStep):
             questionary.Choice("Bimodal - tormentas doble pico", checked=False),
             questionary.Choice("Huff (cuartil 2) - basado en datos históricos", checked=False),
             questionary.Choice("SCS Tipo II - distribución SCS 24h", checked=False),
+            questionary.Choice("Precipitación personalizada - evaluar evento real", checked=False),
         ]
 
         res, storm_types = self.checkbox("Tipos de tormenta a analizar:", storm_choices)
@@ -288,6 +292,8 @@ class StepTormenta(WizardStep):
                 self.state.storm_codes.append("huff_q2")
             elif "SCS Tipo II" in storm_type:
                 self.state.storm_codes.append("scs_ii")
+            elif "personalizada" in storm_type:
+                self.state.storm_codes.append("custom")
 
         # Períodos de retorno
         tr_choices = [
@@ -327,6 +333,14 @@ class StepTormenta(WizardStep):
                 return self.execute()
             if bimodal_result != StepResult.NEXT:
                 return bimodal_result
+
+        # Configuración tormenta personalizada
+        if "custom" in self.state.storm_codes:
+            custom_result = self._configure_custom_storm()
+            if custom_result == StepResult.BACK:
+                return self.execute()
+            if custom_result != StepResult.NEXT:
+                return custom_result
 
         return StepResult.NEXT
 
@@ -371,6 +385,10 @@ class StepTormenta(WizardStep):
         self.echo("  │      │ ╱      ╲────────╱      ╲                         │")
         self.echo("  │      └─────────────────────────────► Tiempo             │")
         self.echo("  │        Pico 1         Pico 2                            │")
+        self.echo("  │       ◄─ancho─►      ◄─ancho─►                          │")
+        self.echo("  ├─────────────────────────────────────────────────────────┤")
+        self.echo("  │  Cada pico tiene forma triangular. El volumen se        │")
+        self.echo("  │  distribuye en varios intervalos dt, no en uno solo.    │")
         self.echo("  ├─────────────────────────────────────────────────────────┤")
         self.echo("  │  Útil para:                                             │")
         self.echo("  │  • Regiones costeras/tropicales                         │")
@@ -378,13 +396,58 @@ class StepTormenta(WizardStep):
         self.echo("  │  • Cuencas con respuesta mixta                          │")
         self.echo("  └─────────────────────────────────────────────────────────┘")
 
-        self.echo(f"\n  Configuración por defecto:")
-        self.echo(f"    • Pico 1: 25% de la duración (primera hora en tormenta 6h)")
-        self.echo(f"    • Pico 2: 75% de la duración (hora 4.5 en tormenta 6h)")
-        self.echo(f"    • Volumen: 50% en cada pico\n")
+        # Estimar Tc para ofrecer como opción de duración
+        tc_hr_est = self._estimate_tc()
+
+        # Seleccionar duración de la tormenta
+        duration_choices = [
+            "6 horas (estándar Uruguay, igual que GZ)",
+        ]
+        if tc_hr_est:
+            duration_choices.append(f"Tc estimado ({tc_hr_est:.2f} h)")
+        duration_choices.extend([
+            "3 horas (tormentas cortas intensas)",
+            "12 horas (tormentas prolongadas)",
+            "24 horas (eventos extremos)",
+            "Personalizada",
+        ])
+
+        res, duration_choice = self.select("Duración de la tormenta bimodal:", duration_choices)
+        if res != StepResult.NEXT:
+            return res
+
+        if duration_choice:
+            if "6 horas" in duration_choice:
+                self.state.bimodal_duration_hr = 6.0
+            elif "Tc estimado" in duration_choice and tc_hr_est:
+                self.state.bimodal_duration_hr = tc_hr_est
+            elif "3 horas" in duration_choice:
+                self.state.bimodal_duration_hr = 3.0
+            elif "12 horas" in duration_choice:
+                self.state.bimodal_duration_hr = 12.0
+            elif "24 horas" in duration_choice:
+                self.state.bimodal_duration_hr = 24.0
+            elif "Personalizada" in duration_choice:
+                res, dur_str = self.text(
+                    "Duración en horas:",
+                    default="6.0",
+                    validate=lambda v: validate_positive_float(v),
+                )
+                if res != StepResult.NEXT:
+                    return res
+                if dur_str:
+                    self.state.bimodal_duration_hr = float(dur_str)
+
+        dur = self.state.bimodal_duration_hr
+        width_min = dur * 60 * self.state.bimodal_peak_width * 2  # ancho total en minutos
+        self.echo(f"\n  Configuración por defecto (duración {dur:.1f}h):")
+        self.echo(f"    • Pico 1: 25% ({dur * 0.25:.1f}h)")
+        self.echo(f"    • Pico 2: 75% ({dur * 0.75:.1f}h)")
+        self.echo(f"    • Volumen: 50% en cada pico")
+        self.echo(f"    • Ancho de picos: 15% ({width_min:.0f} min cada uno)\n")
 
         res, configurar = self.confirm(
-            "¿Configurar posición de picos? (default: 25%/75%, vol 50/50)",
+            "¿Configurar parámetros de la tormenta bimodal?",
             default=False,
         )
 
@@ -392,20 +455,29 @@ class StepTormenta(WizardStep):
             return res
 
         if not configurar:
-            self.echo("  Usando configuración por defecto")
+            print_info("Usando configuración por defecto (25%/75%, vol 50/50)")
             return StepResult.NEXT
 
-        # Opciones predefinidas
-        self.echo("\n  Configuraciones típicas:")
+        # Opciones predefinidas con sugerencias
+        print_suggestion("Selecciona según el tipo de evento que quieras modelar:")
+        self.echo("")
+
         config_choices = [
-            "Estándar (25%/75%) - picos simétricos",
-            "Adelantada (15%/50%) - pico principal temprano",
-            "Tardía (50%/85%) - pico principal tardío",
-            "Asimétrica (20%/70%, vol 60/40) - primer pico dominante",
-            "Personalizada - ingresar valores",
+            # Simétricas (vol 50/50)
+            "Estándar (25%/75%, vol 50/50) - dos eventos similares",
+            "Adelantada (15%/50%, vol 50/50) - evento temprano + refuerzo",
+            "Tardía (50%/85%, vol 50/50) - evento tardío dominante",
+            # Primer pico dominante
+            "Primer pico fuerte (25%/75%, vol 70/30) - tormenta principal + cola",
+            "Frente de tormenta (20%/60%, vol 65/35) - entrada intensa",
+            # Segundo pico dominante
+            "Segundo pico fuerte (25%/75%, vol 30/70) - precursor + principal",
+            "Tormenta creciente (30%/80%, vol 35/65) - intensificación gradual",
+            # Personalizada
+            "Personalizada - ingresar valores manualmente",
         ]
 
-        res, config_choice = self.select("Configuración de picos:", config_choices)
+        res, config_choice = self.select("Configuración de picos y volumen:", config_choices)
 
         if res != StepResult.NEXT:
             return res
@@ -423,26 +495,42 @@ class StepTormenta(WizardStep):
                 self.state.bimodal_peak1 = 0.50
                 self.state.bimodal_peak2 = 0.85
                 self.state.bimodal_vol_split = 0.5
-            elif "Asimétrica" in config_choice:
+            elif "Primer pico fuerte" in config_choice:
+                self.state.bimodal_peak1 = 0.25
+                self.state.bimodal_peak2 = 0.75
+                self.state.bimodal_vol_split = 0.7
+            elif "Frente de tormenta" in config_choice:
                 self.state.bimodal_peak1 = 0.20
-                self.state.bimodal_peak2 = 0.70
-                self.state.bimodal_vol_split = 0.6
+                self.state.bimodal_peak2 = 0.60
+                self.state.bimodal_vol_split = 0.65
+            elif "Segundo pico fuerte" in config_choice:
+                self.state.bimodal_peak1 = 0.25
+                self.state.bimodal_peak2 = 0.75
+                self.state.bimodal_vol_split = 0.3
+            elif "Tormenta creciente" in config_choice:
+                self.state.bimodal_peak1 = 0.30
+                self.state.bimodal_peak2 = 0.80
+                self.state.bimodal_vol_split = 0.35
             elif "Personalizada" in config_choice:
                 custom_result = self._configure_bimodal_custom()
                 if custom_result != StepResult.NEXT:
                     return custom_result
 
-        self.echo(f"\n  Configurado:")
-        self.echo(f"    • Pico 1: {self.state.bimodal_peak1*100:.0f}% de la duración")
-        self.echo(f"    • Pico 2: {self.state.bimodal_peak2*100:.0f}% de la duración")
-        self.echo(f"    • Volumen pico 1: {self.state.bimodal_vol_split*100:.0f}%")
-        self.echo(f"    • Volumen pico 2: {(1-self.state.bimodal_vol_split)*100:.0f}%")
+        dur = self.state.bimodal_duration_hr
+        vol1 = self.state.bimodal_vol_split * 100
+        vol2 = (1 - self.state.bimodal_vol_split) * 100
+        width_min = dur * 60 * self.state.bimodal_peak_width * 2
+
+        print_info(f"Configurado (duración {dur:.1f}h):")
+        self.echo(f"    Pico 1: {self.state.bimodal_peak1*100:.0f}% ({dur * self.state.bimodal_peak1:.1f}h) - {vol1:.0f}% del volumen")
+        self.echo(f"    Pico 2: {self.state.bimodal_peak2*100:.0f}% ({dur * self.state.bimodal_peak2:.1f}h) - {vol2:.0f}% del volumen")
+        self.echo(f"    Ancho de picos: {self.state.bimodal_peak_width*100:.0f}% ({width_min:.0f} min)")
 
         return StepResult.NEXT
 
     def _configure_bimodal_custom(self) -> StepResult:
         """Configura parámetros bimodales personalizados."""
-        self.echo("\n  Ingresa valores personalizados (0-100%):\n")
+        self.echo("\n  Ingresa valores personalizados:\n")
 
         # Pico 1
         res, peak1_str = self.text(
@@ -478,7 +566,46 @@ class StepTormenta(WizardStep):
         if vol_str:
             self.state.bimodal_vol_split = float(vol_str) / 100
 
+        # Ancho de picos
+        dur = self.state.bimodal_duration_hr
+        print_info("El ancho define cuántos intervalos dt ocupa cada pico triangular.")
+        print_suggestion("Valores típicos: 10-20%. Mayor ancho = picos más suaves.")
+        current_width_min = dur * 60 * self.state.bimodal_peak_width * 2
+        self.echo(f"  Actual: {self.state.bimodal_peak_width*100:.0f}% = {current_width_min:.0f} min por pico\n")
+
+        res, width_str = self.text(
+            "Ancho de cada pico (% de duración, ej: 15):",
+            validate=lambda x: self._validate_percent(x, 5, 30),
+            default="15",
+        )
+        if res != StepResult.NEXT:
+            return res
+        if width_str:
+            self.state.bimodal_peak_width = float(width_str) / 100
+
         return StepResult.NEXT
+
+    def _estimate_tc(self) -> Optional[float]:
+        """Estima el Tc basándose en los métodos seleccionados y datos disponibles."""
+        from hidropluvial.core import kirpich, desbordes, temez
+
+        tc_values = []
+
+        for method in self.state.tc_methods:
+            method_lower = method.lower()
+            if "kirpich" in method_lower and self.state.length_m:
+                tc_hr = kirpich(self.state.length_m, self.state.slope_pct / 100)
+                tc_values.append(tc_hr)
+            elif "temez" in method_lower and self.state.length_m:
+                tc_hr = temez(self.state.length_m / 1000, self.state.slope_pct / 100)
+                tc_values.append(tc_hr)
+            elif "desbordes" in method_lower and self.state.c:
+                tc_hr = desbordes(self.state.area_ha, self.state.slope_pct, self.state.c)
+                tc_values.append(tc_hr)
+
+        if tc_values:
+            return sum(tc_values) / len(tc_values)
+        return None
 
     def _validate_percent(self, value: str, min_val: float, max_val: float) -> bool | str:
         """Valida entrada de porcentaje."""
@@ -488,6 +615,202 @@ class StepTormenta(WizardStep):
                 return f"Debe ser >= {min_val:.0f}%"
             if v > max_val:
                 return f"Debe ser <= {max_val:.0f}%"
+            return True
+        except ValueError:
+            return "Debe ser un número válido"
+
+    def _configure_custom_storm(self) -> StepResult:
+        """Configura parámetros de tormenta personalizada."""
+        from hidropluvial.cli.wizard.styles import validate_positive_float
+
+        self.echo("\n  ┌─────────────────────────────────────────────────────────┐")
+        self.echo("  │         PRECIPITACIÓN PERSONALIZADA                     │")
+        self.echo("  ├─────────────────────────────────────────────────────────┤")
+        self.echo("  │  Opciones:                                              │")
+        self.echo("  │  • Pacum total: Ingresar precipitación acumulada y     │")
+        self.echo("  │    seleccionar distribución temporal                    │")
+        self.echo("  │  • Hietograma: Ingresar serie de tiempo de lluvia      │")
+        self.echo("  │    (para evaluar eventos medidos/reales)                │")
+        self.echo("  └─────────────────────────────────────────────────────────┘")
+
+        type_choices = [
+            "Pacum total - Precipitación acumulada con distribución",
+            "Hietograma - Serie de tiempo de lluvia (evento real)",
+        ]
+
+        res, type_choice = self.select("Tipo de datos personalizados:", type_choices)
+        if res != StepResult.NEXT:
+            return res
+
+        if type_choice and "Pacum" in type_choice:
+            return self._configure_custom_pacum()
+        elif type_choice and "Hietograma" in type_choice:
+            return self._configure_custom_hyetograph()
+
+        return StepResult.NEXT
+
+    def _configure_custom_pacum(self) -> StepResult:
+        """Configura precipitación total personalizada."""
+        from hidropluvial.cli.wizard.styles import validate_positive_float
+
+        self.echo("\n  Ingresa la precipitación acumulada del evento:")
+        print_info("Ejemplo: 80 mm para un evento de 6 horas")
+
+        res, depth_str = self.text(
+            "Precipitación total (mm):",
+            validate=validate_positive_float,
+            default="80",
+        )
+        if res != StepResult.NEXT:
+            return res
+        if depth_str:
+            self.state.custom_depth_mm = float(depth_str)
+
+        # Duración
+        tc_hr_est = self._estimate_tc()
+        duration_choices = [
+            "6 horas (estándar Uruguay)",
+        ]
+        if tc_hr_est:
+            duration_choices.append(f"Tc estimado ({tc_hr_est:.2f} h)")
+        duration_choices.extend([
+            "3 horas (tormentas cortas)",
+            "12 horas (tormentas prolongadas)",
+            "24 horas (eventos extremos)",
+            "Personalizada",
+        ])
+
+        res, dur_choice = self.select("Duración del evento:", duration_choices)
+        if res != StepResult.NEXT:
+            return res
+
+        if dur_choice:
+            if "6 horas" in dur_choice:
+                self.state.custom_duration_hr = 6.0
+            elif "Tc estimado" in dur_choice and tc_hr_est:
+                self.state.custom_duration_hr = tc_hr_est
+            elif "3 horas" in dur_choice:
+                self.state.custom_duration_hr = 3.0
+            elif "12 horas" in dur_choice:
+                self.state.custom_duration_hr = 12.0
+            elif "24 horas" in dur_choice:
+                self.state.custom_duration_hr = 24.0
+            elif "Personalizada" in dur_choice:
+                res, dur_str = self.text(
+                    "Duración en horas:",
+                    validate=validate_positive_float,
+                    default="6.0",
+                )
+                if res != StepResult.NEXT:
+                    return res
+                if dur_str:
+                    self.state.custom_duration_hr = float(dur_str)
+
+        # Distribución temporal
+        self.echo("\n  Selecciona cómo distribuir la precipitación en el tiempo:")
+        dist_choices = [
+            "Bloques alternantes - pico en primer tercio (estilo GZ)",
+            "Bloques alternantes (centro) - pico centrado",
+            "SCS Tipo II - distribución NRCS 24h",
+            "Huff Q2 - basado en datos históricos",
+            "Triangular - distribución simple",
+            "Uniforme - intensidad constante",
+        ]
+
+        res, dist_choice = self.select("Distribución temporal:", dist_choices)
+        if res != StepResult.NEXT:
+            return res
+
+        if dist_choice:
+            if "alternantes (centro)" in dist_choice:
+                self.state.custom_distribution = "alternating_blocks"
+            elif "alternantes" in dist_choice.lower():
+                self.state.custom_distribution = "alternating_blocks_gz"
+            elif "SCS" in dist_choice:
+                self.state.custom_distribution = "scs_type_ii"
+            elif "Huff" in dist_choice:
+                self.state.custom_distribution = "huff_q2"
+            elif "Triangular" in dist_choice:
+                self.state.custom_distribution = "triangular"
+            elif "Uniforme" in dist_choice:
+                self.state.custom_distribution = "uniform"
+
+        dur = self.state.custom_duration_hr
+        print_info(f"Configurado: {self.state.custom_depth_mm:.1f} mm en {dur:.1f}h")
+        self.echo(f"    Distribución: {self.state.custom_distribution}")
+
+        return StepResult.NEXT
+
+    def _configure_custom_hyetograph(self) -> StepResult:
+        """Configura hietograma personalizado desde datos."""
+        from hidropluvial.cli.wizard.styles import validate_positive_float
+
+        self.echo("\n  Ingresa los datos del hietograma (evento medido/real):")
+        print_info("Formato: tiempo (min) y precipitación (mm) por intervalo")
+        print_suggestion("Ejemplo: intervalos de 5 min con lluvia en cada uno")
+
+        # Preguntar intervalo de tiempo
+        res, dt_str = self.text(
+            "Intervalo de tiempo dt (minutos):",
+            validate=validate_positive_float,
+            default="5",
+        )
+        if res != StepResult.NEXT:
+            return res
+
+        dt = float(dt_str) if dt_str else 5.0
+
+        # Preguntar número de intervalos
+        res, n_str = self.text(
+            "Número de intervalos:",
+            validate=lambda x: x.isdigit() and int(x) >= 2 or "Mínimo 2 intervalos",
+            default="12",
+        )
+        if res != StepResult.NEXT:
+            return res
+
+        n_intervals = int(n_str) if n_str else 12
+
+        # Recolectar datos de precipitación
+        self.echo(f"\n  Ingresa la precipitación para cada intervalo de {dt:.0f} min:")
+        self.echo("  (Ingresa 0 para intervalos sin lluvia)\n")
+
+        depths = []
+        times = []
+        for i in range(n_intervals):
+            t_start = i * dt
+            t_end = (i + 1) * dt
+            t_center = t_start + dt / 2
+
+            res, depth_str = self.text(
+                f"  Intervalo {i+1} ({t_start:.0f}-{t_end:.0f} min) [mm]:",
+                validate=lambda x: self._validate_non_negative(x),
+                default="0",
+                back_option=False,
+            )
+            if res != StepResult.NEXT:
+                return res
+
+            depth = float(depth_str) if depth_str else 0.0
+            depths.append(depth)
+            times.append(t_center)
+
+        self.state.custom_hyetograph_time = times
+        self.state.custom_hyetograph_depth = depths
+
+        total = sum(depths)
+        duration_hr = (n_intervals * dt) / 60
+        print_info(f"Configurado: {total:.1f} mm total en {duration_hr:.1f}h")
+        print_info(f"Pico: {max(depths):.1f} mm en intervalo de {dt:.0f} min")
+
+        return StepResult.NEXT
+
+    def _validate_non_negative(self, value: str) -> bool | str:
+        """Valida entrada no negativa."""
+        try:
+            v = float(value)
+            if v < 0:
+                return "No puede ser negativo"
             return True
         except ValueError:
             return "Debe ser un número válido"

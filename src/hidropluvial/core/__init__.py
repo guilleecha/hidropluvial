@@ -31,6 +31,8 @@ from hidropluvial.core.temporal import (
     bimodal_storm,
     bimodal_dinagua,
     bimodal_chicago,
+    custom_depth_storm,
+    custom_hyetograph,
     generate_hyetograph,
     generate_hyetograph_dinagua,
 )
@@ -107,6 +109,8 @@ __all__ = [
     "bimodal_storm",
     "bimodal_dinagua",
     "bimodal_chicago",
+    "custom_depth_storm",
+    "custom_hyetograph",
     "generate_hyetograph",
     "generate_hyetograph_dinagua",
     # Time of concentration

@@ -52,9 +52,18 @@ class WizardState:
     dt_min: float = 5.0  # Intervalo de tiempo del hietograma (minutos)
 
     # Parámetros de tormenta bimodal
+    bimodal_duration_hr: float = 6.0  # Duración de la tormenta bimodal (horas)
     bimodal_peak1: float = 0.25  # Posición del primer pico (0-1)
     bimodal_peak2: float = 0.75  # Posición del segundo pico (0-1)
     bimodal_vol_split: float = 0.5  # Fracción del volumen en el primer pico
+    bimodal_peak_width: float = 0.15  # Ancho de cada pico (fracción de duración)
+
+    # Parámetros de tormenta personalizada
+    custom_depth_mm: Optional[float] = None  # Precipitación total personalizada (mm)
+    custom_duration_hr: float = 6.0  # Duración de tormenta personalizada (horas)
+    custom_distribution: str = "alternating_blocks"  # Distribución temporal
+    custom_hyetograph_time: Optional[list[float]] = None  # Tiempos del hietograma (min)
+    custom_hyetograph_depth: Optional[list[float]] = None  # Profundidades del hietograma (mm)
 
     # Parámetros NRCS (método de velocidades)
     nrcs_segments: list = field(default_factory=list)  # Lista de segmentos TCSegment

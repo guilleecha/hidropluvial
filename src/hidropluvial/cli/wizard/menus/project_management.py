@@ -45,7 +45,7 @@ class ProjectManagementMenu(BaseMenu):
                 "Renombrar proyecto",
                 "Eliminar proyecto",
                 "Crear nuevo proyecto",
-                "← Volver al menu principal",
+                self.back_option("Volver al menu principal"),
             ]
 
             action = self.select("Que deseas hacer?", choices)
@@ -95,7 +95,7 @@ class ProjectManagementMenu(BaseMenu):
             f"{p['id']} - {p['name']} ({p['n_basins']} cuencas)"
             for p in projects
         ]
-        choices.append("← Cancelar")
+        choices.append(self.cancel_option())
 
         choice = self.select(prompt, choices)
 

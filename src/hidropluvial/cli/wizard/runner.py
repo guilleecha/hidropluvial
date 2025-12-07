@@ -34,7 +34,12 @@ from hidropluvial.core import (
     adjust_cn_for_amc,
     recalculate_weighted_c_for_tr,
 )
-from hidropluvial.core.temporal import huff_distribution, scs_distribution
+from hidropluvial.core.temporal import (
+    huff_distribution,
+    scs_distribution,
+    custom_depth_storm,
+    custom_hyetograph,
+)
 from hidropluvial.core.idf import dinagua_depth
 from hidropluvial.config import StormMethod
 from hidropluvial.core.coefficients import get_c_for_tr_from_table
@@ -291,6 +296,12 @@ class AnalysisRunner:
         dt = self.config.dt_min
         if storm_code == "gz":
             duration_hr = 6.0
+        elif storm_code == "bimodal":
+            # Bimodal usa duración configurable (default 6h como GZ)
+            duration_hr = self.config.bimodal_duration_hr
+        elif storm_code == "custom":
+            # Tormenta personalizada usa su propia duración
+            duration_hr = self.config.custom_duration_hr
         elif storm_code == "blocks24" or storm_code == "scs_ii":
             duration_hr = 24.0
             # Para tormentas de 24h, dt mínimo de 10 min si el usuario puso menos
@@ -313,7 +324,34 @@ class AnalysisRunner:
                 peak1_position=self.config.bimodal_peak1,
                 peak2_position=self.config.bimodal_peak2,
                 volume_split=self.config.bimodal_vol_split,
+                peak_width_fraction=self.config.bimodal_peak_width,
             )
+        elif storm_code == "custom":
+            # Tormenta personalizada
+            if self.config.custom_hyetograph_time and self.config.custom_hyetograph_depth:
+                # Usar hietograma personalizado (evento real)
+                hyetograph = custom_hyetograph(
+                    self.config.custom_hyetograph_time,
+                    self.config.custom_hyetograph_depth,
+                )
+            elif self.config.custom_depth_mm:
+                # Usar precipitación total con distribución
+                distribution = self.config.custom_distribution
+                peak_pos = 1.0 / 6.0 if distribution == "alternating_blocks_gz" else 0.5
+                if distribution == "alternating_blocks_gz":
+                    distribution = "alternating_blocks"
+                hyetograph = custom_depth_storm(
+                    self.config.custom_depth_mm,
+                    duration_hr,
+                    dt,
+                    distribution=distribution,
+                    peak_position=peak_pos,
+                )
+            else:
+                # Fallback a IDF DINAGUA si no hay datos personalizados
+                hyetograph = alternating_blocks_dinagua(
+                    p3_10, tr, duration_hr, dt, None
+                )
         elif storm_code.startswith("huff"):
             # Extraer cuartil (ej: huff_q2 -> 2)
             quartile = int(storm_code.split("_q")[1]) if "_q" in storm_code else 2
@@ -499,9 +537,16 @@ class AdditionalAnalysisRunner:
         lambda_coef: float = 0.2,
         t0_min: float = 5.0,
         dt_min: float = 5.0,
+        bimodal_duration_hr: float = 6.0,
         bimodal_peak1: float = 0.25,
         bimodal_peak2: float = 0.75,
         bimodal_vol_split: float = 0.5,
+        bimodal_peak_width: float = 0.15,
+        custom_depth_mm: float = None,
+        custom_duration_hr: float = 6.0,
+        custom_distribution: str = "alternating_blocks",
+        custom_hyetograph_time: list = None,
+        custom_hyetograph_depth: list = None,
     ):
         self.basin = basin
         self.c = c
@@ -510,9 +555,16 @@ class AdditionalAnalysisRunner:
         self.lambda_coef = lambda_coef
         self.t0_min = t0_min
         self.dt_min = dt_min
+        self.bimodal_duration_hr = bimodal_duration_hr
         self.bimodal_peak1 = bimodal_peak1
         self.bimodal_peak2 = bimodal_peak2
         self.bimodal_vol_split = bimodal_vol_split
+        self.bimodal_peak_width = bimodal_peak_width
+        self.custom_depth_mm = custom_depth_mm
+        self.custom_duration_hr = custom_duration_hr
+        self.custom_distribution = custom_distribution
+        self.custom_hyetograph_time = custom_hyetograph_time
+        self.custom_hyetograph_depth = custom_hyetograph_depth
 
     def run(
         self,
@@ -567,6 +619,10 @@ class AdditionalAnalysisRunner:
                         dt = self.dt_min
                         if storm_code == "gz":
                             duration_hr = 6.0
+                        elif storm_code == "bimodal":
+                            duration_hr = self.bimodal_duration_hr
+                        elif storm_code == "custom":
+                            duration_hr = self.custom_duration_hr
                         elif storm_code == "blocks24" or storm_code == "scs_ii":
                             duration_hr = 24.0
                             # Para tormentas de 24h, dt mínimo de 10 min
@@ -589,7 +645,31 @@ class AdditionalAnalysisRunner:
                                 peak1_position=self.bimodal_peak1,
                                 peak2_position=self.bimodal_peak2,
                                 volume_split=self.bimodal_vol_split,
+                                peak_width_fraction=self.bimodal_peak_width,
                             )
+                        elif storm_code == "custom":
+                            # Tormenta personalizada
+                            if self.custom_hyetograph_time and self.custom_hyetograph_depth:
+                                hyetograph = custom_hyetograph(
+                                    self.custom_hyetograph_time,
+                                    self.custom_hyetograph_depth,
+                                )
+                            elif self.custom_depth_mm:
+                                distribution = self.custom_distribution
+                                peak_pos = 1.0 / 6.0 if distribution == "alternating_blocks_gz" else 0.5
+                                if distribution == "alternating_blocks_gz":
+                                    distribution = "alternating_blocks"
+                                hyetograph = custom_depth_storm(
+                                    self.custom_depth_mm,
+                                    duration_hr,
+                                    dt,
+                                    distribution=distribution,
+                                    peak_position=peak_pos,
+                                )
+                            else:
+                                hyetograph = alternating_blocks_dinagua(
+                                    p3_10, tr, duration_hr, dt, None
+                                )
                         elif storm_code.startswith("huff"):
                             quartile = int(storm_code.split("_q")[1]) if "_q" in storm_code else 2
                             total_depth = dinagua_depth(p3_10, tr, duration_hr, None)

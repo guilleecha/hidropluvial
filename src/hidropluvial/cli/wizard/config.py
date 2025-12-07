@@ -50,9 +50,18 @@ class WizardConfig:
     dt_min: float = 5.0  # Intervalo de tiempo del hietograma (minutos)
 
     # Parametros de tormenta bimodal
+    bimodal_duration_hr: float = 6.0  # Duracion de la tormenta bimodal (horas)
     bimodal_peak1: float = 0.25  # Posicion del primer pico (0-1)
     bimodal_peak2: float = 0.75  # Posicion del segundo pico (0-1)
     bimodal_vol_split: float = 0.5  # Fraccion del volumen en el primer pico
+    bimodal_peak_width: float = 0.15  # Ancho de cada pico (fraccion de duracion)
+
+    # Parametros de tormenta personalizada
+    custom_depth_mm: Optional[float] = None  # Precipitacion total personalizada (mm)
+    custom_duration_hr: float = 6.0  # Duracion de tormenta personalizada (horas)
+    custom_distribution: str = "alternating_blocks"  # Distribucion temporal
+    custom_hyetograph_time: Optional[list[float]] = None  # Tiempos del hietograma (min)
+    custom_hyetograph_depth: Optional[list[float]] = None  # Profundidades del hietograma (mm)
 
     # Salida
     output_name: Optional[str] = None
@@ -86,9 +95,16 @@ class WizardConfig:
             return_periods=state.return_periods,
             x_factors=state.x_factors,
             dt_min=state.dt_min,
+            bimodal_duration_hr=state.bimodal_duration_hr,
             bimodal_peak1=state.bimodal_peak1,
             bimodal_peak2=state.bimodal_peak2,
             bimodal_vol_split=state.bimodal_vol_split,
+            bimodal_peak_width=state.bimodal_peak_width,
+            custom_depth_mm=state.custom_depth_mm,
+            custom_duration_hr=state.custom_duration_hr,
+            custom_distribution=state.custom_distribution,
+            custom_hyetograph_time=state.custom_hyetograph_time,
+            custom_hyetograph_depth=state.custom_hyetograph_depth,
             output_name=state.output_name,
         )
 

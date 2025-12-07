@@ -1,5 +1,5 @@
 """
-Menu para exportar sesiones a Excel o LaTeX con filtrado de analisis.
+Menú para exportar sesiones a Excel o LaTeX con filtrado de análisis.
 """
 
 from datetime import datetime
@@ -29,10 +29,10 @@ def get_output_dir(session_name: str, base_dir: str = "outputs") -> Path:
 
 
 class ExportMenu(SessionMenu):
-    """Menu para exportar una cuenca con opciones de filtrado."""
+    """Menú para exportar una cuenca con opciones de filtrado."""
 
     def show(self) -> None:
-        """Muestra el menu de exportacion."""
+        """Muestra el menú de exportacion."""
         if not self.basin.analyses:
             self.echo("\n  La cuenca no tiene analisis para exportar.\n")
             return
@@ -58,7 +58,7 @@ class ExportMenu(SessionMenu):
         use_filter = False
         if len(self.basin.analyses) > 1:
             use_filter = self.confirm(
-                f"Filtrar analisis? (hay {len(self.basin.analyses)} disponibles)",
+                f"¿Filtrar análisis? (hay {len(self.basin.analyses)} disponibles)",
                 default=False,
             )
 
@@ -69,7 +69,7 @@ class ExportMenu(SessionMenu):
             if selected_indices is None:
                 return
             if not selected_indices:
-                self.echo("\n  No se seleccionaron analisis.\n")
+                self.echo("\n  No se seleccionaron análisis.\n")
                 return
 
         # Directorio de salida organizado
@@ -87,16 +87,16 @@ class ExportMenu(SessionMenu):
             self._export_latex(output_dir, default_name, selected_indices)
 
     def _show_basin_info(self) -> None:
-        """Muestra informacion de la cuenca."""
+        """Muestra información de la cuenca."""
         self.echo(f"\n  Cuenca: {self.basin.name}")
         self.echo(f"  Analisis: {len(self.basin.analyses)}")
 
-        # Mostrar resumen de analisis
+        # Mostrar resumen de análisis
         tr_values = sorted(set(a.storm.return_period for a in self.basin.analyses))
         tc_methods = sorted(set(a.hydrograph.tc_method for a in self.basin.analyses))
 
-        self.echo(f"  Periodos de retorno: {tr_values}")
-        self.echo(f"  Metodos Tc: {tc_methods}")
+        self.echo(f"  Períodos de retorno: {tr_values}")
+        self.echo(f"  Métodos Tc: {tc_methods}")
         self.echo("")
 
     def _select_analyses(self) -> Optional[list[int]]:
@@ -111,7 +111,7 @@ class ExportMenu(SessionMenu):
             x_str = f" X={hydro.x_factor:.2f}" if hydro.x_factor else ""
             label = (
                 f"{a.id}: {hydro.tc_method} + {storm.type} "
-                f"Tr{storm.return_period}{x_str} -> Qp={hydro.peak_flow_m3s:.2f} m3/s"
+                f"Tr{storm.return_period}{x_str} -> Qp={hydro.peak_flow_m3s:.2f} m³/s"
             )
             choices.append(questionary.Choice(label, checked=True))
 
@@ -204,23 +204,23 @@ class ExportMenu(SessionMenu):
 
             row = {
                 "ID": a.id,
-                "Metodo Tc": a.tc.method.capitalize(),
+                "Método Tc": a.tc.method.capitalize(),
                 "Tc (min)": round(a.tc.tc_min, 1),
                 "tp (min)": round(a.hydrograph.tp_unit_min, 1) if a.hydrograph.tp_unit_min else None,
                 "tb (min)": round(a.hydrograph.tb_min, 1) if a.hydrograph.tb_min else None,
-                "Metodo Pe": runoff_method,
+                "Método Pe": runoff_method,
                 "Tormenta": a.storm.type.upper(),
                 "Tr (anos)": a.storm.return_period,
                 "Duracion (hr)": round(a.storm.duration_hr, 2),
                 "P total (mm)": round(a.storm.total_depth_mm, 1),
                 "i pico (mm/hr)": round(a.storm.peak_intensity_mmhr, 1),
                 "Pe (mm)": round(a.hydrograph.runoff_mm, 1),
-                "Qp (m3/s)": round(a.hydrograph.peak_flow_m3s, 2),
+                "Qp (m³/s)": round(a.hydrograph.peak_flow_m3s, 2),
                 "Tp (min)": round(a.hydrograph.time_to_peak_min, 1),
                 "Vol (hm3)": round(a.hydrograph.volume_m3 / 1_000_000, 4),
             }
 
-            # Agregar C si el metodo de Tc depende de C
+            # Agregar C si el método de Tc depende de C
             if a.tc.parameters and "c" in a.tc.parameters:
                 row["C"] = round(a.tc.parameters["c"], 3)
 
@@ -277,7 +277,7 @@ class ExportMenu(SessionMenu):
             rows.append({
                 "Metodo": method_label,
                 "Tr": a.storm.return_period,
-                "Q pico (m3/s)": round(a.hydrograph.peak_flow_m3s, 3),
+                "Q pico (m³/s)": round(a.hydrograph.peak_flow_m3s, 3),
             })
 
         df = pd.DataFrame(rows)
@@ -286,7 +286,7 @@ class ExportMenu(SessionMenu):
             pivot = df.pivot_table(
                 index="Metodo",
                 columns="Tr",
-                values="Q pico (m3/s)",
+                values="Q pico (m³/s)",
                 aggfunc="first",
             )
             pivot.columns = [f"Tr={tr}" for tr in pivot.columns]
@@ -296,7 +296,7 @@ class ExportMenu(SessionMenu):
 
 
 class ExportBasinSelector(BaseMenu):
-    """Menu para seleccionar cuenca y exportar desde gestion de proyectos."""
+    """Menú para seleccionar cuenca y exportar desde gestión de proyectos."""
 
     def show(self) -> None:
         """Muestra selector de proyecto/cuenca para exportar."""
@@ -330,7 +330,7 @@ class ExportBasinSelector(BaseMenu):
             self.echo("\n  Este proyecto no tiene cuencas.\n")
             return
 
-        # Filtrar cuencas con analisis
+        # Filtrar cuencas con análisis
         basins_with_analyses = [b for b in project.basins if b.analyses]
 
         if not basins_with_analyses:
@@ -339,7 +339,7 @@ class ExportBasinSelector(BaseMenu):
 
         # Seleccionar cuenca
         basin_choices = [
-            f"{b.id} - {b.name} ({len(b.analyses)} analisis)"
+            f"{b.id} - {b.name} ({len(b.analyses)} análisis)"
             for b in basins_with_analyses
         ]
         basin_choices.append("← Cancelar")

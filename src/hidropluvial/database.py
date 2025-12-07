@@ -764,63 +764,72 @@ class Database:
             analysis = self._row_to_analysis(row, conn)
             return analysis
 
+    def _row_to_tc_dict(self, row: sqlite3.Row) -> dict:
+        """Extrae datos de Tc de una fila de análisis."""
+        return {
+            "method": row["tc_method"],
+            "tc_hr": row["tc_hr"],
+            "tc_min": row["tc_min"],
+            "parameters": _json_dict(row["tc_parameters"]),
+        }
+
+    def _row_to_storm_dict(self, row: sqlite3.Row, storm_ts: Optional[sqlite3.Row]) -> dict:
+        """Extrae datos de tormenta de una fila de análisis."""
+        return {
+            "type": row["storm_type"],
+            "return_period": row["return_period"],
+            "duration_hr": row["duration_hr"],
+            "total_depth_mm": row["total_depth_mm"],
+            "peak_intensity_mmhr": row["peak_intensity_mmhr"],
+            "n_intervals": row["n_intervals"],
+            "time_min": _json_list(storm_ts["time_min"]) if storm_ts else [],
+            "intensity_mmhr": _json_list(storm_ts["intensity_mmhr"]) if storm_ts else [],
+        }
+
+    def _row_to_hydrograph_dict(self, row: sqlite3.Row, hydro_ts: Optional[sqlite3.Row]) -> dict:
+        """Extrae datos de hidrograma de una fila de análisis."""
+        return {
+            "tc_method": row["tc_method"],
+            "tc_min": row["tc_min"],
+            "storm_type": row["storm_type"],
+            "return_period": row["return_period"],
+            "x_factor": row["x_factor"],
+            "peak_flow_m3s": row["peak_flow_m3s"],
+            "time_to_peak_hr": row["time_to_peak_hr"],
+            "time_to_peak_min": row["time_to_peak_min"],
+            "tp_unit_hr": row["tp_unit_hr"],
+            "tp_unit_min": row["tp_unit_min"],
+            "tb_hr": row["tb_hr"],
+            "tb_min": row["tb_min"],
+            "volume_m3": row["volume_m3"],
+            "total_depth_mm": row["total_depth_mm"],
+            "runoff_mm": row["runoff_mm"],
+            "time_hr": _json_list(hydro_ts["time_hr"]) if hydro_ts else [],
+            "flow_m3s": _json_list(hydro_ts["flow_m3s"]) if hydro_ts else [],
+        }
+
     def _row_to_analysis(self, row: sqlite3.Row, conn: sqlite3.Connection) -> dict:
         """Convierte una fila de análisis a diccionario completo."""
         analysis_id = row["id"]
 
-        # Obtener series temporales de tormenta
-        storm_cursor = conn.execute(
+        # Obtener series temporales
+        storm_ts = conn.execute(
             "SELECT * FROM storm_timeseries WHERE analysis_id = ?",
             (analysis_id,)
-        )
-        storm_ts = storm_cursor.fetchone()
+        ).fetchone()
 
-        # Obtener series temporales de hidrograma
-        hydro_cursor = conn.execute(
+        hydro_ts = conn.execute(
             "SELECT * FROM hydrograph_timeseries WHERE analysis_id = ?",
             (analysis_id,)
-        )
-        hydro_ts = hydro_cursor.fetchone()
+        ).fetchone()
 
         return {
             "id": row["id"],
             "timestamp": row["timestamp"],
             "note": row["note"],
-            "tc": {
-                "method": row["tc_method"],
-                "tc_hr": row["tc_hr"],
-                "tc_min": row["tc_min"],
-                "parameters": _json_dict(row["tc_parameters"]),
-            },
-            "storm": {
-                "type": row["storm_type"],
-                "return_period": row["return_period"],
-                "duration_hr": row["duration_hr"],
-                "total_depth_mm": row["total_depth_mm"],
-                "peak_intensity_mmhr": row["peak_intensity_mmhr"],
-                "n_intervals": row["n_intervals"],
-                "time_min": _json_list(storm_ts["time_min"]) if storm_ts else [],
-                "intensity_mmhr": _json_list(storm_ts["intensity_mmhr"]) if storm_ts else [],
-            },
-            "hydrograph": {
-                "tc_method": row["tc_method"],
-                "tc_min": row["tc_min"],
-                "storm_type": row["storm_type"],
-                "return_period": row["return_period"],
-                "x_factor": row["x_factor"],
-                "peak_flow_m3s": row["peak_flow_m3s"],
-                "time_to_peak_hr": row["time_to_peak_hr"],
-                "time_to_peak_min": row["time_to_peak_min"],
-                "tp_unit_hr": row["tp_unit_hr"],
-                "tp_unit_min": row["tp_unit_min"],
-                "tb_hr": row["tb_hr"],
-                "tb_min": row["tb_min"],
-                "volume_m3": row["volume_m3"],
-                "total_depth_mm": row["total_depth_mm"],
-                "runoff_mm": row["runoff_mm"],
-                "time_hr": _json_list(hydro_ts["time_hr"]) if hydro_ts else [],
-                "flow_m3s": _json_list(hydro_ts["flow_m3s"]) if hydro_ts else [],
-            },
+            "tc": self._row_to_tc_dict(row),
+            "storm": self._row_to_storm_dict(row, storm_ts),
+            "hydrograph": self._row_to_hydrograph_dict(row, hydro_ts),
         }
 
     def get_basin_analyses(self, basin_id: str) -> list[dict]:

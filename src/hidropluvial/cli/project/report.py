@@ -4,6 +4,7 @@ Comando de generación de reportes LaTeX para proyectos.
 Genera un reporte consolidado con todas las cuencas del proyecto.
 """
 
+from copy import deepcopy
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -14,6 +15,191 @@ from hidropluvial.cli.theme import (
     print_header, print_subheader, print_separator,
     print_success, print_error, print_warning,
 )
+
+
+# =============================================================================
+# Helper functions para project_report
+# =============================================================================
+
+
+def _validate_palette(palette: str) -> None:
+    """Configura y valida la paleta de colores."""
+    from hidropluvial.reports.palettes import set_active_palette
+    try:
+        set_active_palette(palette)
+    except ValueError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+
+def _get_and_validate_project(project_id: str):
+    """Obtiene el proyecto y valida que exista y tenga cuencas."""
+    manager = get_project_manager()
+    project = manager.get_project(project_id)
+
+    if project is None:
+        print_error(f"Proyecto '{project_id}' no encontrado.")
+        raise typer.Exit(1)
+
+    if not project.basins:
+        print_error("El proyecto no tiene cuencas.")
+        raise typer.Exit(1)
+
+    return project
+
+
+def _filter_basins_by_name(project, basin_filter: Optional[list[str]]) -> list:
+    """Filtra cuencas por nombre o ID."""
+    if not basin_filter:
+        return project.basins
+
+    basin_names_lower = [b.lower() for b in basin_filter]
+    filtered = [
+        b for b in project.basins
+        if b.name.lower() in basin_names_lower
+        or b.id.lower().startswith(tuple(basin_names_lower))
+    ]
+
+    if not filtered:
+        print_error(f"No se encontraron cuencas que coincidan con: {basin_filter}")
+        raise typer.Exit(1)
+
+    typer.echo(f"  Filtro de cuencas: {len(filtered)} de {len(project.basins)}")
+    return filtered
+
+
+def _filter_analyses(basins: list, tr_filter: Optional[list[int]], tc_method_filter: Optional[list[str]]) -> list:
+    """Filtra análisis por Tr y método Tc."""
+    if not tr_filter and not tc_method_filter:
+        return basins
+
+    filtered_basins = []
+    for b in basins:
+        filtered_analyses = b.analyses
+
+        if tr_filter:
+            filtered_analyses = [
+                a for a in filtered_analyses
+                if a.storm.return_period in tr_filter
+            ]
+
+        if tc_method_filter:
+            tc_methods_lower = [m.lower() for m in tc_method_filter]
+            filtered_analyses = [
+                a for a in filtered_analyses
+                if a.tc.method.lower() in tc_methods_lower
+            ]
+
+        if filtered_analyses:
+            filtered_basin = deepcopy(b)
+            filtered_basin.analyses = filtered_analyses
+            filtered_basins.append(filtered_basin)
+
+    if not filtered_basins:
+        print_error("No hay análisis que coincidan con los filtros aplicados.")
+        raise typer.Exit(1)
+
+    # Mostrar resumen de filtros
+    filter_info = []
+    if tr_filter:
+        filter_info.append(f"Tr={tr_filter}")
+    if tc_method_filter:
+        filter_info.append(f"Tc={tc_method_filter}")
+    typer.echo(f"  Filtros aplicados: {', '.join(filter_info)}")
+
+    return filtered_basins
+
+
+def _setup_output_dir(project, output: Optional[str]) -> Path:
+    """Configura el directorio de salida."""
+    if output is None:
+        safe_name = project.name.lower().replace(" ", "_").replace("/", "_")
+        output_name = safe_name
+    else:
+        output_name = output
+
+    base_output = Path("output")
+    output_dir = base_output / output_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
+
+
+def _process_basins(basins: list, output_dir: Path) -> tuple[list[dict], dict]:
+    """Procesa todas las cuencas y genera sus archivos."""
+    basin_sections = []
+    all_generated_files = {"hyetographs": [], "hydrographs": []}
+
+    for basin_obj in basins:
+        typer.echo(f"\n  Procesando cuenca: {basin_obj.name}...")
+
+        # Crear subdirectorio para la cuenca
+        basin_safe_name = basin_obj.name.lower().replace(" ", "_").replace("/", "_")
+        basin_dir = output_dir / f"cuenca_{basin_safe_name}"
+        basin_dir.mkdir(exist_ok=True)
+
+        hidrogramas_dir = basin_dir / "hidrogramas"
+        hietogramas_dir = basin_dir / "hietogramas"
+        hidrogramas_dir.mkdir(exist_ok=True)
+        hietogramas_dir.mkdir(exist_ok=True)
+
+        # Generar gráficos TikZ
+        basin_files = _generate_basin_tikz(basin_obj, basin_dir, hidrogramas_dir, hietogramas_dir)
+
+        # Generar secciones
+        basin_content = _generate_basin_sections(basin_obj, basin_dir, basin_files, basin_safe_name)
+
+        basin_sections.append({
+            "name": basin_obj.name,
+            "safe_name": basin_safe_name,
+            "content": basin_content,
+            "n_analyses": len(basin_obj.analyses),
+        })
+
+        # Acumular archivos generados
+        all_generated_files["hyetographs"].extend(basin_files["hyetographs"])
+        all_generated_files["hydrographs"].extend(basin_files["hydrographs"])
+
+        typer.echo(f"    Gráficos: {len(basin_files['hyetographs'])} hietogramas, {len(basin_files['hydrographs'])} hidrogramas")
+
+    return basin_sections, all_generated_files
+
+
+def _compile_to_pdf(main_path: Path, output_dir: Path, main_filename: str, clean: bool) -> None:
+    """Compila el documento LaTeX a PDF."""
+    from hidropluvial.reports.compiler import compile_latex, check_latex_installation
+
+    print_subheader("COMPILANDO A PDF")
+
+    latex_info = check_latex_installation()
+    if not latex_info["installed"]:
+        print_error("No se encontró LaTeX instalado.")
+        typer.echo(f"\n  Para compilar manualmente:")
+        typer.echo(f"    cd {output_dir.absolute()}")
+        typer.echo(f"    pdflatex {main_filename}")
+        raise typer.Exit(1)
+
+    typer.echo(f"  Usando: {latex_info['recommended']}")
+    typer.echo(f"  Compilando {main_filename}...")
+
+    result = compile_latex(
+        tex_file=main_path,
+        output_dir=output_dir,
+        runs=2,
+        quiet=True,
+        clean_aux=clean,
+    )
+
+    if result.success:
+        print_success(f"PDF generado: {result.pdf_path.name}")
+        if result.warnings:
+            print_warning(f"Advertencias: {len(result.warnings)}")
+    else:
+        print_error("Error al compilar PDF")
+        if result.error_message:
+            typer.echo(f"  {result.error_message[:200]}")
+        raise typer.Exit(1)
+
+    print_separator()
 
 
 def project_report(
@@ -55,145 +241,31 @@ def project_report(
         hidropluvial project report abc123 --basin "Cuenca A" --basin "Cuenca B"
         hidropluvial project report abc123 --tr 10 --tr 25 --tc-method kirpich
     """
-    from hidropluvial.reports import ReportGenerator
-    from hidropluvial.reports.palettes import set_active_palette
+    # Validaciones iniciales
+    _validate_palette(palette)
+    project = _get_and_validate_project(project_id)
 
-    # Configurar paleta
-    try:
-        set_active_palette(palette)
-    except ValueError as e:
-        print_error(str(e))
-        raise typer.Exit(1)
+    # Aplicar filtros
+    basins_to_include = _filter_basins_by_name(project, basin)
+    basins_to_include = _filter_analyses(basins_to_include, tr, tc_method)
 
-    # Obtener proyecto
-    manager = get_project_manager()
-    project = manager.get_project(project_id)
-
-    if project is None:
-        print_error(f"Proyecto '{project_id}' no encontrado.")
-        raise typer.Exit(1)
-
-    if not project.basins:
-        print_error("El proyecto no tiene cuencas.")
-        raise typer.Exit(1)
-
-    # Filtrar cuencas si se especificó --basin
-    basins_to_include = project.basins
-    if basin:
-        basin_names_lower = [b.lower() for b in basin]
-        basins_to_include = [
-            b for b in project.basins
-            if b.name.lower() in basin_names_lower
-            or b.id.lower().startswith(tuple(basin_names_lower))
-        ]
-        if not basins_to_include:
-            print_error(f"No se encontraron cuencas que coincidan con: {basin}")
-            raise typer.Exit(1)
-        typer.echo(f"  Filtro de cuencas: {len(basins_to_include)} de {len(project.basins)}")
-
-    # Filtrar análisis por Tr y método Tc
-    filtered_basins = []
-    for b in basins_to_include:
-        filtered_analyses = b.analyses
-
-        if tr:
-            filtered_analyses = [
-                a for a in filtered_analyses
-                if a.storm.return_period in tr
-            ]
-
-        if tc_method:
-            tc_methods_lower = [m.lower() for m in tc_method]
-            filtered_analyses = [
-                a for a in filtered_analyses
-                if a.tc.method.lower() in tc_methods_lower
-            ]
-
-        if filtered_analyses:
-            # Crear copia de la cuenca con análisis filtrados
-            from copy import deepcopy
-            filtered_basin = deepcopy(b)
-            filtered_basin.analyses = filtered_analyses
-            filtered_basins.append(filtered_basin)
-
-    if not filtered_basins:
-        print_error("No hay análisis que coincidan con los filtros aplicados.")
-        raise typer.Exit(1)
-
-    # Mostrar resumen de filtros
-    if tr or tc_method:
-        filter_info = []
-        if tr:
-            filter_info.append(f"Tr={tr}")
-        if tc_method:
-            filter_info.append(f"Tc={tc_method}")
-        typer.echo(f"  Filtros aplicados: {', '.join(filter_info)}")
-
-    basins_to_include = filtered_basins
-
-    # Contar análisis totales
+    # Validar que hay análisis
     total_analyses = sum(len(b.analyses) for b in basins_to_include)
     if total_analyses == 0:
         print_error("No hay análisis en ninguna cuenca del proyecto.")
         raise typer.Exit(1)
 
-    # Determinar directorio de salida
-    if output is None:
-        safe_name = project.name.lower().replace(" ", "_").replace("/", "_")
-        output_name = safe_name
-    else:
-        output_name = output
-
-    base_output = Path("output")
-    output_dir = base_output / output_name
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # Configurar directorio de salida
+    output_dir = _setup_output_dir(project, output)
+    output_name = output_dir.name
 
     print_header(f"GENERANDO REPORTE - {project.name}")
     typer.echo(f"  Directorio: {output_dir.absolute()}")
     typer.echo(f"  Cuencas: {len(basins_to_include)}")
     typer.echo(f"  Análisis totales: {total_analyses}")
 
-    generator = ReportGenerator()
-
-    # Generar contenido de cada cuenca
-    basin_sections = []
-    all_generated_files = {"hyetographs": [], "hydrographs": []}
-
-    for basin_obj in basins_to_include:
-        typer.echo(f"\n  Procesando cuenca: {basin_obj.name}...")
-
-        # Crear subdirectorio para la cuenca
-        basin_safe_name = basin_obj.name.lower().replace(" ", "_").replace("/", "_")
-        basin_dir = output_dir / f"cuenca_{basin_safe_name}"
-        basin_dir.mkdir(exist_ok=True)
-
-        hidrogramas_dir = basin_dir / "hidrogramas"
-        hietogramas_dir = basin_dir / "hietogramas"
-        hidrogramas_dir.mkdir(exist_ok=True)
-        hietogramas_dir.mkdir(exist_ok=True)
-
-        # Generar gráficos TikZ para esta cuenca
-        basin_files = _generate_basin_tikz(
-            basin_obj, basin_dir, hidrogramas_dir, hietogramas_dir
-        )
-
-        # Generar secciones de la cuenca
-        basin_content = _generate_basin_sections(
-            basin_obj, basin_dir, basin_files, basin_safe_name
-        )
-
-        basin_sections.append({
-            "name": basin_obj.name,
-            "safe_name": basin_safe_name,
-            "content": basin_content,
-            "n_analyses": len(basin_obj.analyses),
-        })
-
-        # Acumular archivos generados
-        all_generated_files["hyetographs"].extend(basin_files["hyetographs"])
-        all_generated_files["hydrographs"].extend(basin_files["hydrographs"])
-
-        typer.echo(f"    Gráficos: {len(basin_files['hyetographs'])} hietogramas, {len(basin_files['hydrographs'])} hidrogramas")
+    # Procesar cuencas
+    basin_sections, all_generated_files = _process_basins(basins_to_include, output_dir)
 
     # Generar sección del proyecto
     project_content = _generate_project_section(project, basins_to_include, len(basin_sections), total_analyses)
@@ -239,40 +311,7 @@ def project_report(
 
     # Compilación a PDF
     if pdf:
-        from hidropluvial.reports.compiler import compile_latex, check_latex_installation
-
-        print_subheader("COMPILANDO A PDF")
-
-        latex_info = check_latex_installation()
-        if not latex_info["installed"]:
-            print_error("No se encontró LaTeX instalado.")
-            typer.echo(f"\n  Para compilar manualmente:")
-            typer.echo(f"    cd {output_dir.absolute()}")
-            typer.echo(f"    pdflatex {main_filename}")
-            raise typer.Exit(1)
-
-        typer.echo(f"  Usando: {latex_info['recommended']}")
-        typer.echo(f"  Compilando {main_filename}...")
-
-        result = compile_latex(
-            tex_file=main_path,
-            output_dir=output_dir,
-            runs=2,
-            quiet=True,
-            clean_aux=clean,
-        )
-
-        if result.success:
-            print_success(f"PDF generado: {result.pdf_path.name}")
-            if result.warnings:
-                print_warning(f"Advertencias: {len(result.warnings)}")
-        else:
-            print_error("Error al compilar PDF")
-            if result.error_message:
-                typer.echo(f"  {result.error_message[:200]}")
-            raise typer.Exit(1)
-
-        print_separator()
+        _compile_to_pdf(main_path, output_dir, main_filename, clean)
     else:
         typer.echo(f"\n  Para compilar:")
         typer.echo(f"    cd {output_dir.absolute()}")

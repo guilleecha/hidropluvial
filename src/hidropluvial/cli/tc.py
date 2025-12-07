@@ -2,13 +2,19 @@
 Comandos CLI para cálculo de tiempo de concentración.
 """
 
-from typing import Annotated
-
-import typer
-
-from hidropluvial.core import kirpich, temez
-from hidropluvial.cli.theme import print_header, print_field, print_separator
-from hidropluvial.cli.validators import validate_length, validate_slope, validate_area, validate_c_coefficient
+from hidropluvial.cli.common import (
+    Annotated,
+    typer,
+    print_header,
+    print_field,
+    print_separator,
+    print_error,
+    validate_length,
+    validate_slope,
+    validate_area,
+    validate_c_coefficient,
+)
+from hidropluvial.core import kirpich, temez, desbordes
 
 # Crear sub-aplicación
 tc_app = typer.Typer(help="Cálculo de tiempo de concentración")
@@ -76,13 +82,10 @@ def tc_desbordes(
         hp tc desbordes 50 2.5 0.6
         hp tc desbordes 100 1.8 0.45 --t0 3
     """
-    from hidropluvial.core import desbordes
-
     # Validar entradas
     validate_area(area)
     validate_c_coefficient(c)
     if slope_pct <= 0:
-        from hidropluvial.cli.theme import print_error
         print_error(f"La pendiente debe ser positiva (recibido: {slope_pct})")
         raise typer.Exit(1)
 

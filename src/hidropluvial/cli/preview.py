@@ -13,8 +13,8 @@ import plotext as plt
 from hidropluvial.cli.formatters import format_flow
 
 
-# Caracteres para sparklines (8 niveles)
-SPARK_CHARS = " ▁▂▃▄▅▆▇█"
+# Caracteres para sparklines (8 niveles) - ASCII compatible
+SPARK_CHARS = " ._-=+*#@"
 
 
 def sparkline(values: Sequence[float], width: int = 20) -> str:

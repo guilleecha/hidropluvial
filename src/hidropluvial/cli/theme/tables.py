@@ -346,7 +346,7 @@ def print_analyses_summary_table(
 
     # Leyenda de unidades
     console.print(
-        f"  [dim]Tc: min | P: mm | Pe: mm | Qp: m³/s | Tp: min | Vol: hm³[/dim]"
+        f"  [dim]Tc: min | P: mm | Pe: mm | Qp: m3/s | Tp: min | Vol: hm3[/dim]"
     )
 
 
@@ -457,7 +457,7 @@ def print_comparison_table(
 
     # Leyenda de notacion
     console.print(
-        f"  [dim]tp: pico HU | tb: base HU | Tc, Tp: min | P, Pe: mm | Qp: m³/s | Vol: hm³[/dim]"
+        f"  [dim]tp: pico HU | tb: base HU | Tc, Tp: min | P, Pe: mm | Qp: m3/s | Vol: hm3[/dim]"
     )
 
 

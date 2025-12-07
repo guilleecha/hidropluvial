@@ -169,3 +169,55 @@ def _filter_analyses(
         result = filtered
 
     return result
+
+
+def basin_preview_compare(
+    analyses: list,
+    basin_name: str = "",
+    width: int = 70,
+    height: int = 18,
+) -> None:
+    """
+    Muestra comparación gráfica de múltiples hidrogramas.
+
+    Args:
+        analyses: Lista de AnalysisRun a comparar
+        basin_name: Nombre de la cuenca (para título)
+        width: Ancho del gráfico
+        height: Alto del gráfico
+    """
+    from hidropluvial.cli.preview import plot_hydrograph_comparison_terminal
+    from hidropluvial.cli.theme import print_comparison_table, get_console
+
+    if not analyses:
+        print("  No hay análisis para comparar.")
+        return
+
+    console = get_console()
+    console.print()
+
+    # Preparar datos para gráfico
+    comparison_data = []
+    for a in analyses:
+        hydro = a.hydrograph
+        storm = a.storm
+        x_str = f" X={hydro.x_factor:.1f}" if hydro.x_factor else ""
+        label = f"{hydro.tc_method} {storm.type} Tr{storm.return_period}{x_str}"
+
+        comparison_data.append({
+            "time_hr": hydro.time_hr,
+            "flow_m3s": hydro.flow_m3s,
+            "label": label[:25],  # Limitar longitud
+        })
+
+    # Mostrar tabla de comparación
+    print_comparison_table(analyses, title=f"Comparacion - {basin_name}")
+
+    # Mostrar gráfico
+    console.print()
+    plot_hydrograph_comparison_terminal(
+        comparison_data,
+        width=width,
+        height=height,
+        show_legend=True,
+    )

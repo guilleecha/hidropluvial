@@ -12,7 +12,7 @@ from hidropluvial.cli.wizard.styles import WIZARD_STYLE
 from hidropluvial.project import get_project_manager, ProjectManager
 from hidropluvial.cli.theme import (
     print_header, print_section, print_success, print_warning,
-    print_error, print_info, print_note, print_basin_info, print_project_info,
+    print_error, print_info, print_note, print_suggestion, print_basin_info, print_project_info,
 )
 
 
@@ -70,6 +70,10 @@ class BaseMenu(ABC):
     def note(self, message: str) -> None:
         """Muestra nota destacada."""
         print_note(message)
+
+    def suggestion(self, message: str) -> None:
+        """Muestra sugerencia/recomendación."""
+        print_suggestion(message)
 
     def basin_info(self, basin, project_name: str = None) -> None:
         """Muestra información de cuenca en panel estilizado."""

@@ -1,14 +1,31 @@
 """
 Menu para agregar analisis adicionales.
+
+Permite seleccionar exactamente qué análisis agregar, similar al wizard inicial,
+detectando y descartando duplicados de análisis ya existentes.
 """
 
-from typing import Optional
+from typing import Optional, Set, Tuple
 
 import questionary
 
 from hidropluvial.cli.wizard.menus.base import SessionMenu
 from hidropluvial.cli.wizard.runner import AdditionalAnalysisRunner
 from hidropluvial.core import kirpich, desbordes, temez
+
+
+def _get_analysis_key(analysis) -> Tuple[str, str, int, float]:
+    """
+    Genera una clave única para identificar un análisis.
+
+    Returns:
+        Tupla (tc_method, storm_type, return_period, x_factor)
+    """
+    tc_method = analysis.hydrograph.tc_method.lower()
+    storm_type = analysis.storm.type.lower()
+    return_period = analysis.storm.return_period
+    x_factor = analysis.hydrograph.x_factor or 1.0
+    return (tc_method, storm_type, return_period, x_factor)
 
 
 class AddAnalysisMenu(SessionMenu):
@@ -25,6 +42,10 @@ class AddAnalysisMenu(SessionMenu):
         self.c = c
         self.cn = cn
         self.length = length
+        # Obtener claves de análisis existentes para detectar duplicados
+        self._existing_keys: Set[Tuple[str, str, int, float]] = set()
+        for a in basin.analyses:
+            self._existing_keys.add(_get_analysis_key(a))
 
     def show(self) -> None:
         """Muestra menu de opciones para agregar analisis."""
@@ -33,12 +54,138 @@ class AddAnalysisMenu(SessionMenu):
             self.echo(f"  Cuenca: {self.basin.name} ({len(self.basin.analyses)} analisis)\n")
 
             que_agregar = self.select(
-                "Que tipo de analisis quieres agregar?",
+                "¿Cómo quieres agregar análisis?",
+                choices=[
+                    "Selección individual (elegir Tc, tormenta, Tr, X)",
+                    "Agregar rápido por categoría",
+                    "← Volver",
+                ],
+            )
+
+            if que_agregar is None or "Volver" in que_agregar:
+                return
+
+            if "individual" in que_agregar.lower():
+                self._add_individual()
+            elif "rápido" in que_agregar.lower():
+                self._add_quick_menu()
+
+            # Recargar sesion para mostrar contador actualizado
+            self.reload_session()
+
+    def _add_individual(self) -> None:
+        """Wizard de selección individual para agregar un análisis específico."""
+        self.echo("\n  === Selección Individual ===\n")
+
+        # 1. Seleccionar método Tc
+        tc_existentes = [tc.method for tc in self.basin.tc_results]
+        if not tc_existentes:
+            self.warning("No hay métodos de Tc calculados en esta cuenca")
+            return
+
+        tc_method = self.select(
+            "Método de Tc:",
+            choices=tc_existentes + ["← Cancelar"],
+        )
+        if tc_method is None or "Cancelar" in tc_method:
+            return
+
+        # 2. Seleccionar tipo de tormenta
+        storm_choices = [
+            "GZ (6 horas) - DINAGUA Uruguay",
+            "Bloques alternantes (duración = 2×Tc)",
+            "Bloques 24 horas",
+            "Bimodal Uruguay",
+            "← Cancelar",
+        ]
+        storm_type = self.select("Tipo de tormenta:", choices=storm_choices)
+        if storm_type is None or "Cancelar" in storm_type:
+            return
+        storm_code = self._get_storm_code(storm_type)
+
+        # 3. Seleccionar período de retorno
+        tr_choices = [
+            questionary.Choice("2 años", checked=False),
+            questionary.Choice("5 años", checked=False),
+            questionary.Choice("10 años", checked=True),
+            questionary.Choice("25 años", checked=False),
+            questionary.Choice("50 años", checked=False),
+            questionary.Choice("100 años", checked=False),
+        ]
+        return_periods = self.checkbox("Períodos de retorno:", tr_choices)
+        if not return_periods:
+            return
+        tr_list = [int(tr.split()[0]) for tr in return_periods]
+
+        # 4. Seleccionar factor X (solo para GZ)
+        x_factors = [1.0]
+        if storm_code == "gz":
+            x_choices = [
+                questionary.Choice("X=1.00 - Racional/urbano interno", checked=True),
+                questionary.Choice("X=1.25 - Urbano (gran pendiente)", checked=False),
+                questionary.Choice("X=1.67 - NRCS estándar", checked=False),
+                questionary.Choice("X=2.25 - Mixto rural/urbano", checked=False),
+                questionary.Choice("X=3.33 - Rural sinuoso", checked=False),
+            ]
+            x_selected = self.checkbox("Factor X (forma del hidrograma):", x_choices)
+            if x_selected:
+                x_factors = [float(x.split("=")[1].split()[0]) for x in x_selected]
+
+        # Calcular cuántos análisis nuevos se agregarán (descartando duplicados)
+        new_analyses = []
+        duplicates = []
+        for tr in tr_list:
+            for x in x_factors:
+                key = (tc_method.lower(), storm_code, tr, x)
+                if key in self._existing_keys:
+                    duplicates.append(f"Tc={tc_method}, {storm_code}, Tr={tr}, X={x:.2f}")
+                else:
+                    new_analyses.append((tr, x))
+
+        if duplicates:
+            self.echo(f"\n  Se descartarán {len(duplicates)} análisis duplicados:")
+            for dup in duplicates[:5]:  # Mostrar máximo 5
+                self.echo(f"    - {dup}")
+            if len(duplicates) > 5:
+                self.echo(f"    ... y {len(duplicates) - 5} más")
+
+        if not new_analyses:
+            self.warning("Todos los análisis seleccionados ya existen")
+            return
+
+        # Confirmar
+        self.echo(f"\n  Se agregarán {len(new_analyses)} análisis nuevos:")
+        for tr, x in new_analyses[:5]:
+            x_str = f", X={x:.2f}" if x != 1.0 else ""
+            self.echo(f"    + Tc={tc_method}, {storm_code}, Tr={tr}{x_str}")
+        if len(new_analyses) > 5:
+            self.echo(f"    ... y {len(new_analyses) - 5} más")
+
+        if not self.confirm(f"\n¿Ejecutar {len(new_analyses)} análisis?", default=True):
+            return
+
+        # Ejecutar solo los análisis nuevos
+        runner = AdditionalAnalysisRunner(self.basin, self.c, self.cn)
+
+        # Filtrar solo los Tr y X que no son duplicados
+        unique_trs = sorted(set(tr for tr, _ in new_analyses))
+        unique_xs = sorted(set(x for _, x in new_analyses))
+
+        count = runner.run([tc_method], storm_code, unique_trs, unique_xs)
+        self.success(f"Se agregaron {count} análisis")
+
+    def _add_quick_menu(self) -> None:
+        """Menú rápido por categoría (comportamiento original simplificado)."""
+        while True:
+            self.echo("\n  === Agregar Rápido ===\n")
+
+            que_agregar = self.select(
+                "¿Qué tipo de análisis quieres agregar?",
                 choices=[
                     "Otra tormenta (Bloques, Bimodal, etc.)",
-                    "Otros periodos de retorno",
+                    "Otros períodos de retorno",
                     "Otros valores de X",
-                    "Otro metodo de Tc",
+                    "Otro método de Tc",
                     "← Volver",
                 ],
             )
@@ -57,8 +204,10 @@ class AddAnalysisMenu(SessionMenu):
             elif "Tc" in que_agregar:
                 self._add_tc_method(tc_existentes)
 
-            # Recargar sesion para mostrar contador actualizado
-            self.reload_session()
+            # Actualizar claves existentes
+            self._existing_keys.clear()
+            for a in self.basin.analyses:
+                self._existing_keys.add(_get_analysis_key(a))
 
     def _add_storm(self, tc_existentes: list[str]) -> None:
         """Agrega analisis con nueva tormenta."""
@@ -69,10 +218,11 @@ class AddAnalysisMenu(SessionMenu):
                 "Bloques alternantes",
                 "Bloques 24 horas",
                 "Bimodal Uruguay",
+                "← Cancelar",
             ],
         )
 
-        if storm_type is None:
+        if storm_type is None or "Cancelar" in storm_type:
             return
 
         storm_code = self._get_storm_code(storm_type)
@@ -93,8 +243,17 @@ class AddAnalysisMenu(SessionMenu):
         if storm_code == "gz":
             x_factors = self._ask_x_factors()
 
-        runner = AdditionalAnalysisRunner(self.basin, self.c, self.cn)
-        runner.run(tc_existentes, storm_code, [int(tr) for tr in return_periods], x_factors)
+        # Mostrar preview y confirmar
+        n_new = self._preview_and_confirm(
+            tc_existentes, storm_code,
+            [int(tr) for tr in return_periods],
+            x_factors
+        )
+
+        if n_new > 0:
+            runner = AdditionalAnalysisRunner(self.basin, self.c, self.cn)
+            count = runner.run(tc_existentes, storm_code, [int(tr) for tr in return_periods], x_factors)
+            self.success(f"Se agregaron {count} análisis")
 
     def _get_storm_code(self, storm_type: str) -> str:
         """Convierte tipo de tormenta a codigo."""
@@ -117,6 +276,45 @@ class AddAnalysisMenu(SessionMenu):
             return [float(x) for x in x_selected]
         return [1.0]
 
+    def _preview_and_confirm(
+        self,
+        tc_methods: list[str],
+        storm_code: str,
+        return_periods: list[int],
+        x_factors: list[float]
+    ) -> int:
+        """
+        Muestra preview de análisis a agregar y confirma.
+
+        Returns:
+            Número de análisis nuevos (0 si cancela o todos son duplicados)
+        """
+        new_analyses = []
+        duplicates = []
+
+        for tc in tc_methods:
+            for tr in return_periods:
+                for x in x_factors:
+                    key = (tc.lower(), storm_code, tr, x)
+                    if key in self._existing_keys:
+                        duplicates.append(key)
+                    else:
+                        new_analyses.append(key)
+
+        if duplicates:
+            self.echo(f"\n  Se descartarán {len(duplicates)} análisis duplicados")
+
+        if not new_analyses:
+            self.warning("Todos los análisis seleccionados ya existen")
+            return 0
+
+        self.echo(f"\n  Se agregarán {len(new_analyses)} análisis nuevos")
+
+        if not self.confirm(f"¿Continuar?", default=True):
+            return 0
+
+        return len(new_analyses)
+
     def _add_return_periods(self, tc_existentes: list[str]) -> None:
         """Agrega analisis con nuevos periodos de retorno."""
         tr_choices = [
@@ -132,8 +330,17 @@ class AddAnalysisMenu(SessionMenu):
         if not return_periods:
             return
 
-        runner = AdditionalAnalysisRunner(self.basin, self.c, self.cn)
-        runner.run(tc_existentes, "gz", [int(tr) for tr in return_periods], [1.0, 1.25])
+        # Usar GZ por defecto y X=[1.0, 1.25]
+        n_new = self._preview_and_confirm(
+            tc_existentes, "gz",
+            [int(tr) for tr in return_periods],
+            [1.0, 1.25]
+        )
+
+        if n_new > 0:
+            runner = AdditionalAnalysisRunner(self.basin, self.c, self.cn)
+            count = runner.run(tc_existentes, "gz", [int(tr) for tr in return_periods], [1.0, 1.25])
+            self.success(f"Se agregaron {count} análisis")
 
     def _add_x_factors(self, tc_existentes: list[str]) -> None:
         """Agrega analisis con nuevos valores de X."""
@@ -150,8 +357,22 @@ class AddAnalysisMenu(SessionMenu):
             return
 
         x_factors = [float(x) for x in x_selected]
-        runner = AdditionalAnalysisRunner(self.basin, self.c, self.cn)
-        runner.run(tc_existentes, "gz", [2, 10, 25], x_factors)
+
+        # Usar Tr existentes o defaults
+        existing_trs = sorted(set(a.storm.return_period for a in self.basin.analyses))
+        if not existing_trs:
+            existing_trs = [2, 10, 25]
+
+        n_new = self._preview_and_confirm(
+            tc_existentes, "gz",
+            existing_trs,
+            x_factors
+        )
+
+        if n_new > 0:
+            runner = AdditionalAnalysisRunner(self.basin, self.c, self.cn)
+            count = runner.run(tc_existentes, "gz", existing_trs, x_factors)
+            self.success(f"Se agregaron {count} análisis")
 
     def _add_tc_method(self, tc_existentes: list[str]) -> None:
         """Agrega nuevo metodo de Tc y ejecuta analisis."""
@@ -161,28 +382,41 @@ class AddAnalysisMenu(SessionMenu):
             self.echo("  No hay metodos de Tc adicionales disponibles.")
             return
 
-        new_tc = self.select("Metodo de Tc:", tc_choices)
-        if new_tc is None:
+        new_tc = self.select("Metodo de Tc:", tc_choices + ["← Cancelar"])
+        if new_tc is None or "Cancelar" in new_tc:
             return
 
         method = new_tc.lower()
         tc_hr, tc_params = self._calculate_tc_with_params(method)
         if tc_hr:
             result = self.manager.add_tc_result(self.basin, method, tc_hr, **tc_params)
-            self.echo(f"  + Tc ({method}): {result.tc_min:.1f} min")
+            self.success(f"Tc ({method}): {result.tc_min:.1f} min")
 
-            # Ejecutar analisis con nuevo Tc
-            runner = AdditionalAnalysisRunner(self.basin, self.c, self.cn)
-            runner.run([method], "gz", [2, 10, 25], [1.0, 1.25])
+            # Usar Tr y X existentes o defaults
+            existing_trs = sorted(set(a.storm.return_period for a in self.basin.analyses))
+            if not existing_trs:
+                existing_trs = [2, 10, 25]
+
+            n_new = self._preview_and_confirm(
+                [method], "gz",
+                existing_trs,
+                [1.0, 1.25]
+            )
+
+            if n_new > 0:
+                runner = AdditionalAnalysisRunner(self.basin, self.c, self.cn)
+                count = runner.run([method], "gz", existing_trs, [1.0, 1.25])
+                self.success(f"Se agregaron {count} análisis")
 
     def _get_available_tc_methods(self, tc_existentes: list[str]) -> list[str]:
         """Retorna metodos de Tc disponibles."""
         tc_choices = []
-        if self.c and "desbordes" not in tc_existentes:
+        tc_lower = [tc.lower() for tc in tc_existentes]
+        if self.c and "desbordes" not in tc_lower:
             tc_choices.append("Desbordes")
-        if self.length and "kirpich" not in tc_existentes:
+        if self.length and "kirpich" not in tc_lower:
             tc_choices.append("Kirpich")
-        if self.length and "temez" not in [tc.lower() for tc in tc_existentes]:
+        if self.length and "temez" not in tc_lower:
             tc_choices.append("Temez")
         return tc_choices
 

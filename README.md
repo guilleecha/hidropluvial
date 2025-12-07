@@ -102,29 +102,37 @@ El visor interactivo muestra hietograma e hidrograma combinados:
 
 ### 1. Curvas IDF (DINAGUA Uruguay)
 
-Cálculo de intensidades de precipitación según metodología Rodríguez Fontal (1980).
+Cálculo de precipitación e intensidad según metodología Rodríguez Fontal (1980).
 
-**Fórmulas:**
+La metodología calcula primero la **precipitación acumulada** y luego deriva la intensidad:
 
 ```
-CT(Tr) = 0.5786 - 0.4312 × log[ln(Tr / (Tr - 1))]
+P(d,Tr,A) = P₃,₁₀ × Cd(d) × Ct(Tr) × CA(A,d)
+I = P / d
+```
 
+**Factores de corrección:**
+
+```
+Cd(d): Factor por duración (normalizado a Cd(3h) ≈ 1.0)
+Ct(Tr) = 0.5786 - 0.4312 × log[ln(Tr / (Tr - 1))]
 CA(A,d) = 1.0 - (0.3549 × d^(-0.4272)) × (1.0 - e^(-0.005792 × A))
-
-I(d<3h) = P₃,₁₀ × CT × 0.6208 / (d + 0.0137)^0.5639
-I(d≥3h) = P₃,₁₀ × CT × 1.0287 / (d + 1.0293)^0.8083
 ```
 
 **Código:** [`src/hidropluvial/core/idf.py`](src/hidropluvial/core/idf.py)
 
 ```python
-def dinagua_ct(return_period_yr: float) -> float:
-    """Factor de corrección por período de retorno (CT)."""
-    Tr = return_period_yr
-    return 0.5786 - 0.4312 * math.log10(math.log(Tr / (Tr - 1)))
+def dinagua_precipitation(p3_10, return_period_yr, duration_hr, area_km2=None):
+    """Calcula precipitación acumulada P(d,Tr,A) = P₃,₁₀ × Cd × Ct × CA."""
+    cd = dinagua_cd(duration_hr)
+    ct = dinagua_ct(return_period_yr)
+    ca = dinagua_ca(area_km2, duration_hr) if area_km2 else 1.0
+    depth = p3_10 * cd * ct * ca
+    intensity = depth / duration_hr
+    return UruguayIDFResult(depth_mm=depth, intensity_mmhr=intensity, ...)
 ```
 
-> Los valores P₃,₁₀ por departamento están disponibles en [docs/metodologias/idf.md](docs/metodologias/idf.md)
+> El valor P₃,₁₀ debe obtenerse del **mapa de isoyetas de DINAGUA** para la ubicación del proyecto. Ver [docs/metodologias/idf.md](docs/metodologias/idf.md)
 
 ---
 

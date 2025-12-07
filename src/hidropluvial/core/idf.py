@@ -1,11 +1,23 @@
 """
 Módulo de curvas Intensidad-Duración-Frecuencia (IDF).
 
-Implementa métodos para calcular intensidades de lluvia:
+Implementa métodos para calcular precipitación e intensidad de lluvia:
 - Uruguay/DINAGUA (Rodríguez Fontal 1980) - MÉTODO PRINCIPAL
 - Sherman (1931)
 - Bernard (Power Law)
 - Koutsoyiannis (1998)
+
+La metodología DINAGUA calcula precipitación acumulada P(d,Tr,A) mediante:
+
+    P(d,Tr,A) = P₃,₁₀ × Cd(d) × Ct(Tr) × CA(A,d)
+
+Donde:
+- P₃,₁₀: Precipitación máxima 3h, Tr=10 años (del mapa de isoyetas)
+- Cd(d): Factor de corrección por duración
+- Ct(Tr): Factor de corrección por período de retorno
+- CA(A,d): Factor de corrección por área de cuenca
+
+La intensidad se deriva como I = P / d
 """
 
 import math
@@ -26,7 +38,9 @@ from hidropluvial.config import (
 # Método Uruguay/DINAGUA - MÉTODO PRINCIPAL
 # ============================================================================
 
-# Valores de P3,10 por departamento (mm)
+# Valores de P3,10 de referencia por departamento (mm)
+# NOTA: Estos son valores orientativos. Para proyectos se debe usar
+# el mapa de isoyetas de DINAGUA para obtener el valor exacto de la ubicación.
 P3_10_URUGUAY = {
     "montevideo": 78,
     "canelones": 75,
@@ -53,27 +67,61 @@ P3_10_URUGUAY = {
 @dataclass
 class UruguayIDFResult:
     """Resultado del cálculo IDF Uruguay."""
-    intensity_mmhr: float
-    depth_mm: float
-    ct: float
-    ca: float
-    p3_10: float
-    return_period_yr: float
-    duration_hr: float
-    area_km2: float | None
+    depth_mm: float           # Precipitación acumulada P(d,Tr,A)
+    intensity_mmhr: float     # Intensidad I = P/d
+    cd: float                 # Factor de corrección por duración
+    ct: float                 # Factor de corrección por período de retorno
+    ca: float                 # Factor de corrección por área
+    p3_10: float              # Precipitación base P₃,₁₀
+    return_period_yr: float   # Período de retorno
+    duration_hr: float        # Duración
+    area_km2: float | None    # Área de cuenca
+
+
+def dinagua_cd(duration_hr: float) -> float:
+    """
+    Factor de corrección por duración (Cd).
+
+    Para d < 3 horas:
+        Cd(d) = 0.6208 / (d + 0.0137)^0.5639 × d / 3
+
+    Para d ≥ 3 horas:
+        Cd(d) = 1.0287 / (d + 1.0293)^0.8083 × d / 3
+
+    El factor está normalizado para que Cd(3) ≈ 1.0
+
+    Args:
+        duration_hr: Duración de la tormenta en horas
+
+    Returns:
+        Factor Cd (adimensional)
+    """
+    if duration_hr <= 0:
+        raise ValueError("Duración debe ser > 0")
+
+    d = duration_hr
+    if d < 3.0:
+        # Factor que convierte intensidad a precipitación y normaliza a d=3h
+        cd = 0.6208 / ((d + 0.0137) ** 0.5639) * d / 3.0
+    else:
+        cd = 1.0287 / ((d + 1.0293) ** 0.8083) * d / 3.0
+
+    return cd
 
 
 def dinagua_ct(return_period_yr: float) -> float:
     """
-    Factor de corrección por período de retorno (CT).
+    Factor de corrección por período de retorno (Ct).
 
-    CT(Tr) = 0.5786 - 0.4312 × log[ln(Tr / (Tr - 1))]
+    Ct(Tr) = 0.5786 - 0.4312 × log[ln(Tr / (Tr - 1))]
+
+    Normalizado para que Ct(10) ≈ 1.0
 
     Args:
         return_period_yr: Período de retorno en años (>= 2)
 
     Returns:
-        Factor CT (adimensional)
+        Factor Ct (adimensional)
     """
     if return_period_yr < 2:
         raise ValueError("Período de retorno debe ser >= 2 años")
@@ -86,7 +134,9 @@ def dinagua_ca(area_km2: float, duration_hr: float) -> float:
     """
     Factor de corrección por área de cuenca (CA).
 
-    CA(Ac,d) = 1.0 - (0.3549 × d^(-0.4272)) × (1.0 - e^(-0.005792 × Ac))
+    CA(A,d) = 1.0 - (0.3549 × d^(-0.4272)) × (1.0 - e^(-0.005792 × A))
+
+    Para A <= 1 km², CA = 1.0 (sin reducción)
 
     Args:
         area_km2: Área de la cuenca en km²
@@ -110,29 +160,27 @@ def dinagua_ca(area_km2: float, duration_hr: float) -> float:
     return min(ca, 1.0)
 
 
-def dinagua_intensity(
+def dinagua_precipitation(
     p3_10: float,
     return_period_yr: float,
     duration_hr: float,
     area_km2: float | None = None,
 ) -> UruguayIDFResult:
     """
-    Calcula intensidad de lluvia usando método DINAGUA Uruguay.
+    Calcula precipitación acumulada usando método DINAGUA Uruguay.
 
-    Para d < 3 horas:
-        I(d) = [P₃,₁₀ × CT(Tr)] × 0.6208 / (d + 0.0137)^0.5639
+    P(d,Tr,A) = P₃,₁₀ × Cd(d) × Ct(Tr) × CA(A,d)
 
-    Para d ≥ 3 horas:
-        I(d) = [P₃,₁₀ × CT(Tr)] × 1.0287 / (d + 1.0293)^0.8083
+    Luego la intensidad se deriva como: I = P / d
 
     Args:
-        p3_10: Precipitación máxima 3hr, Tr=10 años (mm)
+        p3_10: Precipitación máxima 3hr, Tr=10 años (mm) del mapa de isoyetas
         return_period_yr: Período de retorno en años
         duration_hr: Duración de la tormenta en horas
         area_km2: Área de cuenca (km²), opcional para corrección por área
 
     Returns:
-        UruguayIDFResult con intensidad, profundidad y factores
+        UruguayIDFResult con precipitación, intensidad y factores
     """
     # Validaciones
     if p3_10 < 50 or p3_10 > 120:
@@ -144,29 +192,21 @@ def dinagua_intensity(
     if duration_hr <= 0:
         raise ValueError("Duración debe ser > 0")
 
-    # Calcular factores
+    # Calcular factores de corrección
+    cd = dinagua_cd(duration_hr)
     ct = dinagua_ct(return_period_yr)
     ca = dinagua_ca(area_km2, duration_hr) if area_km2 else 1.0
 
-    # Precipitación corregida por período de retorno
-    p_corr = p3_10 * ct
+    # Precipitación acumulada: P(d,Tr,A) = P₃,₁₀ × Cd × Ct × CA
+    depth = p3_10 * cd * ct * ca
 
-    # Intensidad según duración
-    d = duration_hr
-    if d < 3.0:
-        intensity = p_corr * 0.6208 / ((d + 0.0137) ** 0.5639)
-    else:
-        intensity = p_corr * 1.0287 / ((d + 1.0293) ** 0.8083)
-
-    # Aplicar corrección por área
-    intensity *= ca
-
-    # Precipitación total
-    depth = intensity * duration_hr
+    # Intensidad derivada: I = P / d
+    intensity = depth / duration_hr
 
     return UruguayIDFResult(
-        intensity_mmhr=round(intensity, 2),
         depth_mm=round(depth, 2),
+        intensity_mmhr=round(intensity, 2),
+        cd=round(cd, 4),
         ct=round(ct, 4),
         ca=round(ca, 4),
         p3_10=p3_10,
@@ -174,6 +214,36 @@ def dinagua_intensity(
         duration_hr=duration_hr,
         area_km2=area_km2,
     )
+
+
+def dinagua_intensity(
+    p3_10: float,
+    return_period_yr: float,
+    duration_hr: float,
+    area_km2: float | None = None,
+) -> UruguayIDFResult:
+    """
+    Calcula intensidad de lluvia usando método DINAGUA Uruguay.
+
+    Esta función es un alias de dinagua_precipitation() para
+    compatibilidad con código existente.
+
+    La metodología calcula primero la precipitación acumulada:
+        P(d,Tr,A) = P₃,₁₀ × Cd(d) × Ct(Tr) × CA(A,d)
+
+    Y luego deriva la intensidad:
+        I = P / d
+
+    Args:
+        p3_10: Precipitación máxima 3hr, Tr=10 años (mm) del mapa de isoyetas
+        return_period_yr: Período de retorno en años
+        duration_hr: Duración de la tormenta en horas
+        area_km2: Área de cuenca (km²), opcional para corrección por área
+
+    Returns:
+        UruguayIDFResult con precipitación, intensidad y factores
+    """
+    return dinagua_precipitation(p3_10, return_period_yr, duration_hr, area_km2)
 
 
 def dinagua_intensity_simple(

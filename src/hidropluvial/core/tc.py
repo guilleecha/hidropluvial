@@ -10,9 +10,6 @@ Implementa múltiples métodos para calcular el tiempo de concentración:
 - Kinematic Wave
 """
 
-import numpy as np
-from numpy.typing import NDArray
-
 from hidropluvial.config import (
     ChannelFlowSegment,
     ShallowFlowSegment,

@@ -7,7 +7,7 @@ Fuentes:
 - SCS/NRCS TR-55
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 

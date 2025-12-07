@@ -23,7 +23,6 @@ from hidropluvial.config import (
 from hidropluvial.core.idf import (
     depth_from_intensity,
     get_intensity,
-    dinagua_intensity_simple,
     dinagua_depth,
 )
 
@@ -31,17 +30,72 @@ from hidropluvial.core.idf import (
 # Cargar datos de distribuciones
 _DATA_DIR = Path(__file__).parent.parent / "data"
 
+# Cache para datos JSON (evita recargar en cada llamada)
+_scs_cache: dict | None = None
+_huff_cache: dict | None = None
+
 
 def _load_scs_distributions() -> dict:
-    """Carga distribuciones SCS desde JSON."""
-    with open(_DATA_DIR / "scs_distributions.json") as f:
-        return json.load(f)
+    """Carga distribuciones SCS desde JSON (con cache)."""
+    global _scs_cache
+    if _scs_cache is None:
+        with open(_DATA_DIR / "scs_distributions.json") as f:
+            _scs_cache = json.load(f)
+    return _scs_cache
 
 
 def _load_huff_curves() -> dict:
-    """Carga curvas Huff desde JSON."""
-    with open(_DATA_DIR / "huff_curves.json") as f:
-        return json.load(f)
+    """Carga curvas Huff desde JSON (con cache)."""
+    global _huff_cache
+    if _huff_cache is None:
+        with open(_DATA_DIR / "huff_curves.json") as f:
+            _huff_cache = json.load(f)
+    return _huff_cache
+
+
+def _distribute_alternating_blocks(
+    sorted_increments: NDArray[np.floating],
+    n_intervals: int,
+    peak_position: float = 0.5,
+) -> NDArray[np.floating]:
+    """
+    Distribuye incrementos alternando alrededor del pico.
+
+    Algoritmo estándar de bloques alternantes:
+    1. Coloca el mayor incremento en la posición del pico
+    2. Alterna entre izquierda y derecha para los siguientes
+
+    Args:
+        sorted_increments: Incrementos ordenados de mayor a menor
+        n_intervals: Número total de intervalos
+        peak_position: Posición del pico (0-1), default 0.5 (centro)
+
+    Returns:
+        Array con incrementos distribuidos
+    """
+    peak_index = int(peak_position * n_intervals)
+    result_depths = np.zeros(n_intervals)
+
+    left = peak_index
+    right = peak_index + 1
+    toggle = True  # True = izquierda, False = derecha
+
+    for inc in sorted_increments:
+        if toggle and left >= 0:
+            result_depths[left] = inc
+            left -= 1
+        elif not toggle and right < n_intervals:
+            result_depths[right] = inc
+            right += 1
+        elif left >= 0:
+            result_depths[left] = inc
+            left -= 1
+        elif right < n_intervals:
+            result_depths[right] = inc
+            right += 1
+        toggle = not toggle
+
+    return result_depths
 
 
 def alternating_blocks(
@@ -97,32 +151,9 @@ def alternating_blocks(
         scale_factor = total_depth_mm / idf_total
         increments *= scale_factor
 
-    # Ordenar incrementos de mayor a menor
-    sorted_indices = np.argsort(increments)[::-1]
-    sorted_increments = increments[sorted_indices]
-
-    # Distribuir alternando alrededor del pico
-    peak_index = int(peak_position * n_intervals)
-    result_depths = np.zeros(n_intervals)
-
-    left = peak_index
-    right = peak_index + 1
-    toggle = True  # True = izquierda, False = derecha
-
-    for inc in sorted_increments:
-        if toggle and left >= 0:
-            result_depths[left] = inc
-            left -= 1
-        elif not toggle and right < n_intervals:
-            result_depths[right] = inc
-            right += 1
-        elif left >= 0:
-            result_depths[left] = inc
-            left -= 1
-        elif right < n_intervals:
-            result_depths[right] = inc
-            right += 1
-        toggle = not toggle
+    # Ordenar incrementos de mayor a menor y distribuir
+    sorted_increments = np.sort(increments)[::-1]
+    result_depths = _distribute_alternating_blocks(sorted_increments, n_intervals, peak_position)
 
     # Calcular tiempos e intensidades
     time_min = np.arange(0, n_intervals) * dt_min + dt_min / 2
@@ -464,32 +495,9 @@ def alternating_blocks_dinagua(
     for i in range(1, n_intervals):
         increments[i] = cumulative_depths[i] - cumulative_depths[i - 1]
 
-    # Ordenar incrementos de mayor a menor
-    sorted_indices = np.argsort(increments)[::-1]
-    sorted_increments = increments[sorted_indices]
-
-    # Distribuir alternando alrededor del pico
-    peak_index = int(peak_position * n_intervals)
-    result_depths = np.zeros(n_intervals)
-
-    left = peak_index
-    right = peak_index + 1
-    toggle = True
-
-    for inc in sorted_increments:
-        if toggle and left >= 0:
-            result_depths[left] = inc
-            left -= 1
-        elif not toggle and right < n_intervals:
-            result_depths[right] = inc
-            right += 1
-        elif left >= 0:
-            result_depths[left] = inc
-            left -= 1
-        elif right < n_intervals:
-            result_depths[right] = inc
-            right += 1
-        toggle = not toggle
+    # Ordenar incrementos de mayor a menor y distribuir
+    sorted_increments = np.sort(increments)[::-1]
+    result_depths = _distribute_alternating_blocks(sorted_increments, n_intervals, peak_position)
 
     # Calcular tiempos e intensidades
     time_min = np.arange(0, n_intervals) * dt_min + dt_min / 2

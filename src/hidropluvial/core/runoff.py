@@ -21,11 +21,17 @@ from hidropluvial.config import (
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
 
+# Cache para tablas CN (evita recargar en cada llamada)
+_cn_cache: dict | None = None
+
 
 def _load_cn_tables() -> dict:
-    """Carga tablas de CN desde JSON."""
-    with open(_DATA_DIR / "cn_tables.json") as f:
-        return json.load(f)
+    """Carga tablas de CN desde JSON (con cache)."""
+    global _cn_cache
+    if _cn_cache is None:
+        with open(_DATA_DIR / "cn_tables.json") as f:
+            _cn_cache = json.load(f)
+    return _cn_cache
 
 
 # ============================================================================

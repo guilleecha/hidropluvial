@@ -20,11 +20,17 @@ from hidropluvial.config import HydrographMethod, HydrographResult
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
 
+# Cache para datos de hidrogramas unitarios
+_uh_cache: dict | None = None
+
 
 def _load_uh_data() -> dict:
-    """Carga datos de hidrogramas unitarios desde JSON."""
-    with open(_DATA_DIR / "unit_hydrographs.json") as f:
-        return json.load(f)
+    """Carga datos de hidrogramas unitarios desde JSON (con cache)."""
+    global _uh_cache
+    if _uh_cache is None:
+        with open(_DATA_DIR / "unit_hydrographs.json") as f:
+            _uh_cache = json.load(f)
+    return _uh_cache
 
 
 # ============================================================================

@@ -103,23 +103,6 @@ class BaseMenu(ABC):
             location=project.location if hasattr(project, 'location') else None,
         )
 
-    def session_info(self, basin) -> None:
-        """Muestra información de cuenca en panel estilizado (legacy compatibility)."""
-        trs = None
-        if hasattr(basin, 'analyses') and basin.analyses:
-            trs = sorted(set(a.storm.return_period for a in basin.analyses))
-
-        print_basin_info(
-            basin_name=basin.name,
-            basin_id=basin.id,
-            area_ha=basin.area_ha,
-            slope_pct=basin.slope_pct,
-            n_analyses=len(basin.analyses) if hasattr(basin, 'analyses') else None,
-            return_periods=trs,
-            c=basin.c if hasattr(basin, 'c') else None,
-            cn=basin.cn if hasattr(basin, 'cn') else None,
-        )
-
     def select(self, message: str, choices: list[str]) -> Optional[str]:
         """Muestra un menu de seleccion."""
         return questionary.select(

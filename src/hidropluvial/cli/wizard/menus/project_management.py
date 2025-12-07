@@ -210,7 +210,3 @@ class ProjectManagementMenu(BaseMenu):
         self.echo(f"    ID: {project.id}")
         self.echo(f"    Nombre: {project.name}")
         self.echo(f"\n  Usa 'Nueva cuenca' o 'Gestionar cuencas' para agregar cuencas.\n")
-
-
-# Alias para compatibilidad
-SessionManagementMenu = ProjectManagementMenu

@@ -153,28 +153,14 @@ class BasinManagementMenu(BaseMenu):
             self.warning(f"ADVERTENCIA: Esta cuenca tiene {len(basin.analyses)} analisis.")
             self.warning("Al modificar la cuenca se eliminaran todos los analisis.")
 
-        # Convertir a session temporalmente para el editor
-        session = basin.to_session()
-        self.manager.save(session)
+        # Usar editor de cuenca directamente con Basin
+        editor = CuencaEditor(basin, self.project_manager)
+        result = editor.edit()
 
-        try:
-            # Usar editor de cuenca
-            editor = CuencaEditor(session, self.manager)
-            result = editor.edit()
-
-            if result == "modified":
-                # Actualizar basin desde session modificada
-                updated_session = self.manager.get_session(session.id)
-                if updated_session:
-                    updated_basin = Basin.from_session(updated_session)
-                    # Reemplazar en proyecto
-                    self.project.remove_basin(basin.id)
-                    self.project.add_basin(updated_basin)
-                    self.project_manager.save_project(self.project)
-                    self.echo(f"\n  Cuenca '{updated_basin.name}' actualizada.\n")
-        finally:
-            # Limpiar session temporal
-            self.manager.delete(session.id)
+        if result == "modified":
+            # Recargar proyecto para obtener cambios
+            self.project = self.project_manager.get_project(self.project.id)
+            self.echo(f"\n  Cuenca '{basin.name}' actualizada.\n")
 
     def _duplicate_basin(self) -> None:
         """Duplicar una cuenca existente."""
@@ -302,41 +288,33 @@ class BasinManagementMenu(BaseMenu):
         menu.show()
 
     def _import_basin(self) -> None:
-        """Importa una cuenca desde otro proyecto o sesion legacy."""
+        """Importa una cuenca desde otro proyecto."""
         other_projects = [
             p for p in self.project_manager.list_projects()
             if p['id'] != self.project.id and p['n_basins'] > 0
         ]
-        sessions = self.manager.list_sessions()
 
-        if not other_projects and not sessions:
-            self.echo("\n  No hay otros proyectos ni cuencas disponibles para importar.\n")
+        if not other_projects:
+            self.echo("\n  No hay otros proyectos con cuencas disponibles para importar.\n")
             return
 
         # Construir opciones
-        choices = []
-
-        for p in other_projects:
-            choices.append(f"[Proyecto] {p['id']} - {p['name']} ({p['n_basins']} cuencas)")
-
-        for s in sessions:
-            choices.append(f"[Cuenca legacy] {s['id']} - {s['name']}")
-
+        choices = [
+            f"{p['id']} - {p['name']} ({p['n_basins']} cuencas)"
+            for p in other_projects
+        ]
         choices.append("← Cancelar")
 
-        choice = self.select("Selecciona origen de la cuenca:", choices)
+        choice = self.select("Selecciona proyecto origen:", choices)
 
         if choice is None or "Cancelar" in choice:
             return
 
-        if "[Proyecto]" in choice:
-            self._import_from_project(choice)
-        elif "[Cuenca legacy]" in choice:
-            self._import_from_legacy(choice)
+        self._import_from_project(choice)
 
     def _import_from_project(self, choice: str) -> None:
         """Importa cuenca desde otro proyecto."""
-        source_id = choice.split(" - ")[0].replace("[Proyecto] ", "")
+        source_id = choice.split(" - ")[0]
         source_project = self.project_manager.get_project(source_id)
 
         if not source_project or not source_project.basins:
@@ -368,27 +346,6 @@ class BasinManagementMenu(BaseMenu):
 
             self.echo(f"\n  Cuenca '{new_basin.name}' importada al proyecto.")
             self.echo(f"  (Nueva ID: {new_basin.id})\n")
-
-    def _import_from_legacy(self, choice: str) -> None:
-        """Importa cuenca desde sesion legacy."""
-        session_id = choice.split(" - ")[0].replace("[Cuenca legacy] ", "")
-        session = self.manager.get_session(session_id)
-
-        if session:
-            # Use Basin's model directly from session data
-            basin_data = session.model_dump()
-            basin_data['id'] = session.id
-            basin_data['name'] = session.name
-            # Session model has nested 'cuenca' but Basin expects flat structure
-            if 'cuenca' in basin_data:
-                cuenca_data = basin_data.pop('cuenca')
-                basin_data.update(cuenca_data)
-
-            basin = Basin.model_validate(basin_data)
-            self.project.add_basin(basin)
-            self.project_manager.save_project(self.project)
-
-            self.echo(f"\n  Cuenca '{basin.name}' importada al proyecto.\n")
 
     def _manage_analyses(self) -> None:
         """Gestionar analisis de una cuenca."""

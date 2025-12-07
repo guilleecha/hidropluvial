@@ -19,10 +19,6 @@ from hidropluvial.cli.project.basin import (
     basin_list,
     basin_show,
     basin_delete,
-    basin_import,
-)
-from hidropluvial.cli.project.migrate import (
-    migrate_sessions,
 )
 from hidropluvial.cli.project.report import (
     project_report,
@@ -43,10 +39,6 @@ project_app.command("basin-add")(basin_add)
 project_app.command("basin-list")(basin_list)
 project_app.command("basin-show")(basin_show)
 project_app.command("basin-delete")(basin_delete)
-project_app.command("basin-import")(basin_import)
-
-# Comandos de migración
-project_app.command("migrate")(migrate_sessions)
 
 # Comandos de reporte
 project_app.command("report")(project_report)

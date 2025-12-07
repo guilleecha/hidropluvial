@@ -355,7 +355,3 @@ class ExportBasinSelector(BaseMenu):
         if basin:
             export_menu = ExportMenu(basin)
             export_menu.show()
-
-
-# Alias para compatibilidad
-ExportSessionSelector = ExportBasinSelector

@@ -9,13 +9,7 @@ from hidropluvial.cli.wizard.menus.basin_management import BasinManagementMenu
 from hidropluvial.cli.wizard.menus.continue_project import ContinueProjectMenu
 from hidropluvial.cli.wizard.menus.export_menu import ExportMenu, ExportBasinSelector
 
-# Aliases para compatibilidad con código legacy
-SessionManagementMenu = ProjectManagementMenu
-ContinueSessionMenu = ContinueProjectMenu
-ExportSessionSelector = ExportBasinSelector
 
-
-# Funciones de conveniencia
 def continue_project_menu() -> None:
     """Menu para continuar con un proyecto/cuenca existente."""
     menu = ContinueProjectMenu()
@@ -34,14 +28,7 @@ def export_basin_menu() -> None:
     menu.show()
 
 
-# Aliases legacy
-continue_session_menu = continue_project_menu
-manage_sessions_menu = manage_projects_menu
-export_session_menu = export_basin_menu
-
-
 __all__ = [
-    # Nuevos nombres
     "PostExecutionMenu",
     "AddAnalysisMenu",
     "ProjectManagementMenu",
@@ -52,11 +39,4 @@ __all__ = [
     "continue_project_menu",
     "manage_projects_menu",
     "export_basin_menu",
-    # Legacy aliases
-    "SessionManagementMenu",
-    "ContinueSessionMenu",
-    "ExportSessionSelector",
-    "continue_session_menu",
-    "manage_sessions_menu",
-    "export_session_menu",
 ]

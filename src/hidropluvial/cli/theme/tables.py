@@ -114,27 +114,6 @@ def create_basins_table(title: str = None) -> Table:
     return table
 
 
-def create_sessions_table(title: str = None) -> Table:
-    """Crea tabla para listar sesiones legacy."""
-    p = get_palette()
-
-    table = Table(
-        title=title,
-        title_style=f"bold {p.primary}",
-        border_style=p.border,
-        header_style=f"bold {p.secondary}",
-        box=box.ROUNDED,
-        show_header=True,
-        padding=(0, 1),
-    )
-
-    table.add_column("ID", style=p.accent, justify="left")
-    table.add_column("Nombre", justify="left")
-    table.add_column("Analisis", justify="right", style=p.number)
-
-    return table
-
-
 def print_projects_table(projects: list[dict], title: str = "PROYECTOS") -> None:
     """Imprime tabla de proyectos."""
     console = get_console()
@@ -243,46 +222,6 @@ def print_basins_detail_table(basins, title: str = "CUENCAS") -> None:
             cn_str,
             analyses_str,
             tr_str,
-        )
-
-    console.print(table)
-
-
-def print_sessions_table(sessions: list[dict], title: str = "SESIONES DISPONIBLES") -> None:
-    """Imprime tabla de sesiones."""
-    console = get_console()
-    p = get_palette()
-
-    if not sessions:
-        console.print("  No hay sesiones.", style=p.muted)
-        return
-
-    table = Table(
-        title=title,
-        title_style=f"bold {p.primary}",
-        border_style=p.border,
-        header_style=f"bold {p.secondary}",
-        box=box.ROUNDED,
-        show_header=True,
-        padding=(0, 1),
-    )
-
-    table.add_column("ID", style=p.accent, justify="left")
-    table.add_column("Nombre", justify="left")
-    table.add_column("Cuenca", justify="left", style=p.muted)
-    table.add_column("Analisis", justify="right", style=p.number)
-    table.add_column("Actualizado", justify="left", style=p.muted)
-
-    for sess in sessions:
-        name = sess['name'][:20] if len(sess['name']) > 20 else sess['name']
-        cuenca = sess.get('cuenca', '-')[:15]
-        updated = sess.get('updated_at', '')[:19].replace("T", " ")
-        table.add_row(
-            sess['id'],
-            name,
-            cuenca,
-            str(sess.get('n_analyses', 0)),
-            updated,
         )
 
     console.print(table)

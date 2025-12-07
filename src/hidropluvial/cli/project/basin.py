@@ -215,37 +215,3 @@ def basin_delete(
     else:
         typer.echo(f"\n  Error al eliminar cuenca.\n")
         raise typer.Exit(1)
-
-
-def basin_import(
-    project_id: Annotated[str, typer.Argument(help="ID del proyecto destino")],
-    session_id: Annotated[str, typer.Argument(help="ID de la sesión a importar")],
-) -> None:
-    """
-    Importa una sesión existente como cuenca en un proyecto.
-
-    Permite migrar sesiones legacy al nuevo formato de proyectos.
-    La sesión original no se elimina.
-
-    Ejemplo:
-        hp project basin-import abc123 xyz789
-    """
-    manager = get_project_manager()
-    project = manager.get_project(project_id)
-
-    if project is None:
-        typer.echo(f"\n  Error: Proyecto '{project_id}' no encontrado.\n")
-        raise typer.Exit(1)
-
-    basin = manager.import_session_as_basin(project, session_id)
-
-    if basin is None:
-        typer.echo(f"\n  Error: Sesión '{session_id}' no encontrada.\n")
-        raise typer.Exit(1)
-
-    typer.echo(f"\n  Sesión importada como cuenca:")
-    typer.echo(f"    Proyecto:  {project.name}")
-    typer.echo(f"    ID cuenca: {basin.id}")
-    typer.echo(f"    Nombre:    {basin.name}")
-    typer.echo(f"    Análisis:  {len(basin.analyses)}")
-    typer.echo(f"\n  La sesión original no fue modificada.\n")

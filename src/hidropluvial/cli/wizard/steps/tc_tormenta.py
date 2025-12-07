@@ -305,6 +305,14 @@ class StepTormenta(WizardStep):
             if x_result != StepResult.NEXT:
                 return x_result
 
+        # Configuración bimodal
+        if "bimodal" in self.state.storm_codes:
+            bimodal_result = self._configure_bimodal()
+            if bimodal_result == StepResult.BACK:
+                return self.execute()
+            if bimodal_result != StepResult.NEXT:
+                return bimodal_result
+
         return StepResult.NEXT
 
     def _collect_x_factors(self) -> StepResult:
@@ -334,6 +342,140 @@ class StepTormenta(WizardStep):
             self.state.x_factors = [1.0]
 
         return StepResult.NEXT
+
+    def _configure_bimodal(self) -> StepResult:
+        """Configura parámetros de tormenta bimodal."""
+        self.echo("\n  ┌─────────────────────────────────────────────────────────┐")
+        self.echo("  │           TORMENTA BIMODAL (DOBLE PICO)                 │")
+        self.echo("  ├─────────────────────────────────────────────────────────┤")
+        self.echo("  │  Intensidad                                             │")
+        self.echo("  │      ▲                                                  │")
+        self.echo("  │      │    ╱╲              ╱╲                            │")
+        self.echo("  │      │   ╱  ╲            ╱  ╲                           │")
+        self.echo("  │      │  ╱    ╲    ──    ╱    ╲                          │")
+        self.echo("  │      │ ╱      ╲────────╱      ╲                         │")
+        self.echo("  │      └─────────────────────────────► Tiempo             │")
+        self.echo("  │        Pico 1         Pico 2                            │")
+        self.echo("  ├─────────────────────────────────────────────────────────┤")
+        self.echo("  │  Útil para:                                             │")
+        self.echo("  │  • Regiones costeras/tropicales                         │")
+        self.echo("  │  • Tormentas frontales de larga duración                │")
+        self.echo("  │  • Cuencas con respuesta mixta                          │")
+        self.echo("  └─────────────────────────────────────────────────────────┘")
+
+        self.echo(f"\n  Configuración por defecto:")
+        self.echo(f"    • Pico 1: 25% de la duración (primera hora en tormenta 6h)")
+        self.echo(f"    • Pico 2: 75% de la duración (hora 4.5 en tormenta 6h)")
+        self.echo(f"    • Volumen: 50% en cada pico\n")
+
+        res, configurar = self.confirm(
+            "¿Configurar posición de picos? (default: 25%/75%, vol 50/50)",
+            default=False,
+        )
+
+        if res != StepResult.NEXT:
+            return res
+
+        if not configurar:
+            self.echo("  Usando configuración por defecto")
+            return StepResult.NEXT
+
+        # Opciones predefinidas
+        self.echo("\n  Configuraciones típicas:")
+        config_choices = [
+            "Estándar (25%/75%) - picos simétricos",
+            "Adelantada (15%/50%) - pico principal temprano",
+            "Tardía (50%/85%) - pico principal tardío",
+            "Asimétrica (20%/70%, vol 60/40) - primer pico dominante",
+            "Personalizada - ingresar valores",
+        ]
+
+        res, config_choice = self.select("Configuración de picos:", config_choices)
+
+        if res != StepResult.NEXT:
+            return res
+
+        if config_choice:
+            if "Estándar" in config_choice:
+                self.state.bimodal_peak1 = 0.25
+                self.state.bimodal_peak2 = 0.75
+                self.state.bimodal_vol_split = 0.5
+            elif "Adelantada" in config_choice:
+                self.state.bimodal_peak1 = 0.15
+                self.state.bimodal_peak2 = 0.50
+                self.state.bimodal_vol_split = 0.5
+            elif "Tardía" in config_choice:
+                self.state.bimodal_peak1 = 0.50
+                self.state.bimodal_peak2 = 0.85
+                self.state.bimodal_vol_split = 0.5
+            elif "Asimétrica" in config_choice:
+                self.state.bimodal_peak1 = 0.20
+                self.state.bimodal_peak2 = 0.70
+                self.state.bimodal_vol_split = 0.6
+            elif "Personalizada" in config_choice:
+                custom_result = self._configure_bimodal_custom()
+                if custom_result != StepResult.NEXT:
+                    return custom_result
+
+        self.echo(f"\n  Configurado:")
+        self.echo(f"    • Pico 1: {self.state.bimodal_peak1*100:.0f}% de la duración")
+        self.echo(f"    • Pico 2: {self.state.bimodal_peak2*100:.0f}% de la duración")
+        self.echo(f"    • Volumen pico 1: {self.state.bimodal_vol_split*100:.0f}%")
+        self.echo(f"    • Volumen pico 2: {(1-self.state.bimodal_vol_split)*100:.0f}%")
+
+        return StepResult.NEXT
+
+    def _configure_bimodal_custom(self) -> StepResult:
+        """Configura parámetros bimodales personalizados."""
+        self.echo("\n  Ingresa valores personalizados (0-100%):\n")
+
+        # Pico 1
+        res, peak1_str = self.text(
+            "Posición del primer pico (% de duración, ej: 25):",
+            validate=lambda x: self._validate_percent(x, 5, 45),
+            default="25",
+        )
+        if res != StepResult.NEXT:
+            return res
+        if peak1_str:
+            self.state.bimodal_peak1 = float(peak1_str) / 100
+
+        # Pico 2
+        min_peak2 = self.state.bimodal_peak1 * 100 + 20  # Al menos 20% después del pico 1
+        res, peak2_str = self.text(
+            f"Posición del segundo pico (% de duración, mín {min_peak2:.0f}):",
+            validate=lambda x: self._validate_percent(x, min_peak2, 95),
+            default="75",
+        )
+        if res != StepResult.NEXT:
+            return res
+        if peak2_str:
+            self.state.bimodal_peak2 = float(peak2_str) / 100
+
+        # Distribución de volumen
+        res, vol_str = self.text(
+            "Porcentaje del volumen en el primer pico (ej: 50 para 50/50):",
+            validate=lambda x: self._validate_percent(x, 20, 80),
+            default="50",
+        )
+        if res != StepResult.NEXT:
+            return res
+        if vol_str:
+            self.state.bimodal_vol_split = float(vol_str) / 100
+
+        return StepResult.NEXT
+
+    def _validate_percent(self, value: str, min_val: float, max_val: float) -> bool | str:
+        """Valida entrada de porcentaje."""
+        try:
+            v = float(value)
+            if v < min_val:
+                return f"Debe ser >= {min_val:.0f}%"
+            if v > max_val:
+                return f"Debe ser <= {max_val:.0f}%"
+            return True
+        except ValueError:
+            return "Debe ser un número válido"
 
 
 class StepSalida(WizardStep):

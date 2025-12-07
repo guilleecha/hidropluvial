@@ -305,7 +305,12 @@ class AnalysisRunner:
                 p3_10, tr, duration_hr, dt, None, peak_position
             )
         elif storm_code == "bimodal":
-            hyetograph = bimodal_dinagua(p3_10, tr, duration_hr, dt)
+            hyetograph = bimodal_dinagua(
+                p3_10, tr, duration_hr, dt,
+                peak1_position=self.config.bimodal_peak1,
+                peak2_position=self.config.bimodal_peak2,
+                volume_split=self.config.bimodal_vol_split,
+            )
         elif storm_code.startswith("huff"):
             # Extraer cuartil (ej: huff_q2 -> 2)
             quartile = int(storm_code.split("_q")[1]) if "_q" in storm_code else 2
@@ -458,6 +463,9 @@ class AdditionalAnalysisRunner:
         lambda_coef: float = 0.2,
         t0_min: float = 5.0,
         dt_min: float = 5.0,
+        bimodal_peak1: float = 0.25,
+        bimodal_peak2: float = 0.75,
+        bimodal_vol_split: float = 0.5,
     ):
         self.session = session
         self.manager = get_session_manager()
@@ -467,6 +475,9 @@ class AdditionalAnalysisRunner:
         self.lambda_coef = lambda_coef
         self.t0_min = t0_min
         self.dt_min = dt_min
+        self.bimodal_peak1 = bimodal_peak1
+        self.bimodal_peak2 = bimodal_peak2
+        self.bimodal_vol_split = bimodal_vol_split
 
     def run(
         self,
@@ -538,7 +549,12 @@ class AdditionalAnalysisRunner:
                                 p3_10, tr, duration_hr, dt, None, peak_position
                             )
                         elif storm_code == "bimodal":
-                            hyetograph = bimodal_dinagua(p3_10, tr, duration_hr, dt)
+                            hyetograph = bimodal_dinagua(
+                                p3_10, tr, duration_hr, dt,
+                                peak1_position=self.bimodal_peak1,
+                                peak2_position=self.bimodal_peak2,
+                                volume_split=self.bimodal_vol_split,
+                            )
                         elif storm_code.startswith("huff"):
                             quartile = int(storm_code.split("_q")[1]) if "_q" in storm_code else 2
                             total_depth = dinagua_depth(p3_10, tr, duration_hr, None)

@@ -48,6 +48,11 @@ class WizardState:
     x_factors: list[float] = field(default_factory=lambda: [1.0])
     dt_min: float = 5.0  # Intervalo de tiempo del hietograma (minutos)
 
+    # Parámetros de tormenta bimodal
+    bimodal_peak1: float = 0.25  # Posición del primer pico (0-1)
+    bimodal_peak2: float = 0.75  # Posición del segundo pico (0-1)
+    bimodal_vol_split: float = 0.5  # Fracción del volumen en el primer pico
+
     # Salida
     output_name: Optional[str] = None
 

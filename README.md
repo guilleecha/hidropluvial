@@ -200,11 +200,9 @@ hp runoff cn-table --group B      # Ver tabla CN
 # Gestión de proyectos
 hp project list                   # Listar proyectos
 hp project show <id>              # Ver proyecto
+hp project basin-add <id> "Nombre" --area 50 --slope 2.5 --p310 80
 hp project basin-list <id>        # Ver cuencas
-
-# Exportación
-hp session export <id> --format xlsx   # Exportar a Excel
-hp session report <id> --output memoria # Generar LaTeX
+hp project basin-show <pid> <bid> # Ver cuenca específica
 ```
 
 > **Nota**: El wizard (`hp wizard`) es la forma recomendada de trabajar.

@@ -200,7 +200,15 @@ class AnalysisRunner:
                 base_tr=self.config.c_weighted_data["base_tr"],
             )
             self.basin.c_weighted = c_weighted
-            self.db.update_basin(self.basin.id, c_weighted=c_weighted)
+            # Usar set_weighted_coefficient para guardar en tablas normalizadas
+            self.db.set_weighted_coefficient(
+                basin_id=self.basin.id,
+                coef_type="c",
+                weighted_value=self.config.c,
+                items=items,
+                table_used=self.config.c_weighted_data["table_key"],
+                base_tr=self.config.c_weighted_data["base_tr"],
+            )
 
         # Agregar al modelo en memoria para compatibilidad
         self.project.add_basin(self.basin)

@@ -298,12 +298,16 @@ class BasinRepository:
         if p2_mm is not None:
             updates.append("p2_mm = ?")
             params.append(p2_mm)
+        # c_weighted y cn_weighted se manejan en tablas normalizadas
+        # Usar set_weighted_coefficient() en lugar de update()
         if c_weighted is not None:
-            updates.append("c_weighted = ?")
-            params.append(c_weighted.model_dump_json() if isinstance(c_weighted, BaseModel) else json.dumps(c_weighted))
+            raise ValueError(
+                "c_weighted debe guardarse con set_weighted_coefficient(), no con update()"
+            )
         if cn_weighted is not None:
-            updates.append("cn_weighted = ?")
-            params.append(cn_weighted.model_dump_json() if isinstance(cn_weighted, BaseModel) else json.dumps(cn_weighted))
+            raise ValueError(
+                "cn_weighted debe guardarse con set_weighted_coefficient(), no con update()"
+            )
         if notes is not None:
             updates.append("notes = ?")
             params.append(notes)

@@ -285,34 +285,30 @@ def interactive_table_viewer(
 
     clear_screen()
 
-    with Live(console=console, refresh_per_second=10, screen=False) as live:
+    # auto_refresh=False evita el parpadeo constante - solo actualizamos cuando hay cambios
+    with Live(console=console, auto_refresh=False, screen=False) as live:
+        # Mostrar display inicial
+        display = build_display(
+            all_analyses,
+            current_idx,
+            session_name,
+            max_visible_rows,
+            on_edit_note is not None,
+            on_delete is not None,
+        )
+        live.update(display, refresh=True)
+
         while True:
+            # Esperar input (bloqueante)
+            key = get_key()
+
             n_analyses = len(all_analyses)
 
             if n_analyses == 0:
-                live.update(Text("\n  No quedan análisis. Presiona q para salir.\n", style="yellow"))
-                key = get_key()
+                live.update(Text("\n  No quedan análisis. Presiona q para salir.\n", style="yellow"), refresh=True)
                 if key == 'q' or key == 'esc':
                     break
                 continue
-
-            # Ajustar índice si está fuera de rango
-            if current_idx >= n_analyses:
-                current_idx = n_analyses - 1
-
-            # Actualizar display
-            display = build_display(
-                all_analyses,
-                current_idx,
-                session_name,
-                max_visible_rows,
-                on_edit_note is not None,
-                on_delete is not None,
-            )
-            live.update(display)
-
-            # Esperar input
-            key = get_key()
 
             if key == 'q' or key == 'esc':
                 break
@@ -343,6 +339,24 @@ def interactive_table_viewer(
                         current_idx = max(0, len(all_analyses) - 1)
                 clear_screen()
                 live.start()
+            else:
+                # Tecla no reconocida, no actualizar
+                continue
+
+            # Ajustar índice si está fuera de rango
+            if current_idx >= n_analyses:
+                current_idx = n_analyses - 1
+
+            # Solo actualizar display después de una acción válida
+            display = build_display(
+                all_analyses,
+                current_idx,
+                session_name,
+                max_visible_rows,
+                on_edit_note is not None,
+                on_delete is not None,
+            )
+            live.update(display, refresh=True)
 
     clear_screen()
     console.print(f"\n  Tabla cerrada. Cuenca: {session_name}\n")

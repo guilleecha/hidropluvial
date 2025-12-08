@@ -2,34 +2,28 @@
 Menú para exportar sesiones a Excel o LaTeX con filtrado de análisis.
 """
 
-from datetime import datetime
 from typing import Optional
 from pathlib import Path
 
 import questionary
 
 from hidropluvial.cli.wizard.menus.base import BaseMenu, SessionMenu
+from hidropluvial.cli.output_manager import (
+    get_latex_output_dir,
+    get_excel_output_dir,
+    get_basin_output_dir,
+    _sanitize_name,
+)
 from hidropluvial.models import Basin
-
-
-def get_output_dir(session_name: str, base_dir: str = "outputs") -> Path:
-    """
-    Genera el directorio de salida para una sesión.
-
-    Estructura: outputs/<nombre_sesion>_<fecha>/
-    """
-    safe_name = session_name.lower().replace(" ", "_").replace("/", "_")
-    date_str = datetime.now().strftime("%Y%m%d")
-    dir_name = f"{safe_name}_{date_str}"
-
-    output_dir = Path(base_dir) / dir_name
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    return output_dir
+from hidropluvial.project import Project
 
 
 class ExportMenu(SessionMenu):
     """Menú para exportar una cuenca con opciones de filtrado."""
+
+    def __init__(self, basin: Basin, project: Optional[Project] = None):
+        super().__init__(basin)
+        self.project = project
 
     def show(self) -> None:
         """Muestra el menú de exportacion."""
@@ -73,7 +67,15 @@ class ExportMenu(SessionMenu):
                 return
 
         # Directorio de salida organizado
-        output_dir = get_output_dir(self.basin.name)
+        project_id = self.project.id if self.project else None
+        project_name = self.project.name if self.project else None
+
+        output_dir = get_basin_output_dir(
+            self.basin.id,
+            self.basin.name,
+            project_id,
+            project_name,
+        )
         self.echo(f"\n  Directorio de salida: {output_dir.absolute()}")
 
         # Nombre base para archivos
@@ -135,7 +137,10 @@ class ExportMenu(SessionMenu):
         """Exporta a Excel con filtrado opcional."""
         from hidropluvial.cli.basin.export import export_to_excel
 
-        output_path = output_dir / f"{base_name}.xlsx"
+        # Usar subdirectorio excel/
+        excel_dir = output_dir / "excel"
+        excel_dir.mkdir(parents=True, exist_ok=True)
+        output_path = excel_dir / f"{base_name}.xlsx"
 
         # Filtrar analisis si es necesario
         if selected_indices is not None:
@@ -157,15 +162,12 @@ class ExportMenu(SessionMenu):
 
     def _export_latex(self, output_dir: Path, base_name: str, selected_indices: Optional[list[int]]) -> None:
         """Exporta a LaTeX con filtrado opcional."""
-        import os
         from hidropluvial.cli.basin.report import generate_basin_report
 
-        # Cambiar al directorio de salida para que los archivos se generen ahí
-        original_dir = os.getcwd()
+        # Usar subdirectorio latex/
+        latex_dir = output_dir / "latex"
 
         try:
-            os.chdir(output_dir)
-
             # Filtrar analisis si es necesario
             if selected_indices is not None:
                 from copy import deepcopy
@@ -176,14 +178,12 @@ class ExportMenu(SessionMenu):
             else:
                 basin_to_export = self.basin
 
-            generate_basin_report(basin_to_export, base_name, author=None, template_dir=None)
-            self.echo(f"\n  Reporte LaTeX generado en: {output_dir}")
+            generate_basin_report(basin_to_export, output_dir=latex_dir)
+            self.echo(f"\n  Reporte LaTeX generado en: {latex_dir}")
         except SystemExit:
             pass  # Capturar typer.Exit
         except Exception as e:
             self.error(f"Error al generar reporte: {e}")
-        finally:
-            os.chdir(original_dir)
 
     def _get_filtered_summary(self, analyses: list) -> "pd.DataFrame":
         """Genera DataFrame con resumen de analisis filtrados."""
@@ -353,5 +353,5 @@ class ExportBasinSelector(BaseMenu):
         basin = project.get_basin(basin_id)
 
         if basin:
-            export_menu = ExportMenu(basin)
+            export_menu = ExportMenu(basin, project)
             export_menu.show()

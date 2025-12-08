@@ -48,7 +48,7 @@ def _json_dict(value: Optional[str]) -> dict:
 # Esquema de la Base de Datos
 # ============================================================================
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 
 SCHEMA_SQL = """
 -- Tabla de proyectos
@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS basins (
     cn INTEGER,
     c_weighted TEXT,  -- JSON WeightedCoefficient
     cn_weighted TEXT,  -- JSON WeightedCoefficient
+    p2_mm REAL,  -- Precipitación 2 años, 24h (mm) para NRCS
     notes TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -93,6 +94,48 @@ CREATE TABLE IF NOT EXISTS tc_results (
     parameters TEXT,  -- JSON dict
     FOREIGN KEY (basin_id) REFERENCES basins(id) ON DELETE CASCADE,
     UNIQUE (basin_id, method)
+);
+
+-- Tabla de segmentos NRCS (método de velocidades TR-55)
+CREATE TABLE IF NOT EXISTS nrcs_segments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    basin_id TEXT NOT NULL,
+    segment_order INTEGER NOT NULL,  -- Orden del segmento en el recorrido
+    segment_type TEXT NOT NULL,  -- 'sheet', 'shallow', 'channel'
+    length_m REAL NOT NULL,
+    slope REAL NOT NULL,
+    -- Campos para sheet flow
+    n_manning REAL,  -- Coeficiente de Manning (sheet/channel)
+    -- Campos para shallow flow
+    surface TEXT,  -- Tipo de superficie ('paved', 'unpaved', 'grassed', 'short_grass')
+    -- Campos para channel flow
+    hydraulic_radius_m REAL,
+    FOREIGN KEY (basin_id) REFERENCES basins(id) ON DELETE CASCADE
+);
+
+-- Tabla de coeficientes ponderados (C y CN)
+CREATE TABLE IF NOT EXISTS weighted_coefficients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    basin_id TEXT NOT NULL,
+    coef_type TEXT NOT NULL,  -- 'c' o 'cn'
+    table_used TEXT,          -- 'chow', 'fhwa', 'uruguay', 'nrcs', etc.
+    weighted_value REAL NOT NULL,
+    base_tr INTEGER,          -- Período de retorno base (ej: 2 para Ven Te Chow)
+    FOREIGN KEY (basin_id) REFERENCES basins(id) ON DELETE CASCADE,
+    UNIQUE (basin_id, coef_type)
+);
+
+-- Tabla de items de cobertura para ponderación
+CREATE TABLE IF NOT EXISTS coverage_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    weighted_coef_id INTEGER NOT NULL,
+    item_order INTEGER NOT NULL,
+    description TEXT NOT NULL,
+    area_ha REAL NOT NULL,
+    value REAL NOT NULL,       -- Valor de C o CN para esta cobertura
+    percentage REAL NOT NULL,  -- Porcentaje del área total
+    table_index INTEGER,       -- Índice en tabla original (para recálculo)
+    FOREIGN KEY (weighted_coef_id) REFERENCES weighted_coefficients(id) ON DELETE CASCADE
 );
 
 -- Tabla de análisis
@@ -150,6 +193,9 @@ CREATE TABLE IF NOT EXISTS hydrograph_timeseries (
 -- Índices para búsquedas rápidas
 CREATE INDEX IF NOT EXISTS idx_basins_project ON basins(project_id);
 CREATE INDEX IF NOT EXISTS idx_tc_results_basin ON tc_results(basin_id);
+CREATE INDEX IF NOT EXISTS idx_nrcs_segments_basin ON nrcs_segments(basin_id);
+CREATE INDEX IF NOT EXISTS idx_weighted_coef_basin ON weighted_coefficients(basin_id);
+CREATE INDEX IF NOT EXISTS idx_coverage_items_coef ON coverage_items(weighted_coef_id);
 CREATE INDEX IF NOT EXISTS idx_analyses_basin ON analyses(basin_id);
 CREATE INDEX IF NOT EXISTS idx_analyses_storm ON analyses(storm_type, return_period);
 CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name);
@@ -200,7 +246,150 @@ class DatabaseConnection:
                     "INSERT INTO metadata (key, value) VALUES (?, ?)",
                     ("schema_version", str(SCHEMA_VERSION))
                 )
-            # Aquí se agregarían migraciones si cambia el esquema
+            else:
+                current_version = int(row["value"])
+                if current_version < SCHEMA_VERSION:
+                    self._migrate(conn, current_version)
+
+    def _migrate(self, conn: sqlite3.Connection, from_version: int) -> None:
+        """Ejecuta migraciones incrementales del esquema."""
+        if from_version < 2:
+            # Migración v1 -> v2: Agregar soporte NRCS
+            # Agregar columna p2_mm a basins si no existe
+            cursor = conn.execute("PRAGMA table_info(basins)")
+            columns = [col["name"] for col in cursor]
+            if "p2_mm" not in columns:
+                conn.execute("ALTER TABLE basins ADD COLUMN p2_mm REAL")
+
+            # Crear tabla nrcs_segments si no existe
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS nrcs_segments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    basin_id TEXT NOT NULL,
+                    segment_order INTEGER NOT NULL,
+                    segment_type TEXT NOT NULL,
+                    length_m REAL NOT NULL,
+                    slope REAL NOT NULL,
+                    n_manning REAL,
+                    surface TEXT,
+                    hydraulic_radius_m REAL,
+                    FOREIGN KEY (basin_id) REFERENCES basins(id) ON DELETE CASCADE
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_nrcs_segments_basin ON nrcs_segments(basin_id)"
+            )
+
+        if from_version < 3:
+            # Migración v2 -> v3: Normalizar coeficientes ponderados
+            # Crear tabla weighted_coefficients
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS weighted_coefficients (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    basin_id TEXT NOT NULL,
+                    coef_type TEXT NOT NULL,
+                    table_used TEXT,
+                    weighted_value REAL NOT NULL,
+                    base_tr INTEGER,
+                    FOREIGN KEY (basin_id) REFERENCES basins(id) ON DELETE CASCADE,
+                    UNIQUE (basin_id, coef_type)
+                )
+            """)
+
+            # Crear tabla coverage_items
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS coverage_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    weighted_coef_id INTEGER NOT NULL,
+                    item_order INTEGER NOT NULL,
+                    description TEXT NOT NULL,
+                    area_ha REAL NOT NULL,
+                    value REAL NOT NULL,
+                    percentage REAL NOT NULL,
+                    table_index INTEGER,
+                    FOREIGN KEY (weighted_coef_id) REFERENCES weighted_coefficients(id) ON DELETE CASCADE
+                )
+            """)
+
+            # Crear índices
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_weighted_coef_basin ON weighted_coefficients(basin_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_coverage_items_coef ON coverage_items(weighted_coef_id)"
+            )
+
+            # Migrar datos JSON existentes a las nuevas tablas
+            self._migrate_weighted_coefficients(conn)
+
+        # Actualizar versión del esquema
+        conn.execute(
+            "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
+            (str(SCHEMA_VERSION),)
+        )
+
+    def _migrate_weighted_coefficients(self, conn: sqlite3.Connection) -> None:
+        """Migra c_weighted y cn_weighted de JSON a tablas normalizadas."""
+        cursor = conn.execute(
+            "SELECT id, c_weighted, cn_weighted FROM basins WHERE c_weighted IS NOT NULL OR cn_weighted IS NOT NULL"
+        )
+
+        for row in cursor.fetchall():
+            basin_id = row["id"]
+
+            # Migrar c_weighted
+            if row["c_weighted"]:
+                self._migrate_single_weighted(conn, basin_id, row["c_weighted"], "c")
+
+            # Migrar cn_weighted
+            if row["cn_weighted"]:
+                self._migrate_single_weighted(conn, basin_id, row["cn_weighted"], "cn")
+
+    def _migrate_single_weighted(
+        self, conn: sqlite3.Connection, basin_id: str, json_data: str, coef_type: str
+    ) -> None:
+        """Migra un coeficiente ponderado individual."""
+        try:
+            data = json.loads(json_data)
+
+            # Insertar coeficiente ponderado
+            cursor = conn.execute(
+                """
+                INSERT INTO weighted_coefficients (basin_id, coef_type, table_used, weighted_value, base_tr)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    basin_id,
+                    coef_type,
+                    data.get("table_used", ""),
+                    data.get("weighted_value", 0),
+                    data.get("base_tr"),
+                )
+            )
+            weighted_id = cursor.lastrowid
+
+            # Insertar items de cobertura
+            items = data.get("items", [])
+            for order, item in enumerate(items):
+                conn.execute(
+                    """
+                    INSERT INTO coverage_items
+                    (weighted_coef_id, item_order, description, area_ha, value, percentage, table_index)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        weighted_id,
+                        order,
+                        item.get("description", ""),
+                        item.get("area_ha", 0),
+                        item.get("value", 0),
+                        item.get("percentage", 0),
+                        item.get("table_index"),
+                    )
+                )
+        except (json.JSONDecodeError, KeyError):
+            # Si hay error en el JSON, ignorar este registro
+            pass
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:

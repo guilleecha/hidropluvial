@@ -382,17 +382,14 @@ def print_comparison_table(
     """
     Imprime tabla de parametros caracteristicos para comparacion de hidrogramas.
 
-    Muestra columnas adicionales para comparacion detallada:
-    - tp: tiempo pico del hidrograma unitario (minusculas)
-    - Tp: tiempo pico del hidrograma resultante (mayusculas)
-    - tb: tiempo base del hidrograma unitario
+    Usa el mismo formato que print_analyses_summary_table para consistencia.
 
     Args:
         analyses_to_show: Lista de analisis a mostrar en la tabla
         all_analyses: Lista completa de analisis (para obtener indice original)
         title: Titulo de la tabla
     """
-    from hidropluvial.cli.formatters import format_flow, format_volume_hm3
+    from hidropluvial.cli.formatters import format_flow
 
     console = get_console()
     p = get_palette()
@@ -414,19 +411,19 @@ def print_comparison_table(
         padding=(0, 1),
     )
 
-    # Columnas - orden similar al original pero mejor organizado
+    # Columnas - mismas que print_analyses_summary_table (sin sparkline)
     table.add_column("#", justify="right", style=p.muted, width=3)
     table.add_column("Metodo Tc", justify="left")
-    table.add_column("Tormenta", justify="left")
-    table.add_column("Tr", justify="right", style=p.number)
     table.add_column("Tc", justify="right", style=p.number)
-    table.add_column("tp", justify="right", style=p.muted)  # tiempo pico unitario
     table.add_column("X", justify="right", style=p.number)
-    table.add_column("tb", justify="right", style=p.muted)  # tiempo base
+    table.add_column("tp", justify="right", style=p.muted)
+    table.add_column("Abst", justify="left")  # Abstraccion: C=0.5 o CN=75
+    table.add_column("Tormenta", justify="left")
+    table.add_column("Dur", justify="right", style=p.number)  # Duracion (h)
+    table.add_column("Tr", justify="right", style=p.number)
     table.add_column("P", justify="right", style=p.number)
     table.add_column("Pe", justify="right", style=p.number)
     table.add_column("Qp", justify="right")  # Estilo especial para destacar max
-    table.add_column("Tp", justify="right", style=p.number)
     table.add_column("Vol", justify="right", style=p.number)
 
     # Encontrar Qp maximo para destacar
@@ -443,15 +440,31 @@ def print_comparison_table(
         storm = analysis.storm
         tc = analysis.tc
 
-        # Formatear valores
+        # Formatear valores basicos
         tc_min = f"{tc.tc_min:.0f}" if tc.tc_min else "-"
-        tp_unit = f"{hydro.tp_unit_min:.0f}" if hydro.tp_unit_min else "-"
         x_str = f"{hydro.x_factor:.2f}" if hydro.x_factor else "-"
-        tb = f"{hydro.tb_min:.0f}" if hydro.tb_min else "-"
+        tp_unit = f"{hydro.tp_unit_min:.0f}" if hydro.tp_unit_min else "-"
+
+        # Abstraccion: obtener C o CN de los parametros
+        abst_str = "-"
+        params = tc.parameters or {}
+        if "c" in params:
+            c_val = params["c"]
+            abst_str = f"C={c_val:.2f}"
+        elif "cn_adjusted" in params:
+            cn_val = params["cn_adjusted"]
+            abst_str = f"CN={cn_val:.0f}"
+        elif "cn" in params:
+            cn_val = params["cn"]
+            abst_str = f"CN={cn_val:.0f}"
+
+        # Tormenta
+        storm_type = storm.type.upper()[:6]
+        dur_hr = f"{storm.duration_hr:.1f}" if storm.duration_hr else "-"
+
+        # Precipitacion
         p_total = f"{storm.total_depth_mm:.1f}" if storm.total_depth_mm else "-"
         pe = f"{hydro.runoff_mm:.1f}" if hydro.runoff_mm else "-"
-        tp_result = f"{hydro.time_to_peak_min:.0f}" if hydro.time_to_peak_min else "-"
-        vol = format_volume_hm3(hydro.volume_m3)
 
         # Qp con formato especial - destacar el maximo
         qp_val = hydro.peak_flow_m3s
@@ -461,27 +474,31 @@ def print_comparison_table(
         else:
             qp_text = Text(qp_str, style=p.number)
 
+        # Volumen con 2 decimales
+        vol_hm3 = hydro.volume_m3 / 1e6
+        vol_str = f"{vol_hm3:.2f}"
+
         table.add_row(
             str(orig_idx),
             tc.method[:12],
-            storm.type.upper()[:6],
-            str(storm.return_period),
             tc_min,
-            tp_unit,
             x_str,
-            tb,
+            tp_unit,
+            abst_str,
+            storm_type,
+            dur_hr,
+            str(storm.return_period),
             p_total,
             pe,
             qp_text,
-            tp_result,
-            vol,
+            vol_str,
         )
 
     console.print(table)
 
-    # Leyenda de notacion
+    # Leyenda de unidades (misma que print_analyses_summary_table)
     console.print(
-        f"  [dim]tp: pico HU | tb: base HU | Tc, Tp: min | P, Pe: mm | Qp: m3/s | Vol: hm3[/dim]"
+        f"  [dim]Tc, tp: min | Dur: h | Abst: C o CN | P, Pe: mm | Qp: m3/s | Vol: hm3[/dim]"
     )
 
 

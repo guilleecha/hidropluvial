@@ -5,7 +5,6 @@ Menú para gestionar cuencas dentro de un proyecto.
 from typing import Optional
 
 from hidropluvial.cli.wizard.menus.base import BaseMenu
-from hidropluvial.cli.wizard.menus.cuenca_editor import CuencaEditor
 from hidropluvial.cli.theme import (
     get_console, print_basins_table, print_header, print_info,
 )
@@ -96,22 +95,7 @@ class BasinManagementMenu(BaseMenu):
 
     def _select_basin(self, prompt: str = "Selecciona una cuenca:") -> Optional[Basin]:
         """Permite seleccionar una cuenca del proyecto."""
-        if not self.project.basins:
-            self.echo("  No hay cuencas en este proyecto.")
-            return None
-
-        choices = []
-        for b in self.project.basins:
-            choices.append(f"{b.id} - {b.name} ({len(b.analyses)} análisis)")
-        choices.append("← Cancelar")
-
-        choice = self.select(prompt, choices)
-
-        if choice is None or "Cancelar" in choice:
-            return None
-
-        basin_id = choice.split(" - ")[0]
-        return self.project.get_basin(basin_id)
+        return self.select_basin_from_project(self.project, prompt)
 
     def _view_basin_details(self) -> None:
         """Ver detalles de una cuenca."""
@@ -153,9 +137,7 @@ class BasinManagementMenu(BaseMenu):
             self.warning(f"ADVERTENCIA: Esta cuenca tiene {len(basin.analyses)} análisis.")
             self.warning("Al modificar la cuenca se eliminaran todos los análisis.")
 
-        # Usar editor de cuenca directamente con Basin
-        editor = CuencaEditor(basin, self.project_manager)
-        result = editor.edit()
+        result = self.edit_basin_with_editor(basin, self.project_manager)
 
         if result == "modified":
             # Recargar proyecto para obtener cambios
@@ -176,15 +158,17 @@ class BasinManagementMenu(BaseMenu):
         if not new_name:
             return
 
-        # Clonar la cuenca
-        basin_data = basin.model_dump()
-        basin_data['id'] = None  # Forzar nuevo ID
-        basin_data['name'] = new_name
-        basin_data['analyses'] = []  # Nueva cuenca sin análisis
-
-        new_basin = Basin.model_validate(basin_data)
-        self.project.add_basin(new_basin)
-        self.project_manager.save_project(self.project)
+        # Crear nueva cuenca en la BD con los datos de la cuenca origen
+        new_basin = self.project_manager.create_basin(
+            project=self.project,
+            name=new_name,
+            area_ha=basin.area_ha,
+            slope_pct=basin.slope_pct,
+            p3_10=basin.p3_10,
+            c=basin.c,
+            cn=basin.cn,
+            length_m=basin.length_m,
+        )
 
         self.echo(f"\n  Cuenca duplicada:")
         self.echo(f"    ID original: {basin.id}")
@@ -234,8 +218,7 @@ class BasinManagementMenu(BaseMenu):
 
         if basin:
             from hidropluvial.cli.wizard.menus.export_menu import ExportMenu
-            # ExportMenu can work with Basin directly via SessionMenu
-            export_menu = ExportMenu(basin)
+            export_menu = ExportMenu(basin, self.project)
             export_menu.show()
 
     def _delete_basin(self) -> None:
@@ -244,47 +227,13 @@ class BasinManagementMenu(BaseMenu):
         if not basin:
             return
 
-        msg = f"Eliminar cuenca '{basin.name}'"
-        if basin.analyses:
-            msg += f" y sus {len(basin.analyses)} análisis"
-        msg += "?"
-
-        if self.confirm(msg, default=False):
-            if self.project_manager.delete_basin(self.project, basin.id):
-                self.echo(f"\n  Cuenca '{basin.name}' eliminada.\n")
-            else:
-                self.error("No se pudo eliminar la cuenca")
+        self.delete_basin_from_project(basin, self.project, self.project_manager)
 
     def _add_new_basin(self) -> None:
         """Agrega una nueva cuenca al proyecto."""
-        from hidropluvial.cli.wizard.config import WizardConfig
-        from hidropluvial.cli.wizard.runner import AnalysisRunner
-        from hidropluvial.cli.wizard.menus.post_execution import PostExecutionMenu
-
-        self.echo(f"\n  Agregando cuenca al proyecto: {self.project.name}\n")
-
-        # Usar WizardConfig
-        config = WizardConfig.from_wizard()
-        if config is None:
-            return
-
-        config.print_summary()
-
-        if not self.confirm("\n¿Ejecutar análisis?", default=True):
-            return
-
-        self.echo("\n" + "=" * 60)
-        self.echo("  EJECUTANDO ANÁLISIS")
-        self.echo("=" * 60 + "\n")
-
-        runner = AnalysisRunner(config, project_id=self.project.id)
-        updated_project, basin = runner.run()
-
-        self.echo(f"\n  Cuenca '{basin.name}' agregada al proyecto.\n")
-
-        # Menu post-ejecucion
-        menu = PostExecutionMenu(updated_project, basin, config.c, config.cn, config.length_m)
-        menu.show()
+        result = self.add_basin_with_wizard(self.project, show_post_menu=True)
+        if result:
+            self.project, _ = result
 
     def _import_basin(self) -> None:
         """Importa una cuenca desde otro proyecto."""
@@ -335,13 +284,17 @@ class BasinManagementMenu(BaseMenu):
         source_basin = source_project.get_basin(basin_id)
 
         if source_basin:
-            # Clonar la cuenca con nuevo ID
-            basin_data = source_basin.model_dump()
-            basin_data['id'] = None  # Forzar nuevo ID
-            new_basin = Basin.model_validate(basin_data)
-
-            self.project.add_basin(new_basin)
-            self.project_manager.save_project(self.project)
+            # Crear nueva cuenca en la BD con los datos de la cuenca origen
+            new_basin = self.project_manager.create_basin(
+                project=self.project,
+                name=source_basin.name,
+                area_ha=source_basin.area_ha,
+                slope_pct=source_basin.slope_pct,
+                p3_10=source_basin.p3_10,
+                c=source_basin.c,
+                cn=source_basin.cn,
+                length_m=source_basin.length_m,
+            )
 
             self.echo(f"\n  Cuenca '{new_basin.name}' importada al proyecto.")
             self.echo(f"  (Nueva ID: {new_basin.id})\n")

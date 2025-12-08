@@ -4,7 +4,7 @@ Modelo de cuenca hidrológica (Basin).
 Representa una cuenca física con todos sus cálculos de Tc y análisis de crecidas.
 """
 
-from typing import Optional
+from typing import Optional, Union
 
 from pydantic import Field
 
@@ -12,6 +12,10 @@ from hidropluvial.models.base import TimestampedModel
 from hidropluvial.models.coverage import WeightedCoefficient
 from hidropluvial.models.tc import TcResult
 from hidropluvial.models.analysis import AnalysisRun
+from hidropluvial.config import SheetFlowSegment, ShallowFlowSegment, ChannelFlowSegment
+
+# Tipo unión para segmentos NRCS
+NRCSSegment = Union[SheetFlowSegment, ShallowFlowSegment, ChannelFlowSegment]
 
 
 class Basin(TimestampedModel):
@@ -37,6 +41,10 @@ class Basin(TimestampedModel):
     # Detalle de ponderación (opcional)
     c_weighted: Optional[WeightedCoefficient] = None
     cn_weighted: Optional[WeightedCoefficient] = None
+
+    # Parámetros NRCS (método de velocidades TR-55)
+    p2_mm: Optional[float] = None  # Precipitación 2 años, 24h (mm) para flujo laminar
+    nrcs_segments: list[NRCSSegment] = Field(default_factory=list)
 
     # Resultados
     tc_results: list[TcResult] = Field(default_factory=list)

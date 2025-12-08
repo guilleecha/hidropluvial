@@ -19,7 +19,7 @@ from hidropluvial.cli.wizard.styles import (
     menu_separator,
     get_icons,
 )
-from hidropluvial.project import get_project_manager, ProjectManager
+from hidropluvial.project import get_project_manager, ProjectManager, Project, Basin
 from hidropluvial.cli.theme import (
     print_header, print_section, print_success, print_warning,
     print_error, print_info, print_note, print_suggestion, print_basin_info, print_project_info,
@@ -196,6 +196,143 @@ class BaseMenu(ABC):
         except ValueError:
             self.echo(f"  Valor invalido, se mantiene {current}")
             return None
+
+    # ========================================================================
+    # Métodos compartidos para operaciones de cuenca
+    # ========================================================================
+
+    def select_basin_from_project(
+        self,
+        project: Project,
+        prompt: str = "Selecciona una cuenca:",
+    ) -> Optional[Basin]:
+        """
+        Permite seleccionar una cuenca de un proyecto.
+
+        Args:
+            project: Proyecto del cual seleccionar
+            prompt: Mensaje a mostrar
+
+        Returns:
+            Basin seleccionada o None si cancela
+        """
+        if not project.basins:
+            self.echo("  No hay cuencas en este proyecto.")
+            return None
+
+        choices = []
+        for b in project.basins:
+            n_analyses = len(b.analyses) if b.analyses else 0
+            choices.append(f"{b.id} - {b.name} ({n_analyses} análisis)")
+        choices.append(self.cancel_option())
+
+        choice = self.select(prompt, choices)
+
+        if choice is None or "Cancelar" in choice:
+            return None
+
+        basin_id = choice.split(" - ")[0]
+        return project.get_basin(basin_id)
+
+    def add_basin_with_wizard(
+        self,
+        project: Project,
+        show_post_menu: bool = True,
+    ) -> Optional[tuple[Project, Basin]]:
+        """
+        Agrega una nueva cuenca a un proyecto usando el wizard completo.
+
+        Args:
+            project: Proyecto al que agregar la cuenca
+            show_post_menu: Si mostrar el menú post-ejecución
+
+        Returns:
+            Tupla (proyecto_actualizado, nueva_cuenca) o None si cancela
+        """
+        from hidropluvial.cli.wizard.config import WizardConfig
+        from hidropluvial.cli.wizard.runner import AnalysisRunner
+        from hidropluvial.cli.wizard.menus.post_execution import PostExecutionMenu
+
+        self.echo(f"\n  Configurando nueva cuenca para: {project.name}\n")
+
+        config = WizardConfig.from_wizard()
+        if config is None:
+            return None
+
+        config.print_summary()
+
+        if not self.confirm("\n¿Ejecutar análisis?", default=True):
+            return None
+
+        self.header("EJECUTANDO ANÁLISIS")
+
+        runner = AnalysisRunner(config, project_id=project.id)
+        updated_project, basin = runner.run()
+
+        self.echo(f"\n  Cuenca '{basin.name}' agregada al proyecto.\n")
+
+        if show_post_menu:
+            menu = PostExecutionMenu(
+                updated_project, basin,
+                config.c, config.cn, config.length_m
+            )
+            menu.show()
+
+        return updated_project, basin
+
+    def edit_basin_with_editor(
+        self,
+        basin: Basin,
+        project_manager: Optional[ProjectManager] = None,
+    ) -> str:
+        """
+        Edita una cuenca usando CuencaEditor.
+
+        Args:
+            basin: Cuenca a editar
+            project_manager: ProjectManager a usar (opcional)
+
+        Returns:
+            Resultado del editor: "modified", "cancelled", etc.
+        """
+        from hidropluvial.cli.wizard.menus.cuenca_editor import CuencaEditor
+
+        pm = project_manager or self.manager
+        editor = CuencaEditor(basin, pm)
+        return editor.edit()
+
+    def delete_basin_from_project(
+        self,
+        basin: Basin,
+        project: Project,
+        project_manager: Optional[ProjectManager] = None,
+    ) -> bool:
+        """
+        Elimina una cuenca de un proyecto con confirmación.
+
+        Args:
+            basin: Cuenca a eliminar
+            project: Proyecto que contiene la cuenca
+            project_manager: ProjectManager a usar (opcional)
+
+        Returns:
+            True si se eliminó, False si canceló o falló
+        """
+        msg = f"¿Eliminar cuenca '{basin.name}'"
+        if basin.analyses:
+            msg += f" y sus {len(basin.analyses)} análisis"
+        msg += "?"
+
+        if not self.confirm(msg, default=False):
+            return False
+
+        pm = project_manager or self.manager
+        if pm.delete_basin(project, basin.id):
+            self.echo(f"\n  Cuenca '{basin.name}' eliminada.\n")
+            return True
+
+        self.error("No se pudo eliminar la cuenca")
+        return False
 
 
 class SessionMenu(BaseMenu):

@@ -83,14 +83,16 @@ def generate_basin_report(
 
         # Hidrograma
         if hydro.time_hr and hydro.flow_m3s:
+            # Convertir tiempo de horas a minutos
+            time_min = [t * 60 for t in hydro.time_hr]
             series = HydrographSeries(
-                time_hr=hydro.time_hr,
+                time_min=time_min,
                 flow_m3s=hydro.flow_m3s,
                 label=f"{hydro.tc_method} Tr{storm.return_period}",
             )
             tikz_hydro = generate_hydrograph_tikz(
                 series=[series],
-                title=f"Hidrograma - {base_name}",
+                caption=f"Hidrograma - {base_name}",
                 width=fig_width,
                 height=fig_height,
             )
@@ -103,7 +105,7 @@ def generate_basin_report(
             tikz_hyeto = generate_hyetograph_tikz(
                 time_min=storm.time_min,
                 intensity_mmhr=storm.intensity_mmhr,
-                title=f"Hietograma - {base_name}",
+                caption=f"Hietograma - {base_name}",
                 width=fig_width,
                 height=fig_height,
             )

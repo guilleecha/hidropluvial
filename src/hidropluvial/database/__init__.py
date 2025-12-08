@@ -168,6 +168,53 @@ class Database:
         return self._basins.clear_tc_results(basin_id)
 
     # ========================================================================
+    # Operaciones de Segmentos NRCS
+    # ========================================================================
+
+    def set_nrcs_segments(
+        self,
+        basin_id: str,
+        segments: list,
+        p2_mm: Optional[float] = None,
+    ) -> None:
+        """Guarda los segmentos NRCS de una cuenca."""
+        self._basins.set_nrcs_segments(basin_id, segments, p2_mm)
+
+    def get_nrcs_segments(self, basin_id: str) -> list:
+        """Obtiene los segmentos NRCS de una cuenca."""
+        return self._basins.get_nrcs_segments(basin_id)
+
+    def clear_nrcs_segments(self, basin_id: str) -> int:
+        """Elimina todos los segmentos NRCS de una cuenca."""
+        return self._basins.clear_nrcs_segments(basin_id)
+
+    # ========================================================================
+    # Operaciones de Coeficientes Ponderados
+    # ========================================================================
+
+    def set_weighted_coefficient(
+        self,
+        basin_id: str,
+        coef_type: str,
+        weighted_value: float,
+        items: list[dict],
+        table_used: Optional[str] = None,
+        base_tr: Optional[int] = None,
+    ) -> int:
+        """Guarda un coeficiente ponderado (C o CN)."""
+        return self._basins.set_weighted_coefficient(
+            basin_id, coef_type, weighted_value, items, table_used, base_tr
+        )
+
+    def get_weighted_coefficient(self, basin_id: str, coef_type: str) -> Optional[dict]:
+        """Obtiene un coeficiente ponderado de una cuenca."""
+        return self._basins.get_weighted_coefficient(basin_id, coef_type)
+
+    def delete_weighted_coefficient(self, basin_id: str, coef_type: str) -> bool:
+        """Elimina un coeficiente ponderado."""
+        return self._basins.delete_weighted_coefficient(basin_id, coef_type)
+
+    # ========================================================================
     # Operaciones de Análisis
     # ========================================================================
 
@@ -332,6 +379,9 @@ class Database:
         if d.get("cn_weighted"):
             cn_weighted = WeightedCoefficient.model_validate(d["cn_weighted"])
 
+        # Manejar segmentos NRCS
+        nrcs_segments = d.get("nrcs_segments", [])
+
         return Basin(
             id=d["id"],
             name=d["name"],
@@ -343,6 +393,8 @@ class Database:
             cn=d.get("cn"),
             c_weighted=c_weighted,
             cn_weighted=cn_weighted,
+            p2_mm=d.get("p2_mm"),
+            nrcs_segments=nrcs_segments,
             tc_results=tc_results,
             analyses=analyses,
             notes=d.get("notes"),

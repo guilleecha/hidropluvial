@@ -127,47 +127,13 @@ class ContinueProjectMenu(BaseMenu):
 
     def _select_basin(self) -> Optional[Basin]:
         """Permite seleccionar una cuenca del proyecto."""
-        if not self.project.basins:
-            self.echo("  No hay cuencas en este proyecto.")
-            return None
-
-        choices = []
-        for b in self.project.basins:
-            choices.append(f"{b.id} - {b.name} ({len(b.analyses)} analisis)")
-        choices.append(self.cancel_option())
-
-        choice = self.select("Selecciona una cuenca:", choices)
-
-        if choice is None or "Cancelar" in choice:
-            return None
-
-        basin_id = choice.split(" - ")[0]
-        return self.project.get_basin(basin_id)
+        return self.select_basin_from_project(self.project)
 
     def _add_basin_to_project(self) -> None:
         """Agrega una nueva cuenca al proyecto usando el wizard."""
-        from hidropluvial.cli.wizard.config import WizardConfig
-        from hidropluvial.cli.wizard.runner import AnalysisRunner
-
-        self.echo("\n  Configurando nueva cuenca para el proyecto...\n")
-
-        # Usar WizardConfig pero forzar el proyecto actual
-        config = WizardConfig.from_wizard()
-        if config is None:
-            return
-
-        config.print_summary()
-
-        if not self.confirm("\nEjecutar analisis?", default=True):
-            return
-
-        runner = AnalysisRunner(config, project_id=self.project.id)
-        updated_project, basin = runner.run()
-
-        # Actualizar referencia local al proyecto
-        self.project = updated_project
-
-        self.echo(f"\n  Cuenca '{basin.name}' agregada al proyecto.\n")
+        result = self.add_basin_with_wizard(self.project, show_post_menu=False)
+        if result:
+            self.project, _ = result
 
     def _edit_project_metadata(self) -> None:
         """Edita metadatos del proyecto."""
@@ -205,10 +171,26 @@ class ContinueProjectMenu(BaseMenu):
     # Menu de Cuenca (Basin)
     # ========================================================================
 
-    def _show_basin_menu(self) -> None:
-        """Muestra el menu de acciones para la cuenca seleccionada."""
+    def _show_basin_menu(self, single_basin_mode: bool = False) -> None:
+        """
+        Muestra el menu de acciones para la cuenca seleccionada.
+
+        Args:
+            single_basin_mode: Si True, "Volver" simplemente retorna sin
+                              ofrecer seleccionar otra cuenca (para uso
+                              desde visor interactivo).
+        """
         while True:
             self._show_basin_header()
+
+            # Opciones de volver según el modo
+            if single_basin_mode:
+                back_choices = [self.back_option("Volver")]
+            else:
+                back_choices = [
+                    self.back_option("Volver (elegir otra cuenca)"),
+                    self.back_option("Salir al menú principal"),
+                ]
 
             action = self.select(
                 "¿Qué deseas hacer?",
@@ -220,12 +202,10 @@ class ContinueProjectMenu(BaseMenu):
                     "Filtrar resultados",
                     "Exportar (Excel/LaTeX)",
                     "Editar cuenca...",
-                    self.back_option("Volver (elegir otra cuenca)"),
-                    self.back_option("Salir al menú principal"),
-                ],
+                ] + back_choices,
             )
 
-            if action is None or "Salir" in action:
+            if action is None or "Salir" in action or (single_basin_mode and "Volver" in action):
                 return
             elif "otra cuenca" in action.lower():
                 if self.project:
@@ -490,14 +470,12 @@ class ContinueProjectMenu(BaseMenu):
     def _export(self) -> None:
         """Exporta resultados."""
         from hidropluvial.cli.wizard.menus.export_menu import ExportMenu
-        export_menu = ExportMenu(self.basin)
+        export_menu = ExportMenu(self.basin, self.project)
         export_menu.show()
 
     def _edit_basin(self) -> None:
         """Edita datos de la cuenca."""
-        from hidropluvial.cli.wizard.menus.cuenca_editor import CuencaEditor
-        editor = CuencaEditor(self.basin)
-        result = editor.edit()
+        result = self.edit_basin_with_editor(self.basin)
 
         if result == "modified" and self.project:
             # Reload basin from project
@@ -521,15 +499,16 @@ class ContinueProjectMenu(BaseMenu):
 
     def _delete_basin(self) -> bool:
         """Elimina la cuenca."""
+        if not self.project:
+            self.error("La cuenca no pertenece a ningun proyecto")
+            return False
+
+        # Usar el método base pero con confirmación personalizada
         if self.confirm(f"Seguro que deseas eliminar la cuenca '{self.basin.name}'?", default=False):
-            # Si esta en un proyecto, eliminar del proyecto
-            if self.project:
-                if self.db.delete_basin(self.basin.id):
-                    self.project.remove_basin(self.basin.id)
-                    self.echo(f"\n  Cuenca '{self.basin.name}' eliminada del proyecto.\n")
-                    return True
-                else:
-                    self.error("No se pudo eliminar la cuenca")
+            if self.db.delete_basin(self.basin.id):
+                self.project.remove_basin(self.basin.id)
+                self.echo(f"\n  Cuenca '{self.basin.name}' eliminada del proyecto.\n")
+                return True
             else:
-                self.error("La cuenca no pertenece a ningun proyecto")
+                self.error("No se pudo eliminar la cuenca")
         return False

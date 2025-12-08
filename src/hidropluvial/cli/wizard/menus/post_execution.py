@@ -186,7 +186,7 @@ class PostExecutionMenu(SessionMenu):
     def _export(self) -> None:
         """Exporta los resultados a Excel o LaTeX con opciones de filtrado."""
         from hidropluvial.cli.wizard.menus.export_menu import ExportMenu
-        export_menu = ExportMenu(self.basin)
+        export_menu = ExportMenu(self.basin, self.project)
         export_menu.show()
 
     def _define_weighted_cn(self) -> None:

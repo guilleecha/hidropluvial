@@ -652,3 +652,344 @@ class TestDatabaseIntegrity:
 
         updated_project = temp_db.get_project(project["id"])
         assert updated_project["updated_at"] > original_timestamp
+
+
+class TestDatabaseNRCSSegments:
+    """Tests para segmentos NRCS (método de velocidades TR-55)."""
+
+    def test_set_nrcs_segments_sheet_flow(self, temp_db):
+        """Guardar segmento de flujo laminar."""
+        from hidropluvial.config import SheetFlowSegment
+
+        project = temp_db.create_project(name="NRCS Test")
+        basin = temp_db.create_basin(
+            project_id=project["id"],
+            name="NRCS Basin",
+            area_ha=10,
+            slope_pct=2,
+            p3_10=50,
+        )
+
+        segments = [
+            SheetFlowSegment(length_m=50, n=0.24, slope=0.02, p2_mm=50)
+        ]
+
+        temp_db.set_nrcs_segments(basin["id"], segments, p2_mm=50)
+
+        # Verificar que se guardó
+        retrieved = temp_db.get_basin(basin["id"])
+        assert len(retrieved["nrcs_segments"]) == 1
+        assert retrieved["nrcs_segments"][0].length_m == 50
+        assert retrieved["nrcs_segments"][0].n == 0.24
+        assert retrieved["p2_mm"] == 50
+
+    def test_set_nrcs_segments_multiple_types(self, temp_db):
+        """Guardar múltiples tipos de segmentos."""
+        from hidropluvial.config import SheetFlowSegment, ShallowFlowSegment, ChannelFlowSegment
+
+        project = temp_db.create_project(name="Multi Segment Test")
+        basin = temp_db.create_basin(
+            project_id=project["id"],
+            name="Multi Basin",
+            area_ha=20,
+            slope_pct=3,
+            p3_10=55,
+        )
+
+        segments = [
+            SheetFlowSegment(length_m=80, n=0.15, slope=0.02, p2_mm=50),
+            ShallowFlowSegment(length_m=300, slope=0.015, surface="unpaved"),
+            ChannelFlowSegment(length_m=500, n=0.035, slope=0.01, hydraulic_radius_m=0.4),
+        ]
+
+        temp_db.set_nrcs_segments(basin["id"], segments, p2_mm=50)
+
+        retrieved = temp_db.get_basin(basin["id"])
+        assert len(retrieved["nrcs_segments"]) == 3
+
+        # Verificar orden y tipos
+        seg0 = retrieved["nrcs_segments"][0]
+        assert seg0.length_m == 80
+        assert hasattr(seg0, 'n')  # SheetFlowSegment
+
+        seg1 = retrieved["nrcs_segments"][1]
+        assert seg1.length_m == 300
+        assert seg1.surface == "unpaved"  # ShallowFlowSegment
+
+        seg2 = retrieved["nrcs_segments"][2]
+        assert seg2.length_m == 500
+        assert seg2.hydraulic_radius_m == 0.4  # ChannelFlowSegment
+
+    def test_set_nrcs_segments_replaces_existing(self, temp_db):
+        """Guardar segmentos reemplaza los existentes."""
+        from hidropluvial.config import SheetFlowSegment, ShallowFlowSegment
+
+        project = temp_db.create_project(name="Replace Test")
+        basin = temp_db.create_basin(
+            project_id=project["id"],
+            name="Replace Basin",
+            area_ha=10,
+            slope_pct=2,
+            p3_10=50,
+        )
+
+        # Guardar segmentos iniciales
+        segments1 = [
+            SheetFlowSegment(length_m=50, n=0.24, slope=0.02, p2_mm=50),
+            SheetFlowSegment(length_m=30, n=0.15, slope=0.01, p2_mm=50),
+        ]
+        temp_db.set_nrcs_segments(basin["id"], segments1)
+
+        # Reemplazar con nuevos segmentos
+        segments2 = [
+            ShallowFlowSegment(length_m=200, slope=0.02, surface="paved"),
+        ]
+        temp_db.set_nrcs_segments(basin["id"], segments2)
+
+        retrieved = temp_db.get_basin(basin["id"])
+        assert len(retrieved["nrcs_segments"]) == 1
+        assert retrieved["nrcs_segments"][0].length_m == 200
+
+    def test_clear_nrcs_segments(self, temp_db):
+        """Limpiar segmentos NRCS."""
+        from hidropluvial.config import SheetFlowSegment
+
+        project = temp_db.create_project(name="Clear Test")
+        basin = temp_db.create_basin(
+            project_id=project["id"],
+            name="Clear Basin",
+            area_ha=10,
+            slope_pct=2,
+            p3_10=50,
+        )
+
+        segments = [
+            SheetFlowSegment(length_m=50, n=0.24, slope=0.02, p2_mm=50),
+        ]
+        temp_db.set_nrcs_segments(basin["id"], segments)
+
+        deleted = temp_db.clear_nrcs_segments(basin["id"])
+        assert deleted == 1
+
+        retrieved = temp_db.get_basin(basin["id"])
+        assert len(retrieved["nrcs_segments"]) == 0
+
+    def test_nrcs_segments_cascade_delete(self, temp_db):
+        """Segmentos se eliminan al eliminar cuenca."""
+        from hidropluvial.config import SheetFlowSegment
+
+        project = temp_db.create_project(name="Cascade Test")
+        basin = temp_db.create_basin(
+            project_id=project["id"],
+            name="Cascade Basin",
+            area_ha=10,
+            slope_pct=2,
+            p3_10=50,
+        )
+
+        segments = [
+            SheetFlowSegment(length_m=50, n=0.24, slope=0.02, p2_mm=50),
+        ]
+        temp_db.set_nrcs_segments(basin["id"], segments)
+
+        # Eliminar cuenca
+        temp_db.delete_basin(basin["id"])
+
+        # Verificar que segmentos fueron eliminados (cuenca ya no existe)
+        retrieved = temp_db.get_basin(basin["id"])
+        assert retrieved is None
+
+
+class TestDatabaseWeightedCoefficients:
+    """Tests para coeficientes ponderados normalizados."""
+
+    def test_set_weighted_coefficient_c(self, temp_db):
+        """Guardar coeficiente C ponderado."""
+        project = temp_db.create_project(name="Weighted C Test")
+        basin = temp_db.create_basin(
+            project_id=project["id"],
+            name="Weighted Basin",
+            area_ha=10,
+            slope_pct=2,
+            p3_10=50,
+        )
+
+        items = [
+            {"description": "Techos", "area_ha": 3, "value": 0.9, "percentage": 30, "table_index": 1},
+            {"description": "Jardines", "area_ha": 5, "value": 0.3, "percentage": 50, "table_index": 5},
+            {"description": "Calles", "area_ha": 2, "value": 0.85, "percentage": 20, "table_index": 2},
+        ]
+
+        temp_db.set_weighted_coefficient(
+            basin_id=basin["id"],
+            coef_type="c",
+            weighted_value=0.55,
+            items=items,
+            table_used="chow",
+            base_tr=2,
+        )
+
+        retrieved = temp_db.get_basin(basin["id"])
+        assert retrieved["c_weighted"] is not None
+        assert retrieved["c_weighted"]["weighted_value"] == 0.55
+        assert retrieved["c_weighted"]["table_used"] == "chow"
+        assert retrieved["c_weighted"]["base_tr"] == 2
+        assert len(retrieved["c_weighted"]["items"]) == 3
+
+    def test_set_weighted_coefficient_cn(self, temp_db):
+        """Guardar coeficiente CN ponderado."""
+        project = temp_db.create_project(name="Weighted CN Test")
+        basin = temp_db.create_basin(
+            project_id=project["id"],
+            name="CN Basin",
+            area_ha=20,
+            slope_pct=3,
+            p3_10=55,
+        )
+
+        items = [
+            {"description": "Urbano residencial", "area_ha": 12, "value": 77, "percentage": 60},
+            {"description": "Área verde", "area_ha": 8, "value": 61, "percentage": 40},
+        ]
+
+        temp_db.set_weighted_coefficient(
+            basin_id=basin["id"],
+            coef_type="cn",
+            weighted_value=71,
+            items=items,
+            table_used="nrcs",
+        )
+
+        retrieved = temp_db.get_basin(basin["id"])
+        assert retrieved["cn_weighted"] is not None
+        assert retrieved["cn_weighted"]["weighted_value"] == 71
+        assert retrieved["cn_weighted"]["table_used"] == "nrcs"
+        assert len(retrieved["cn_weighted"]["items"]) == 2
+
+    def test_weighted_coefficient_replaces_existing(self, temp_db):
+        """Nuevo coeficiente reemplaza el existente."""
+        project = temp_db.create_project(name="Replace Coef Test")
+        basin = temp_db.create_basin(
+            project_id=project["id"],
+            name="Replace Basin",
+            area_ha=10,
+            slope_pct=2,
+            p3_10=50,
+        )
+
+        # Primer coeficiente
+        items1 = [
+            {"description": "Zona A", "area_ha": 5, "value": 0.5, "percentage": 50},
+            {"description": "Zona B", "area_ha": 5, "value": 0.7, "percentage": 50},
+        ]
+        temp_db.set_weighted_coefficient(basin["id"], "c", 0.6, items1, "chow")
+
+        # Reemplazar
+        items2 = [
+            {"description": "Nueva zona", "area_ha": 10, "value": 0.8, "percentage": 100},
+        ]
+        temp_db.set_weighted_coefficient(basin["id"], "c", 0.8, items2, "fhwa")
+
+        retrieved = temp_db.get_basin(basin["id"])
+        assert retrieved["c_weighted"]["weighted_value"] == 0.8
+        assert retrieved["c_weighted"]["table_used"] == "fhwa"
+        assert len(retrieved["c_weighted"]["items"]) == 1
+
+    def test_get_weighted_coefficient_direct(self, temp_db):
+        """Obtener coeficiente directamente por tipo."""
+        project = temp_db.create_project(name="Direct Get Test")
+        basin = temp_db.create_basin(
+            project_id=project["id"],
+            name="Direct Basin",
+            area_ha=10,
+            slope_pct=2,
+            p3_10=50,
+        )
+
+        items = [
+            {"description": "Test", "area_ha": 10, "value": 0.65, "percentage": 100},
+        ]
+        temp_db.set_weighted_coefficient(basin["id"], "c", 0.65, items, "uruguay")
+
+        # Usar método directo
+        coef = temp_db.get_weighted_coefficient(basin["id"], "c")
+        assert coef is not None
+        assert coef["weighted_value"] == 0.65
+        assert coef["table_used"] == "uruguay"
+
+        # Tipo inexistente
+        coef_cn = temp_db.get_weighted_coefficient(basin["id"], "cn")
+        assert coef_cn is None
+
+    def test_delete_weighted_coefficient(self, temp_db):
+        """Eliminar coeficiente ponderado."""
+        project = temp_db.create_project(name="Delete Coef Test")
+        basin = temp_db.create_basin(
+            project_id=project["id"],
+            name="Delete Basin",
+            area_ha=10,
+            slope_pct=2,
+            p3_10=50,
+        )
+
+        items = [
+            {"description": "Test", "area_ha": 10, "value": 0.65, "percentage": 100},
+        ]
+        temp_db.set_weighted_coefficient(basin["id"], "c", 0.65, items)
+
+        result = temp_db.delete_weighted_coefficient(basin["id"], "c")
+        assert result is True
+
+        coef = temp_db.get_weighted_coefficient(basin["id"], "c")
+        assert coef is None
+
+    def test_weighted_coefficients_cascade_delete(self, temp_db):
+        """Coeficientes se eliminan al eliminar cuenca."""
+        project = temp_db.create_project(name="Cascade Coef Test")
+        basin = temp_db.create_basin(
+            project_id=project["id"],
+            name="Cascade Basin",
+            area_ha=10,
+            slope_pct=2,
+            p3_10=50,
+        )
+
+        items = [
+            {"description": "Test", "area_ha": 10, "value": 0.65, "percentage": 100},
+        ]
+        temp_db.set_weighted_coefficient(basin["id"], "c", 0.65, items)
+        temp_db.set_weighted_coefficient(basin["id"], "cn", 75, items)
+
+        # Eliminar cuenca
+        temp_db.delete_basin(basin["id"])
+
+        # Verificar que coeficientes fueron eliminados
+        coef_c = temp_db.get_weighted_coefficient(basin["id"], "c")
+        coef_cn = temp_db.get_weighted_coefficient(basin["id"], "cn")
+        assert coef_c is None
+        assert coef_cn is None
+
+    def test_coverage_items_order_preserved(self, temp_db):
+        """Orden de items de cobertura se preserva."""
+        project = temp_db.create_project(name="Order Test")
+        basin = temp_db.create_basin(
+            project_id=project["id"],
+            name="Order Basin",
+            area_ha=10,
+            slope_pct=2,
+            p3_10=50,
+        )
+
+        items = [
+            {"description": "Primero", "area_ha": 2, "value": 0.9, "percentage": 20},
+            {"description": "Segundo", "area_ha": 3, "value": 0.7, "percentage": 30},
+            {"description": "Tercero", "area_ha": 5, "value": 0.5, "percentage": 50},
+        ]
+        temp_db.set_weighted_coefficient(basin["id"], "c", 0.65, items)
+
+        retrieved = temp_db.get_basin(basin["id"])
+        retrieved_items = retrieved["c_weighted"]["items"]
+
+        assert retrieved_items[0]["description"] == "Primero"
+        assert retrieved_items[1]["description"] == "Segundo"
+        assert retrieved_items[2]["description"] == "Tercero"

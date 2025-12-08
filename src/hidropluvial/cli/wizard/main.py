@@ -7,18 +7,14 @@ from typing import Optional
 import typer
 import questionary
 
-from hidropluvial.cli.wizard.styles import WIZARD_STYLE, print_banner, get_console
+from hidropluvial.cli.wizard.styles import WIZARD_STYLE, print_banner
 from hidropluvial.cli.wizard.config import WizardConfig
 from hidropluvial.cli.wizard.runner import AnalysisRunner
-from hidropluvial.cli.wizard.menus import (
-    PostExecutionMenu,
-    continue_project_menu,
-    manage_projects_menu,
-)
+from hidropluvial.cli.wizard.menus import PostExecutionMenu
 from hidropluvial.project import Project, get_project_manager
 from hidropluvial.cli.theme import (
     print_header, print_section, print_success, print_warning,
-    print_info, print_error, print_separator,
+    print_info, print_error,
 )
 
 
@@ -33,35 +29,47 @@ def wizard_main() -> None:
         choice = questionary.select(
             "Que deseas hacer?",
             choices=[
-                "1. Nueva cuenca (analisis guiado)",
-                "2. Crear nuevo proyecto",
-                "3. Continuar proyecto/cuenca existente",
-                "4. Gestionar proyectos y cuencas",
-                "5. Ver comandos disponibles",
-                "6. Salir",
+                "1. Proyectos",
+                "2. Crear proyecto",
+                "3. Nueva cuenca",
+                "4. Ver comandos disponibles",
+                "5. Salir",
             ],
             style=WIZARD_STYLE,
         ).ask()
 
-        if choice is None or "6." in choice:
+        if choice is None or "5." in choice:
             print_info("Hasta pronto!")
             raise typer.Exit()
 
         try:
             if "1." in choice:
-                _new_basin()
+                _projects_menu()
             elif "2." in choice:
                 _create_project()
             elif "3." in choice:
-                continue_project_menu()
+                _new_basin()
             elif "4." in choice:
-                manage_projects_menu()
-            elif "5." in choice:
                 from hidropluvial.cli.commands import show_commands
                 show_commands()
         except SystemExit:
             # Capturar typer.Exit para volver al menu principal
             pass
+
+
+def _projects_menu() -> None:
+    """Muestra el visor interactivo de proyectos."""
+    from hidropluvial.cli.viewer.project_viewer import interactive_project_viewer
+
+    project_manager = get_project_manager()
+    projects = project_manager.list_projects()
+
+    if not projects:
+        print_info("\n  No hay proyectos guardados.")
+        print_info("  Usa 'Crear proyecto' o 'Nueva cuenca' para comenzar.\n")
+        return
+
+    interactive_project_viewer(project_manager)
 
 
 def _new_basin() -> None:
@@ -243,139 +251,11 @@ def _create_project() -> None:
 
 def _post_project_creation_menu(project: Project) -> None:
     """Menu de opciones despues de crear un proyecto."""
-    project_manager = get_project_manager()
+    from hidropluvial.cli.wizard.menus.basin_management import BasinManagementMenu
 
-    while True:
-        choice = questionary.select(
-            "Que deseas hacer ahora?",
-            choices=[
-                "Agregar nueva cuenca al proyecto",
-                "Importar cuenca desde otro proyecto",
-                "Volver al menu principal (proyecto guardado)",
-            ],
-            style=WIZARD_STYLE,
-        ).ask()
+    print_info(f"Proyecto '{project.name}' creado exitosamente")
+    print_info("Ahora puedes agregar cuencas al proyecto\n")
 
-        if choice is None or "Volver" in choice:
-            print_info(f"Proyecto '{project.name}' guardado sin cuencas")
-            print_info("Puedes agregar cuencas luego desde 'Continuar proyecto'")
-            raise typer.Exit()
-
-        if "Agregar nueva" in choice:
-            _add_basin_to_project(project)
-            # Recargar proyecto
-            project = project_manager.get_project(project.id)
-        elif "Importar" in choice:
-            _import_basin_to_project(project)
-            # Recargar proyecto
-            project = project_manager.get_project(project.id)
-
-
-def _add_basin_to_project(project: Project) -> None:
-    """Agrega una nueva cuenca al proyecto usando el wizard."""
-    print_info(f"Agregando cuenca al proyecto: {project.name}")
-
-    # Recolectar configuracion
-    config = WizardConfig.from_wizard()
-    if config is None:
-        return
-
-    # Mostrar resumen y confirmar
-    config.print_summary()
-
-    confirmar = questionary.confirm(
-        "\nEjecutar analisis?",
-        default=True,
-        style=WIZARD_STYLE,
-    ).ask()
-
-    if not confirmar:
-        print_warning("Operacion cancelada")
-        return
-
-    # Ejecutar con el proyecto existente
-    print_header("EJECUTANDO ANALISIS")
-
-    runner = AnalysisRunner(config, project_id=project.id)
-    updated_project, basin = runner.run()
-
-    print_success(f"Cuenca '{basin.name}' agregada al proyecto '{project.name}'")
-
-    # Menu post-ejecucion
-    menu = PostExecutionMenu(updated_project, basin, config.c, config.cn, config.length_m)
+    # Usar el menú de gestión de cuencas directamente
+    menu = BasinManagementMenu(project)
     menu.show()
-
-
-def _import_basin_to_project(project: Project) -> None:
-    """Importa una cuenca desde otro proyecto."""
-    project_manager = get_project_manager()
-
-    # Listar proyectos disponibles
-    other_projects = [p for p in project_manager.list_projects() if p['id'] != project.id]
-
-    if not other_projects:
-        print_warning("No hay otros proyectos disponibles para importar")
-        return
-
-    # Construir opciones
-    choices = []
-
-    for p in other_projects:
-        if p['n_basins'] > 0:
-            choices.append(f"{p['id']} - {p['name']} ({p['n_basins']} cuencas)")
-
-    if not choices:
-        print_warning("No hay otros proyectos con cuencas disponibles para importar")
-        return
-
-    choices.append("Cancelar")
-
-    choice = questionary.select(
-        "Selecciona el proyecto origen:",
-        choices=choices,
-        style=WIZARD_STYLE,
-    ).ask()
-
-    if choice is None or "Cancelar" in choice:
-        return
-
-    # Seleccionar cuenca del proyecto
-    source_id = choice.split(" - ")[0]
-    source_project = project_manager.get_project(source_id)
-
-    if not source_project or not source_project.basins:
-        print_warning("El proyecto no tiene cuencas")
-        return
-
-    basin_choices = [
-        f"{b.id} - {b.name} ({len(b.analyses)} analisis)"
-        for b in source_project.basins
-    ]
-    basin_choices.append("Cancelar")
-
-    basin_choice = questionary.select(
-        "Selecciona cuenca a importar:",
-        choices=basin_choices,
-        style=WIZARD_STYLE,
-    ).ask()
-
-    if basin_choice is None or "Cancelar" in basin_choice:
-        return
-
-    basin_id = basin_choice.split(" - ")[0]
-    source_basin = source_project.get_basin(basin_id)
-
-    if source_basin:
-        # Copiar la cuenca (crear nueva instancia)
-        from hidropluvial.project import Basin
-
-        # Clonar la cuenca con nuevo ID
-        basin_data = source_basin.model_dump()
-        basin_data['id'] = None  # Forzar nuevo ID
-        new_basin = Basin.model_validate(basin_data)
-
-        project.add_basin(new_basin)
-        project_manager.save_project(project)
-
-        print_success(f"Cuenca '{new_basin.name}' importada al proyecto '{project.name}'")
-        print_info(f"Nueva ID: {new_basin.id}")

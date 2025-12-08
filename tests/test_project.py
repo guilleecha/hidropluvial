@@ -161,9 +161,9 @@ class TestProjectManager:
         assert project.name == "Test Project"
         assert project.description == "Descripción"
 
-        # Verificar que se guardó
-        path = temp_dir / "projects" / f"{project.id}.json"
-        assert path.exists()
+        # Verificar que se guardó en la base de datos
+        db_path = temp_dir / "hidropluvial.db"
+        assert db_path.exists()
 
     def test_list_projects(self, temp_dir):
         """Manager lista proyectos."""

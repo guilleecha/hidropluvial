@@ -17,9 +17,12 @@ from hidropluvial.database.basins import BasinRepository
 from hidropluvial.database.analyses import AnalysisRepository
 
 from hidropluvial.models import (
+    Project,
+    Basin,
     TcResult,
     StormResult,
     HydrographResult,
+    AnalysisRun,
     WeightedCoefficient,
 )
 
@@ -256,6 +259,231 @@ class Database:
     ) -> list[dict]:
         """Busca análisis con filtros."""
         return self._analyses.search(storm_type, return_period, min_peak_flow, max_peak_flow)
+
+    # ========================================================================
+    # Métodos que retornan modelos Pydantic (para compatibilidad con código existente)
+    # ========================================================================
+
+    def _dict_to_tc_result(self, d: dict) -> TcResult:
+        """Convierte diccionario a TcResult."""
+        return TcResult(
+            method=d["method"],
+            tc_hr=d["tc_hr"],
+            tc_min=d["tc_min"],
+            parameters=d.get("parameters", {}),
+        )
+
+    def _dict_to_analysis(self, d: dict) -> AnalysisRun:
+        """Convierte diccionario a AnalysisRun."""
+        tc = TcResult(
+            method=d["tc"]["method"],
+            tc_hr=d["tc"]["tc_hr"],
+            tc_min=d["tc"]["tc_min"],
+            parameters=d["tc"].get("parameters", {}),
+        )
+        storm = StormResult(
+            type=d["storm"]["type"],
+            return_period=d["storm"]["return_period"],
+            duration_hr=d["storm"]["duration_hr"],
+            total_depth_mm=d["storm"]["total_depth_mm"],
+            peak_intensity_mmhr=d["storm"]["peak_intensity_mmhr"],
+            n_intervals=d["storm"]["n_intervals"],
+            time_min=d["storm"].get("time_min", []),
+            intensity_mmhr=d["storm"].get("intensity_mmhr", []),
+        )
+        hydrograph = HydrographResult(
+            tc_method=d["hydrograph"]["tc_method"],
+            tc_min=d["hydrograph"]["tc_min"],
+            storm_type=d["hydrograph"]["storm_type"],
+            return_period=d["hydrograph"]["return_period"],
+            x_factor=d["hydrograph"].get("x_factor"),
+            peak_flow_m3s=d["hydrograph"]["peak_flow_m3s"],
+            time_to_peak_hr=d["hydrograph"]["time_to_peak_hr"],
+            time_to_peak_min=d["hydrograph"]["time_to_peak_min"],
+            tp_unit_hr=d["hydrograph"].get("tp_unit_hr"),
+            tp_unit_min=d["hydrograph"].get("tp_unit_min"),
+            tb_hr=d["hydrograph"].get("tb_hr"),
+            tb_min=d["hydrograph"].get("tb_min"),
+            volume_m3=d["hydrograph"]["volume_m3"],
+            total_depth_mm=d["hydrograph"]["total_depth_mm"],
+            runoff_mm=d["hydrograph"]["runoff_mm"],
+            time_hr=d["hydrograph"].get("time_hr", []),
+            flow_m3s=d["hydrograph"].get("flow_m3s", []),
+        )
+        return AnalysisRun(
+            id=d["id"],
+            timestamp=d.get("timestamp"),
+            note=d.get("note"),
+            tc=tc,
+            storm=storm,
+            hydrograph=hydrograph,
+        )
+
+    def _dict_to_basin(self, d: dict) -> Basin:
+        """Convierte diccionario a Basin."""
+        tc_results = [self._dict_to_tc_result(tc) for tc in d.get("tc_results", [])]
+        analyses = [self._dict_to_analysis(a) for a in d.get("analyses", [])]
+
+        # Manejar weighted coefficients
+        c_weighted = None
+        if d.get("c_weighted"):
+            c_weighted = WeightedCoefficient.model_validate(d["c_weighted"])
+        cn_weighted = None
+        if d.get("cn_weighted"):
+            cn_weighted = WeightedCoefficient.model_validate(d["cn_weighted"])
+
+        return Basin(
+            id=d["id"],
+            name=d["name"],
+            area_ha=d["area_ha"],
+            slope_pct=d["slope_pct"],
+            length_m=d.get("length_m"),
+            p3_10=d["p3_10"],
+            c=d.get("c"),
+            cn=d.get("cn"),
+            c_weighted=c_weighted,
+            cn_weighted=cn_weighted,
+            tc_results=tc_results,
+            analyses=analyses,
+            notes=d.get("notes"),
+            created_at=d.get("created_at"),
+            updated_at=d.get("updated_at"),
+        )
+
+    def _dict_to_project(self, d: dict, include_basins: bool = True) -> Project:
+        """Convierte diccionario a Project."""
+        basins = []
+        if include_basins:
+            basin_dicts = self.get_project_basins(d["id"])
+            for bd in basin_dicts:
+                # Obtener cuenca completa con análisis
+                full_basin = self.get_basin(bd["id"])
+                if full_basin:
+                    basins.append(self._dict_to_basin(full_basin))
+
+        return Project(
+            id=d["id"],
+            name=d["name"],
+            description=d.get("description", ""),
+            author=d.get("author", ""),
+            location=d.get("location", ""),
+            notes=d.get("notes"),
+            tags=d.get("tags", []),
+            basins=basins,
+            created_at=d.get("created_at"),
+            updated_at=d.get("updated_at"),
+        )
+
+    def get_project_model(self, project_id: str) -> Optional[Project]:
+        """Obtiene un proyecto como modelo Pydantic."""
+        d = self.get_project(project_id)
+        if d is None:
+            return None
+        return self._dict_to_project(d)
+
+    def get_basin_model(self, basin_id: str) -> Optional[Basin]:
+        """Obtiene una cuenca como modelo Pydantic."""
+        d = self.get_basin(basin_id)
+        if d is None:
+            return None
+        return self._dict_to_basin(d)
+
+    def list_projects_model(self) -> list[Project]:
+        """Lista todos los proyectos como modelos Pydantic (sin cuencas para eficiencia)."""
+        projects = []
+        for d in self.list_projects():
+            # No cargar cuencas para la lista
+            project = Project(
+                id=d["id"],
+                name=d["name"],
+                description=d.get("description", ""),
+                author=d.get("author", ""),
+                location=d.get("location", ""),
+                notes=d.get("notes"),
+                tags=d.get("tags", []),
+                basins=[],  # No cargar para eficiencia
+                created_at=d.get("created_at"),
+                updated_at=d.get("updated_at"),
+            )
+            projects.append(project)
+        return projects
+
+    def save_project_model(self, project: Project) -> None:
+        """Guarda un proyecto desde modelo Pydantic."""
+        # Actualizar metadatos del proyecto
+        self.update_project(
+            project.id,
+            name=project.name,
+            description=project.description,
+            author=project.author,
+            location=project.location,
+            notes=project.notes,
+            tags=project.tags,
+        )
+
+    def create_project_model(
+        self,
+        name: str,
+        description: str = "",
+        author: str = "",
+        location: str = "",
+        notes: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+    ) -> Project:
+        """Crea un proyecto y retorna modelo Pydantic."""
+        d = self.create_project(name, description, author, location, notes, tags)
+        return Project(
+            id=d["id"],
+            name=d["name"],
+            description=d.get("description", ""),
+            author=d.get("author", ""),
+            location=d.get("location", ""),
+            notes=d.get("notes"),
+            tags=d.get("tags", []),
+            basins=[],
+            created_at=d.get("created_at"),
+            updated_at=d.get("updated_at"),
+        )
+
+    def create_basin_model(
+        self,
+        project_id: str,
+        name: str,
+        area_ha: float,
+        slope_pct: float,
+        p3_10: float,
+        c: Optional[float] = None,
+        cn: Optional[int] = None,
+        length_m: Optional[float] = None,
+        notes: Optional[str] = None,
+    ) -> Basin:
+        """Crea una cuenca y retorna modelo Pydantic."""
+        d = self.create_basin(project_id, name, area_ha, slope_pct, p3_10, c, cn, length_m, notes)
+        return self._dict_to_basin(d)
+
+    def add_analysis_model(
+        self,
+        basin_id: str,
+        tc: TcResult,
+        storm: StormResult,
+        hydrograph: HydrographResult,
+        note: Optional[str] = None,
+    ) -> AnalysisRun:
+        """Agrega un análisis y retorna modelo Pydantic."""
+        d = self.add_analysis(basin_id, tc, storm, hydrograph, note)
+        return AnalysisRun(
+            id=d["id"],
+            timestamp=d.get("timestamp"),
+            note=note,
+            tc=tc,
+            storm=storm,
+            hydrograph=hydrograph,
+        )
+
+    def get_basin_analyses_model(self, basin_id: str) -> list[AnalysisRun]:
+        """Obtiene análisis de una cuenca como modelos Pydantic."""
+        analyses = self.get_basin_analyses(basin_id)
+        return [self._dict_to_analysis(a) for a in analyses]
 
 
 # ============================================================================

@@ -52,7 +52,8 @@ from hidropluvial.models import (
     HydrographResult,
     AnalysisRun,
 )
-from hidropluvial.project import Project, get_project_manager
+from hidropluvial.database import get_database
+from hidropluvial.models import Project
 
 
 def _get_amc_enum(amc_str: str) -> AntecedentMoistureCondition:
@@ -128,7 +129,7 @@ class AnalysisRunner:
                        Si no se especifica, se crea un proyecto por defecto.
         """
         self.config = config
-        self.project_manager = get_project_manager()
+        self.db = get_database()
         self.project: Optional[Project] = None
         self.basin: Optional[Basin] = None
         self.project_id = project_id
@@ -149,7 +150,7 @@ class AnalysisRunner:
         self._print_summary()
 
         # Guardar proyecto con la cuenca actualizada
-        self.project_manager.save_project(self.project)
+        self.db.save_project_model(self.project)
 
         return self.project, self.basin
 
@@ -157,18 +158,19 @@ class AnalysisRunner:
         """Crea o obtiene el proyecto y crea la cuenca."""
         # Si hay project_id, usar ese proyecto
         if self.project_id:
-            self.project = self.project_manager.get_project(self.project_id)
+            self.project = self.db.get_project_model(self.project_id)
 
         # Si no hay proyecto o no se encontró, crear uno por defecto
         if not self.project:
-            self.project = self.project_manager.create_project(
+            self.project = self.db.create_project_model(
                 name=f"Proyecto - {self.config.nombre}",
                 description=f"Proyecto creado automaticamente para la cuenca {self.config.nombre}",
             )
             print_success(f"Proyecto creado: {self.project.id}")
 
-        # Crear cuenca con datos del wizard
-        self.basin = Basin(
+        # Crear cuenca en la base de datos
+        self.basin = self.db.create_basin_model(
+            project_id=self.project.id,
             name=self.config.nombre,
             area_ha=self.config.area_ha,
             slope_pct=self.config.slope_pct,
@@ -190,14 +192,17 @@ class AnalysisRunner:
                 )
                 for d in self.config.c_weighted_data["items"]
             ]
-            self.basin.c_weighted = WeightedCoefficient(
+            c_weighted = WeightedCoefficient(
                 type="c",
                 table_used=self.config.c_weighted_data["table_key"],
                 weighted_value=self.config.c,
                 items=items,
                 base_tr=self.config.c_weighted_data["base_tr"],
             )
+            self.basin.c_weighted = c_weighted
+            self.db.update_basin(self.basin.id, c_weighted=c_weighted)
 
+        # Agregar al modelo en memoria para compatibilidad
         self.project.add_basin(self.basin)
         print_success(f"Cuenca creada: {self.basin.id}")
 
@@ -237,6 +242,8 @@ class AnalysisRunner:
                     tc_min=tc_min,
                     parameters=tc_params,
                 )
+                # Guardar en DB y en memoria
+                self.db.add_tc_result(self.basin.id, method, tc_hr, tc_params)
                 self.basin.add_tc_result(result)
                 print_result_row(f"Tc ({method})", f"{tc_min:.1f}", "min")
 
@@ -472,12 +479,15 @@ class AnalysisRunner:
             flow_m3s=[float(q) for q in hydrograph_flow],
         )
 
-        analysis = AnalysisRun(
+        # Guardar análisis en la base de datos
+        analysis = self.db.add_analysis_model(
+            basin_id=self.basin.id,
             tc=tc_result_obj,
             storm=storm_result,
             hydrograph=hydrograph_result,
         )
 
+        # Agregar al modelo en memoria para compatibilidad
         self.basin.add_analysis(analysis)
 
     def _generate_report(self) -> None:
@@ -548,6 +558,7 @@ class AdditionalAnalysisRunner:
         custom_hyetograph_time: list = None,
         custom_hyetograph_depth: list = None,
     ):
+        self.db = get_database()
         self.basin = basin
         self.c = c
         self.cn = cn
@@ -784,12 +795,15 @@ class AdditionalAnalysisRunner:
                             flow_m3s=[float(q) for q in hydrograph_flow],
                         )
 
-                        analysis = AnalysisRun(
+                        # Guardar análisis en la base de datos
+                        analysis = self.db.add_analysis_model(
+                            basin_id=self.basin.id,
                             tc=tc_result_obj,
                             storm=storm_result,
                             hydrograph=hydrograph_result,
                         )
 
+                        # Agregar al modelo en memoria
                         self.basin.add_analysis(analysis)
 
                         n_analyses += 1

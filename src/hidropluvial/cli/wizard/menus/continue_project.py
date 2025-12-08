@@ -6,7 +6,8 @@ from typing import Optional
 
 from hidropluvial.cli.wizard.menus.base import BaseMenu
 from hidropluvial.cli.theme import get_console, print_basins_detail_table
-from hidropluvial.project import Project, Basin, ProjectManager
+from hidropluvial.database import get_database
+from hidropluvial.models import Project, Basin
 
 
 class ContinueProjectMenu(BaseMenu):
@@ -14,13 +15,13 @@ class ContinueProjectMenu(BaseMenu):
 
     def __init__(self):
         super().__init__()
-        self.project_manager = ProjectManager()
+        self.db = get_database()
         self.project: Optional[Project] = None
         self.basin: Optional[Basin] = None
 
     def show(self) -> None:
         """Muestra el menu para continuar un proyecto."""
-        projects = self.project_manager.list_projects()
+        projects = self.db.list_projects()
 
         if not projects:
             self.echo("\n  No hay proyectos guardados.")
@@ -32,7 +33,7 @@ class ContinueProjectMenu(BaseMenu):
         if not selection:
             return
 
-        self.project = self.project_manager.get_project(selection)
+        self.project = self.db.get_project_model(selection)
         if not self.project:
             self.error(f"No se pudo cargar el proyecto {selection}")
             return
@@ -64,7 +65,7 @@ class ContinueProjectMenu(BaseMenu):
         """Muestra el menu de acciones para el proyecto."""
         while True:
             # Recargar proyecto
-            self.project = self.project_manager.get_project(self.project.id)
+            self.project = self.db.get_project_model(self.project.id)
 
             self._show_project_header()
 
@@ -84,10 +85,10 @@ class ContinueProjectMenu(BaseMenu):
             if action is None or "Salir" in action:
                 return
             elif "otro proyecto" in action.lower():
-                projects = self.project_manager.list_projects()
+                projects = self.db.list_projects()
                 selection = self._select_project(projects)
                 if selection:
-                    self.project = self.project_manager.get_project(selection)
+                    self.project = self.db.get_project_model(selection)
                 else:
                     return
             else:
@@ -184,7 +185,7 @@ class ContinueProjectMenu(BaseMenu):
         if new_author is not None:
             self.project.author = new_author
 
-        self.project_manager.save_project(self.project)
+        self.db.save_project_model(self.project)
         self.echo("  Metadatos actualizados.\n")
 
     def _delete_project(self) -> bool:
@@ -193,7 +194,7 @@ class ContinueProjectMenu(BaseMenu):
             f"Seguro que deseas eliminar el proyecto '{self.project.name}' y todas sus cuencas?",
             default=False,
         ):
-            if self.project_manager.delete_project(self.project.id):
+            if self.db.delete_project(self.project.id):
                 self.echo(f"\n  Proyecto {self.project.id} eliminado.\n")
                 return True
             else:
@@ -301,7 +302,7 @@ class ContinueProjectMenu(BaseMenu):
                 self.basin.analyses = [a for a in self.basin.analyses if a.id != analysis_id]
                 # Guardar proyecto para persistir cambios
                 if self.project:
-                    self.project_manager.save_project(self.project)
+                    self.db.save_project_model(self.project)
                 return True
             return False
 
@@ -347,7 +348,7 @@ class ContinueProjectMenu(BaseMenu):
                 self.basin.analyses = [a for a in self.basin.analyses if a.id != analysis_id]
                 # Guardar proyecto para persistir cambios
                 if self.project:
-                    self.project_manager.save_project(self.project)
+                    self.db.save_project_model(self.project)
                 return True
             return False
 
@@ -451,7 +452,7 @@ class ContinueProjectMenu(BaseMenu):
 
         # Reload basin from database if it's in a project
         if self.project:
-            self.project = self.project_manager.get_project(self.project.id)
+            self.project = self.db.get_project_model(self.project.id)
             self.basin = self.project.get_basin(self.basin.id)
 
     def _filter_results(self) -> None:
@@ -500,7 +501,7 @@ class ContinueProjectMenu(BaseMenu):
 
         if result == "modified" and self.project:
             # Reload basin from project
-            self.project = self.project_manager.get_project(self.project.id)
+            self.project = self.db.get_project_model(self.project.id)
             self.basin = self.project.get_basin(self.basin.id)
 
     def _manage_notes(self) -> None:
@@ -515,7 +516,7 @@ class ContinueProjectMenu(BaseMenu):
             self.basin.notes = new_notes
             # Save basin in project
             if self.project:
-                self.project_manager.save_project(self.project)
+                self.db.save_project_model(self.project)
             self.echo("  Notas guardadas." if new_notes else "  Notas eliminadas.")
 
     def _delete_basin(self) -> bool:
@@ -524,7 +525,7 @@ class ContinueProjectMenu(BaseMenu):
             # Si esta en un proyecto, eliminar del proyecto
             if self.project:
                 if self.project.remove_basin(self.basin.id):
-                    self.project_manager.save_project(self.project)
+                    self.db.save_project_model(self.project)
                     self.echo(f"\n  Cuenca '{self.basin.name}' eliminada del proyecto.\n")
                     return True
                 else:

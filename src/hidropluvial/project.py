@@ -1,12 +1,10 @@
 """
 Módulo de gestión de proyectos y cuencas hidrológicas.
 
-Estructura jerárquica:
-- Project: Contenedor de múltiples cuencas (ej: "Estudio Arroyo XYZ")
-- Basin: Una cuenca con sus análisis
+Este módulo proporciona una interfaz de alto nivel sobre la base de datos SQLite.
+Mantiene compatibilidad con la API anterior para no romper código existente.
 """
 
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -22,31 +20,32 @@ from hidropluvial.models import (
 
 
 # ============================================================================
-# Gestor de Proyectos
+# Gestor de Proyectos (usa Database internamente)
 # ============================================================================
 
 class ProjectManager:
-    """Gestiona proyectos y cuencas hidrológicas."""
+    """
+    Gestiona proyectos y cuencas hidrológicas.
+
+    Esta clase es un adaptador sobre la base de datos SQLite.
+    Mantiene la misma API que la versión anterior para compatibilidad.
+    """
 
     def __init__(self, data_dir: Optional[Path] = None):
         """
         Inicializa el gestor de proyectos.
 
         Args:
-            data_dir: Directorio base para datos.
-                     Default: ~/.hidropluvial/
+            data_dir: Si se especifica, usa una base de datos en ese directorio.
+                     Si es None, usa la base de datos global.
         """
-        if data_dir is None:
-            data_dir = Path.home() / ".hidropluvial"
-
-        self.data_dir = Path(data_dir)
-        self.projects_dir = self.data_dir / "projects"
-
-        self.projects_dir.mkdir(parents=True, exist_ok=True)
-
-    def _project_path(self, project_id: str) -> Path:
-        """Retorna la ruta del archivo de proyecto."""
-        return self.projects_dir / f"{project_id}.json"
+        from hidropluvial.database import Database, get_database
+        if data_dir is not None:
+            # Usar una base de datos específica en ese directorio
+            db_path = Path(data_dir) / "hidropluvial.db"
+            self._db = Database(db_path)
+        else:
+            self._db = get_database()
 
     # ========================================================================
     # Operaciones de Proyecto
@@ -60,76 +59,37 @@ class ProjectManager:
         location: str = "",
     ) -> Project:
         """Crea un nuevo proyecto vacío."""
-        project = Project(
+        return self._db.create_project_model(
             name=name,
             description=description,
             author=author,
             location=location,
         )
-        self.save_project(project)
-        return project
 
     def save_project(self, project: Project) -> Path:
-        """Guarda un proyecto a disco."""
-        project.updated_at = datetime.now().isoformat()
-        path = self._project_path(project.id)
-
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(project.model_dump(), f, indent=2, ensure_ascii=False)
-
-        return path
+        """Guarda cambios de un proyecto."""
+        self._db.save_project_model(project)
+        # Retornar path ficticio para compatibilidad
+        return Path.home() / ".hidropluvial" / "hidropluvial.db"
 
     def load_project(self, project_id: str) -> Project:
-        """Carga un proyecto desde disco."""
-        path = self._project_path(project_id)
-
-        if not path.exists():
+        """Carga un proyecto desde la base de datos."""
+        project = self._db.get_project_model(project_id)
+        if project is None:
             raise FileNotFoundError(f"Proyecto no encontrado: {project_id}")
-
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        return Project.model_validate(data)
+        return project
 
     def get_project(self, project_id: str) -> Optional[Project]:
         """Obtiene un proyecto por ID (parcial o completo)."""
-        # Buscar por ID exacto o parcial
-        for path in self.projects_dir.glob("*.json"):
-            if path.stem == project_id or path.stem.startswith(project_id):
-                return self.load_project(path.stem)
-        return None
+        return self._db.get_project_model(project_id)
 
     def list_projects(self) -> list[dict]:
         """Lista todos los proyectos disponibles."""
-        projects = []
-        for path in sorted(
-            self.projects_dir.glob("*.json"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        ):
-            try:
-                project = self.load_project(path.stem)
-                projects.append({
-                    "id": project.id,
-                    "name": project.name,
-                    "description": project.description,
-                    "author": project.author,
-                    "n_basins": project.n_basins,
-                    "total_analyses": project.total_analyses,
-                    "updated_at": project.updated_at,
-                })
-            except Exception:
-                continue
-        return projects
+        return self._db.list_projects()
 
     def delete_project(self, project_id: str) -> bool:
         """Elimina un proyecto."""
-        project = self.get_project(project_id)
-        if project:
-            path = self._project_path(project.id)
-            path.unlink()
-            return True
-        return False
+        return self._db.delete_project(project_id)
 
     # ========================================================================
     # Operaciones de Cuenca (Basin)
@@ -147,7 +107,8 @@ class ProjectManager:
         length_m: Optional[float] = None,
     ) -> Basin:
         """Crea una nueva cuenca y la agrega al proyecto."""
-        basin = Basin(
+        basin = self._db.create_basin_model(
+            project_id=project.id,
             name=name,
             area_ha=area_ha,
             slope_pct=slope_pct,
@@ -156,14 +117,25 @@ class ProjectManager:
             cn=cn,
             length_m=length_m,
         )
+        # Agregar al modelo en memoria
         project.add_basin(basin)
-        self.save_project(project)
         return basin
 
     def update_basin(self, project: Project, basin: Basin) -> None:
         """Actualiza una cuenca en el proyecto."""
-        basin.updated_at = datetime.now().isoformat()
-        self.save_project(project)
+        self._db.update_basin(
+            basin_id=basin.id,
+            name=basin.name,
+            area_ha=basin.area_ha,
+            slope_pct=basin.slope_pct,
+            length_m=basin.length_m,
+            p3_10=basin.p3_10,
+            c=basin.c,
+            cn=basin.cn,
+            c_weighted=basin.c_weighted,
+            cn_weighted=basin.cn_weighted,
+            notes=basin.notes,
+        )
 
     def add_tc_result(
         self,
@@ -180,8 +152,10 @@ class ProjectManager:
             tc_min=tc_hr * 60,
             parameters=parameters,
         )
+        # Guardar en DB
+        self._db.add_tc_result(basin.id, method, tc_hr, parameters)
+        # Agregar al modelo en memoria
         basin.add_tc_result(result)
-        self.save_project(project)
         return result
 
     def add_analysis(
@@ -250,14 +224,16 @@ class ProjectManager:
             flow_m3s=hydrograph_flow_m3s or [],
         )
 
-        analysis = AnalysisRun(
+        # Guardar en DB
+        analysis = self._db.add_analysis_model(
+            basin_id=basin.id,
             tc=tc_result,
             storm=storm,
             hydrograph=hydrograph,
         )
 
+        # Agregar al modelo en memoria
         basin.add_analysis(analysis)
-        self.save_project(project)
         return analysis
 
 

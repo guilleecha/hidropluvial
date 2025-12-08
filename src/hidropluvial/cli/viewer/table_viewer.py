@@ -11,9 +11,11 @@ Permite navegar entre análisis usando:
 
 from typing import Callable, Optional
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.table import Table
 from rich.text import Text
+from rich.panel import Panel
+from rich.live import Live
 from rich import box
 
 from hidropluvial.cli.theme import get_palette
@@ -154,13 +156,101 @@ def build_interactive_table(
     return table
 
 
+def build_display(
+    all_analyses: list,
+    current_idx: int,
+    session_name: str,
+    max_visible_rows: int,
+    on_edit_note: bool,
+    on_delete: bool,
+) -> Group:
+    """Construye el display completo para Live update."""
+    p = get_palette()
+    n_analyses = len(all_analyses)
+
+    # Calcular ventana visible centrada en current_idx
+    if n_analyses <= max_visible_rows:
+        start_idx = 0
+        end_idx = n_analyses
+    else:
+        half = max_visible_rows // 2
+        start_idx = current_idx - half
+        end_idx = start_idx + max_visible_rows
+
+        if start_idx < 0:
+            start_idx = 0
+            end_idx = max_visible_rows
+        elif end_idx > n_analyses:
+            end_idx = n_analyses
+            start_idx = end_idx - max_visible_rows
+
+    visible_analyses = all_analyses[start_idx:end_idx]
+    selected_in_visible = current_idx - start_idx
+
+    # Encabezado
+    header_text = Text()
+    header_text.append(f"  {session_name} ", style=f"bold {p.secondary}")
+    header_text.append(f"({current_idx + 1}/{n_analyses})", style=p.muted)
+    if n_analyses > max_visible_rows:
+        header_text.append(f" [mostrando {start_idx + 1}-{end_idx}]", style=f"dim {p.muted}")
+
+    # Tabla
+    table = build_interactive_table(
+        visible_analyses,
+        selected_in_visible,
+        start_offset=start_idx,
+        title=f"Tabla Resumen - {session_name}",
+    )
+
+    # Info del seleccionado
+    analysis = all_analyses[current_idx]
+    info_text = Text()
+    info_text.append("  Seleccionado: ", style=p.muted)
+    info_text.append(f"[{current_idx}] ", style=f"bold {p.primary}")
+    info_text.append(f"{analysis.hydrograph.tc_method} ", style="bold")
+    info_text.append(f"{analysis.storm.type} Tr{analysis.storm.return_period}")
+    if analysis.note:
+        note_preview = analysis.note[:40] + "..." if len(analysis.note) > 40 else analysis.note
+        info_text.append(f" - Nota: {note_preview}", style=f"italic {p.muted}")
+
+    # Navegación
+    nav_text = Text()
+    nav_text.append("  [", style=p.muted)
+    nav_text.append("↑↓", style=f"bold {p.primary}")
+    nav_text.append("] Navegar  ", style=p.muted)
+    nav_text.append("[", style=p.muted)
+    nav_text.append("Enter", style=f"bold {p.primary}")
+    nav_text.append("] Ver ficha  ", style=p.muted)
+    if on_edit_note:
+        nav_text.append("[", style=p.muted)
+        nav_text.append("e", style=f"bold {p.primary}")
+        nav_text.append("] Nota  ", style=p.muted)
+    if on_delete:
+        nav_text.append("[", style=p.muted)
+        nav_text.append("d", style=f"bold {p.primary}")
+        nav_text.append("] Eliminar  ", style=p.muted)
+    nav_text.append("[", style=p.muted)
+    nav_text.append("q", style=f"bold {p.primary}")
+    nav_text.append("] Salir", style=p.muted)
+
+    return Group(
+        Text(""),  # Línea vacía arriba
+        header_text,
+        Text(""),
+        table,
+        Text(""),
+        info_text,
+        nav_text,
+    )
+
+
 def interactive_table_viewer(
     analyses: list,
     session_name: str,
     on_edit_note: Optional[Callable[[str, str], Optional[str]]] = None,
     on_delete: Optional[Callable[[str], bool]] = None,
     on_view_detail: Optional[Callable[[int], None]] = None,
-    max_visible_rows: int = 10,
+    max_visible_rows: int = 25,
 ) -> list:
     """
     Visor interactivo de tabla resumen.
@@ -193,120 +283,68 @@ def interactive_table_viewer(
     all_analyses = list(analyses)
     current_idx = 0
 
-    while True:
-        clear_screen()
+    clear_screen()
 
-        n_analyses = len(all_analyses)
+    with Live(console=console, refresh_per_second=10, screen=False) as live:
+        while True:
+            n_analyses = len(all_analyses)
 
-        if n_analyses == 0:
-            console.print("\n  [yellow]No quedan análisis.[/yellow]")
-            console.print("  Presiona [bold]q[/bold] para salir.\n")
+            if n_analyses == 0:
+                live.update(Text("\n  No quedan análisis. Presiona q para salir.\n", style="yellow"))
+                key = get_key()
+                if key == 'q' or key == 'esc':
+                    break
+                continue
+
+            # Ajustar índice si está fuera de rango
+            if current_idx >= n_analyses:
+                current_idx = n_analyses - 1
+
+            # Actualizar display
+            display = build_display(
+                all_analyses,
+                current_idx,
+                session_name,
+                max_visible_rows,
+                on_edit_note is not None,
+                on_delete is not None,
+            )
+            live.update(display)
+
+            # Esperar input
             key = get_key()
+
             if key == 'q' or key == 'esc':
                 break
-            continue
+            elif key == 'up':
+                current_idx = (current_idx - 1) % n_analyses
+            elif key == 'down':
+                current_idx = (current_idx + 1) % n_analyses
+            elif key == 'enter' and on_view_detail:
+                live.stop()
+                on_view_detail(current_idx)
+                clear_screen()
+                live.start()
+            elif key == 'e' and on_edit_note:
+                live.stop()
+                analysis = all_analyses[current_idx]
+                current_note = getattr(analysis, 'note', None) or ""
+                new_note = on_edit_note(analysis.id, current_note)
+                if new_note is not None:
+                    analysis.note = new_note if new_note else None
+                clear_screen()
+                live.start()
+            elif key == 'd' and on_delete:
+                live.stop()
+                analysis = all_analyses[current_idx]
+                if on_delete(analysis.id):
+                    all_analyses = [a for a in all_analyses if a.id != analysis.id]
+                    if current_idx >= len(all_analyses):
+                        current_idx = max(0, len(all_analyses) - 1)
+                clear_screen()
+                live.start()
 
-        # Ajustar índice si está fuera de rango
-        if current_idx >= n_analyses:
-            current_idx = n_analyses - 1
-
-        # Calcular ventana visible centrada en current_idx
-        if n_analyses <= max_visible_rows:
-            start_idx = 0
-            end_idx = n_analyses
-        else:
-            # Centrar la ventana en current_idx
-            half = max_visible_rows // 2
-            start_idx = current_idx - half
-            end_idx = start_idx + max_visible_rows
-
-            # Ajustar si estamos cerca del inicio o final
-            if start_idx < 0:
-                start_idx = 0
-                end_idx = max_visible_rows
-            elif end_idx > n_analyses:
-                end_idx = n_analyses
-                start_idx = end_idx - max_visible_rows
-
-        visible_analyses = all_analyses[start_idx:end_idx]
-        selected_in_visible = current_idx - start_idx
-
-        # Encabezado
-        console.print()
-        header_text = Text()
-        header_text.append(f"  {session_name} ", style=f"bold {p.secondary}")
-        header_text.append(f"({current_idx + 1}/{n_analyses})", style=p.muted)
-        if n_analyses > max_visible_rows:
-            header_text.append(f" [mostrando {start_idx + 1}-{end_idx}]", style=f"dim {p.muted}")
-        console.print(header_text)
-        console.print()
-
-        # Tabla con fila seleccionada
-        table = build_interactive_table(
-            visible_analyses,
-            selected_in_visible,
-            start_offset=start_idx,
-            title=f"Tabla Resumen - {session_name}",
-        )
-        console.print(table)
-
-        # Información del análisis seleccionado
-        analysis = all_analyses[current_idx]
-        console.print()
-        info_text = Text()
-        info_text.append("  Seleccionado: ", style=p.muted)
-        info_text.append(f"[{current_idx}] ", style=f"bold {p.primary}")
-        info_text.append(f"{analysis.hydrograph.tc_method} ", style="bold")
-        info_text.append(f"{analysis.storm.type} Tr{analysis.storm.return_period}")
-        if analysis.note:
-            info_text.append(f" - Nota: {analysis.note[:40]}...", style=f"italic {p.muted}")
-        console.print(info_text)
-
-        # Instrucciones de navegación
-        nav_text = Text()
-        nav_text.append("\n  [", style=p.muted)
-        nav_text.append("↑↓", style=f"bold {p.primary}")
-        nav_text.append("] Navegar  ", style=p.muted)
-        nav_text.append("[", style=p.muted)
-        nav_text.append("Enter", style=f"bold {p.primary}")
-        nav_text.append("] Ver ficha  ", style=p.muted)
-        if on_edit_note:
-            nav_text.append("[", style=p.muted)
-            nav_text.append("e", style=f"bold {p.primary}")
-            nav_text.append("] Nota  ", style=p.muted)
-        if on_delete:
-            nav_text.append("[", style=p.muted)
-            nav_text.append("d", style=f"bold {p.primary}")
-            nav_text.append("] Eliminar  ", style=p.muted)
-        nav_text.append("[", style=p.muted)
-        nav_text.append("q", style=f"bold {p.primary}")
-        nav_text.append("] Salir", style=p.muted)
-        console.print(nav_text)
-
-        # Esperar input
-        key = get_key()
-
-        if key == 'q' or key == 'esc':
-            clear_screen()
-            console.print(f"\n  Tabla cerrada. Cuenca: {session_name}\n")
-            break
-        elif key == 'up':
-            current_idx = (current_idx - 1) % n_analyses
-        elif key == 'down':
-            current_idx = (current_idx + 1) % n_analyses
-        elif key == 'enter' and on_view_detail:
-            on_view_detail(current_idx)
-        elif key == 'e' and on_edit_note:
-            analysis = all_analyses[current_idx]
-            current_note = getattr(analysis, 'note', None) or ""
-            new_note = on_edit_note(analysis.id, current_note)
-            if new_note is not None:
-                analysis.note = new_note if new_note else None
-        elif key == 'd' and on_delete:
-            analysis = all_analyses[current_idx]
-            if on_delete(analysis.id):
-                all_analyses = [a for a in all_analyses if a.id != analysis.id]
-                if current_idx >= len(all_analyses):
-                    current_idx = max(0, len(all_analyses) - 1)
+    clear_screen()
+    console.print(f"\n  Tabla cerrada. Cuenca: {session_name}\n")
 
     return all_analyses

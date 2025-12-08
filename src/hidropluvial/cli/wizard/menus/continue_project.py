@@ -270,11 +270,101 @@ class ContinueProjectMenu(BaseMenu):
 
     def _show_table(self) -> None:
         """Muestra tabla resumen interactiva."""
-        self.show_summary_table()
+        if not self.basin.analyses:
+            self.echo("  No hay análisis disponibles.")
+            return
+
+        from hidropluvial.cli.viewer.table_viewer import interactive_table_viewer
+        from hidropluvial.cli.viewer.terminal import clear_screen
+        from hidropluvial.database import get_database
+        from hidropluvial.cli.wizard.styles import get_text_kwargs, get_confirm_kwargs
+        import questionary
+
+        db = get_database()
+
+        def on_edit_note(analysis_id: str, current_note: str) -> str:
+            clear_screen()
+            print(f"\n  Editando nota del análisis {analysis_id[:8]}...\n")
+            new_note = questionary.text(
+                "Nueva nota (vacío para eliminar):",
+                default=current_note or "",
+                **get_text_kwargs(),
+            ).ask()
+            if new_note is not None:
+                db.update_analysis_note(analysis_id, new_note if new_note else None)
+                return new_note
+            return None
+
+        def on_delete(analysis_id: str) -> bool:
+            clear_screen()
+            print(f"\n  ¿Eliminar análisis {analysis_id[:8]}?\n")
+            if questionary.confirm(
+                "¿Confirmar eliminación?",
+                default=False,
+                **get_confirm_kwargs(),
+            ).ask():
+                if db.delete_analysis(analysis_id):
+                    self.basin.analyses = [a for a in self.basin.analyses if a.id != analysis_id]
+                    return True
+            return False
+
+        updated = interactive_table_viewer(
+            self.basin.analyses,
+            self.basin.name,
+            on_edit_note=on_edit_note,
+            on_delete=on_delete,
+        )
+        if updated is not None:
+            self.basin.analyses = updated
 
     def _show_interactive_viewer(self) -> None:
         """Muestra visor interactivo de fichas de análisis."""
-        self.show_analysis_cards()
+        if not self.basin.analyses:
+            self.echo("  No hay análisis disponibles.")
+            return
+
+        from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
+        from hidropluvial.cli.viewer.terminal import clear_screen
+        from hidropluvial.database import get_database
+        from hidropluvial.cli.wizard.styles import get_text_kwargs, get_confirm_kwargs
+        import questionary
+
+        db = get_database()
+
+        def on_edit_note(analysis_id: str, current_note: str) -> str:
+            clear_screen()
+            print(f"\n  Editando nota del análisis {analysis_id[:8]}...\n")
+            new_note = questionary.text(
+                "Nueva nota (vacío para eliminar):",
+                default=current_note or "",
+                **get_text_kwargs(),
+            ).ask()
+            if new_note is not None:
+                db.update_analysis_note(analysis_id, new_note if new_note else None)
+                return new_note
+            return None
+
+        def on_delete(analysis_id: str) -> bool:
+            clear_screen()
+            print(f"\n  ¿Eliminar análisis {analysis_id[:8]}?\n")
+            if questionary.confirm(
+                "¿Confirmar eliminación?",
+                default=False,
+                **get_confirm_kwargs(),
+            ).ask():
+                if db.delete_analysis(analysis_id):
+                    self.basin.analyses = [a for a in self.basin.analyses if a.id != analysis_id]
+                    return True
+            return False
+
+        updated = interactive_hydrograph_viewer(
+            self.basin.analyses,
+            self.basin.name,
+            on_edit_note=on_edit_note,
+            on_delete=on_delete,
+        )
+        if updated is not None:
+            self.basin.analyses = updated
 
     def _compare_hydrographs(self) -> None:
         """Compara hidrogramas con opcion de seleccionar cuales."""

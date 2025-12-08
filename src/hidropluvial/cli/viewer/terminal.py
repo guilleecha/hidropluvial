@@ -61,6 +61,10 @@ def get_key() -> str:
             return 'y'
         elif key == b'n' or key == b'N':
             return 'n'
+        elif key == b'i' or key == b'I':
+            return 'i'
+        elif key == b' ':  # Espacio
+            return 'space'
         elif key == b'\r':  # Enter
             return 'enter'
 
@@ -105,6 +109,10 @@ def get_key() -> str:
                 return 'y'
             elif key == 'n' or key == 'N':
                 return 'n'
+            elif key == 'i' or key == 'I':
+                return 'i'
+            elif key == ' ':  # Espacio
+                return 'space'
             elif key == '\r' or key == '\n':
                 return 'enter'
 

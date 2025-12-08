@@ -3,13 +3,15 @@ Visor interactivo de tabla resumen de análisis.
 
 Permite navegar entre análisis usando:
 - Flechas arriba/abajo: cambiar análisis seleccionado
+- Espacio: marcar/desmarcar para eliminación múltiple
+- i: invertir selección
+- d: eliminar marcados (o actual si no hay marcados)
 - e: editar nota del análisis actual
-- d: eliminar análisis actual
 - Enter: ver ficha detallada del análisis
 - q/ESC: salir
 """
 
-from typing import Callable, Optional
+from typing import Callable, Optional, Set
 
 from rich.console import Console, Group
 from rich.table import Table
@@ -29,6 +31,7 @@ def build_interactive_table(
     title: str = "RESUMEN DE ANÁLISIS",
     sparkline_width: int = 12,
     start_offset: int = 0,
+    marked_indices: Set[int] = None,
 ) -> Table:
     """
     Construye tabla resumen con fila seleccionada destacada.
@@ -39,11 +42,15 @@ def build_interactive_table(
         title: Título de la tabla
         sparkline_width: Ancho del sparkline
         start_offset: Offset para mostrar índices correctos
+        marked_indices: Conjunto de índices marcados para eliminación
 
     Returns:
         Rich Table
     """
     from hidropluvial.cli.formatters import format_flow
+
+    if marked_indices is None:
+        marked_indices = set()
 
     p = get_palette()
 
@@ -57,7 +64,8 @@ def build_interactive_table(
         padding=(0, 1),
     )
 
-    # Columnas
+    # Columnas - agregar columna de marca
+    table.add_column("", justify="center", width=1)  # Marca
     table.add_column("#", justify="right", width=3)
     table.add_column("Método Tc", justify="left")
     table.add_column("Tc", justify="right")
@@ -109,11 +117,16 @@ def build_interactive_table(
 
         # Determinar estilo de la fila
         is_selected = idx == selected_idx
+        is_marked = real_idx in marked_indices
         is_max_qp = qp_val == max_qp
+
+        # Marca de selección
+        mark = "×" if is_marked else ""
 
         if is_selected:
             # Fila seleccionada: fondo destacado
             row_style = f"bold reverse {p.primary}"
+            mark_text = Text(mark, style=f"bold red reverse" if is_marked else row_style)
             idx_text = Text(f">{real_idx}", style=row_style)
             tc_method_text = Text(tc.method[:12], style=row_style)
             tc_text = Text(tc_min, style=row_style)
@@ -125,8 +138,23 @@ def build_interactive_table(
             pe_text = Text(pe, style=row_style)
             qp_text = Text(qp_str, style=row_style)
             spark_text = Text(spark, style=row_style)
+        elif is_marked:
+            # Fila marcada para eliminación
+            mark_text = Text(mark, style="bold red")
+            idx_text = Text(str(real_idx), style="red")
+            tc_method_text = Text(tc.method[:12], style="red")
+            tc_text = Text(tc_min, style="red")
+            x_text = Text(x_str, style="red")
+            abst_text = Text(abst_str, style="red")
+            storm_text = Text(storm_type, style="red")
+            tr_text = Text(str(storm.return_period), style="red")
+            p_text = Text(p_total, style="red")
+            pe_text = Text(pe, style="red")
+            qp_text = Text(qp_str, style="red")
+            spark_text = Text(spark, style="red")
         else:
             # Fila normal
+            mark_text = Text(mark)
             idx_text = Text(str(real_idx), style=p.muted)
             tc_method_text = Text(tc.method[:12])
             tc_text = Text(tc_min, style=p.number)
@@ -140,6 +168,7 @@ def build_interactive_table(
             spark_text = Text(spark, style=p.info)
 
         table.add_row(
+            mark_text,
             idx_text,
             tc_method_text,
             tc_text,
@@ -164,8 +193,13 @@ def build_display(
     on_edit_note: bool,
     on_delete: bool,
     confirm_delete: bool = False,
+    marked_indices: Set[int] = None,
+    delete_count: int = 0,
 ) -> Group:
     """Construye el display completo para Live update."""
+    if marked_indices is None:
+        marked_indices = set()
+
     p = get_palette()
     n_analyses = len(all_analyses)
 
@@ -194,6 +228,8 @@ def build_display(
     header_text.append(f"({current_idx + 1}/{n_analyses})", style=p.muted)
     if n_analyses > max_visible_rows:
         header_text.append(f" [mostrando {start_idx + 1}-{end_idx}]", style=f"dim {p.muted}")
+    if marked_indices:
+        header_text.append(f" [{len(marked_indices)} marcados]", style="bold red")
 
     # Tabla
     table = build_interactive_table(
@@ -201,6 +237,7 @@ def build_display(
         selected_in_visible,
         start_offset=start_idx,
         title=f"Tabla Resumen - {session_name}",
+        marked_indices=marked_indices,
     )
 
     # Info del seleccionado
@@ -218,7 +255,7 @@ def build_display(
     nav_text = Text()
     if confirm_delete:
         # Modo confirmación de eliminación
-        nav_text.append("  ¿Eliminar análisis? ", style=f"bold {p.accent}")
+        nav_text.append(f"  ¿Eliminar {delete_count} análisis? ", style=f"bold {p.accent}")
         nav_text.append("[", style=p.muted)
         nav_text.append("s/y", style=f"bold green")
         nav_text.append("] Confirmar  ", style=p.muted)
@@ -230,17 +267,23 @@ def build_display(
         nav_text.append("  [", style=p.muted)
         nav_text.append("↑↓", style=f"bold {p.primary}")
         nav_text.append("] Navegar  ", style=p.muted)
-        nav_text.append("[", style=p.muted)
-        nav_text.append("Enter", style=f"bold {p.primary}")
-        nav_text.append("] Ver ficha  ", style=p.muted)
+        if on_delete:
+            nav_text.append("[", style=p.muted)
+            nav_text.append("Espacio", style=f"bold {p.primary}")
+            nav_text.append("] Marcar  ", style=p.muted)
+            nav_text.append("[", style=p.muted)
+            nav_text.append("i", style=f"bold {p.primary}")
+            nav_text.append("] Invertir  ", style=p.muted)
+            nav_text.append("[", style=p.muted)
+            nav_text.append("d", style=f"bold {p.primary}")
+            nav_text.append("] Eliminar  ", style=p.muted)
         if on_edit_note:
             nav_text.append("[", style=p.muted)
             nav_text.append("e", style=f"bold {p.primary}")
             nav_text.append("] Nota  ", style=p.muted)
-        if on_delete:
-            nav_text.append("[", style=p.muted)
-            nav_text.append("d", style=f"bold {p.primary}")
-            nav_text.append("] Eliminar  ", style=p.muted)
+        nav_text.append("[", style=p.muted)
+        nav_text.append("Enter", style=f"bold {p.primary}")
+        nav_text.append("] Ficha  ", style=p.muted)
         nav_text.append("[", style=p.muted)
         nav_text.append("q", style=f"bold {p.primary}")
         nav_text.append("] Salir", style=p.muted)
@@ -269,8 +312,10 @@ def interactive_table_viewer(
 
     Navegación:
     - Flechas arriba/abajo: cambiar análisis seleccionado
+    - Espacio: marcar/desmarcar para eliminación
+    - i: invertir selección
+    - d: eliminar marcados (o actual si no hay marcados)
     - e: editar nota del análisis actual
-    - d: eliminar análisis actual
     - Enter: ver ficha detallada
     - q/ESC: salir
 
@@ -295,6 +340,7 @@ def interactive_table_viewer(
     all_analyses = list(analyses)
     current_idx = 0
     pending_delete = False  # Estado de confirmación de eliminación
+    marked_indices: Set[int] = set()  # Índices marcados para eliminación
 
     clear_screen()
 
@@ -308,6 +354,7 @@ def interactive_table_viewer(
             max_visible_rows,
             on_edit_note is not None,
             on_delete is not None,
+            marked_indices=marked_indices,
         )
         live.update(display, refresh=True)
 
@@ -327,13 +374,28 @@ def interactive_table_viewer(
             if pending_delete:
                 if key in ('s', 'y'):
                     # Confirmar eliminación
-                    analysis = all_analyses[current_idx]
                     from hidropluvial.database import get_database
                     db = get_database()
-                    if db.delete_analysis(analysis.id):
-                        all_analyses = [a for a in all_analyses if a.id != analysis.id]
-                        if current_idx >= len(all_analyses):
-                            current_idx = max(0, len(all_analyses) - 1)
+
+                    # Determinar qué eliminar
+                    if marked_indices:
+                        indices_to_delete = sorted(marked_indices, reverse=True)
+                    else:
+                        indices_to_delete = [current_idx]
+
+                    # Eliminar de la base de datos y de la lista
+                    for idx in indices_to_delete:
+                        if idx < len(all_analyses):
+                            analysis = all_analyses[idx]
+                            db.delete_analysis(analysis.id)
+
+                    # Reconstruir lista sin los eliminados
+                    all_analyses = [a for i, a in enumerate(all_analyses) if i not in marked_indices and i != current_idx] if marked_indices else [a for i, a in enumerate(all_analyses) if i != current_idx]
+
+                    # Limpiar marcas y ajustar índice
+                    marked_indices.clear()
+                    if current_idx >= len(all_analyses):
+                        current_idx = max(0, len(all_analyses) - 1)
                     pending_delete = False
                 elif key in ('n', 'esc'):
                     # Cancelar eliminación
@@ -349,6 +411,16 @@ def interactive_table_viewer(
                     current_idx = (current_idx - 1) % n_analyses
                 elif key == 'down':
                     current_idx = (current_idx + 1) % n_analyses
+                elif key == 'space' and on_delete:
+                    # Marcar/desmarcar actual
+                    if current_idx in marked_indices:
+                        marked_indices.remove(current_idx)
+                    else:
+                        marked_indices.add(current_idx)
+                elif key == 'i' and on_delete:
+                    # Invertir selección
+                    all_indices = set(range(n_analyses))
+                    marked_indices = all_indices - marked_indices
                 elif key == 'enter' and on_view_detail:
                     live.stop()
                     on_view_detail(current_idx)
@@ -374,6 +446,9 @@ def interactive_table_viewer(
             if n_analyses > 0 and current_idx >= n_analyses:
                 current_idx = n_analyses - 1
 
+            # Calcular cantidad a eliminar
+            delete_count = len(marked_indices) if marked_indices else 1
+
             # Solo actualizar display después de una acción válida
             display = build_display(
                 all_analyses,
@@ -383,6 +458,8 @@ def interactive_table_viewer(
                 on_edit_note is not None,
                 on_delete is not None,
                 confirm_delete=pending_delete,
+                marked_indices=marked_indices,
+                delete_count=delete_count,
             )
             live.update(display, refresh=True)
 

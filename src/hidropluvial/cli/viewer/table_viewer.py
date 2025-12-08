@@ -372,7 +372,7 @@ def interactive_table_viewer(
 
             # Modo confirmación de eliminación
             if pending_delete:
-                if key in ('s', 'y'):
+                if key in ('s', 'y') and on_delete:
                     # Confirmar eliminación usando el callback
                     # Determinar qué eliminar
                     if marked_indices:
@@ -393,8 +393,9 @@ def interactive_table_viewer(
 
                     # Limpiar marcas y ajustar índice
                     marked_indices.clear()
-                    if current_idx >= len(all_analyses):
-                        current_idx = max(0, len(all_analyses) - 1)
+                    n_analyses = len(all_analyses)  # Actualizar contador
+                    if current_idx >= n_analyses:
+                        current_idx = max(0, n_analyses - 1)
                     pending_delete = False
                 elif key in ('n', 'esc'):
                     # Cancelar eliminación

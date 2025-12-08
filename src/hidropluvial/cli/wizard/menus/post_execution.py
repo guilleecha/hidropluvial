@@ -102,9 +102,8 @@ class PostExecutionMenu(SessionMenu):
             pass
 
     def _show_table(self) -> None:
-        """Muestra tabla resumen con sparklines."""
-        from hidropluvial.cli.basin.preview import basin_preview_table
-        self._safe_call(basin_preview_table, self.basin)
+        """Muestra tabla resumen interactiva."""
+        self.show_summary_table()
 
     def _compare_hydrographs(self) -> None:
         """Compara hidrogramas con opción de seleccionar cuáles."""

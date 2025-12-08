@@ -5,6 +5,8 @@ Permite navegar entre análisis usando:
 - Flechas izquierda/derecha: cambiar análisis secuencialmente
 - f: abrir menú de filtros
 - c: limpiar filtros
+- e: editar nota del análisis actual
+- d: eliminar análisis actual
 - q/ESC: salir
 """
 
@@ -29,7 +31,9 @@ def interactive_hydrograph_viewer(
     session_name: str,
     width: int = 75,
     height: int = 16,
-) -> None:
+    on_edit_note: callable = None,
+    on_delete: callable = None,
+) -> list:
     """
     Visor interactivo de fichas de análisis.
 
@@ -40,6 +44,8 @@ def interactive_hydrograph_viewer(
     - Flechas izquierda/derecha: cambiar análisis secuencialmente
     - f: abrir menú de filtros
     - c: limpiar filtros (solo si hay filtros activos)
+    - e: editar nota del análisis actual
+    - d: eliminar análisis actual
     - q/ESC: salir
 
     Args:
@@ -47,6 +53,11 @@ def interactive_hydrograph_viewer(
         session_name: Nombre de la sesión/cuenca
         width: Ancho del gráfico
         height: Alto del gráfico (no usado, se usan alturas fijas)
+        on_edit_note: Callback(analysis_id, current_note) -> new_note para editar nota
+        on_delete: Callback(analysis_id) -> bool para eliminar análisis
+
+    Returns:
+        Lista actualizada de análisis (puede haber cambiado si se eliminaron)
     """
     if not analyses:
         print("  No hay análisis disponibles.")
@@ -133,7 +144,15 @@ def interactive_hydrograph_viewer(
         if active_filters:
             nav_text.append("[", style=p.muted)
             nav_text.append("c", style=f"bold {p.primary}")
-            nav_text.append("] Limpiar filtro  ", style=p.muted)
+            nav_text.append("] Limpiar  ", style=p.muted)
+        if on_edit_note:
+            nav_text.append("[", style=p.muted)
+            nav_text.append("e", style=f"bold {p.primary}")
+            nav_text.append("] Nota  ", style=p.muted)
+        if on_delete:
+            nav_text.append("[", style=p.muted)
+            nav_text.append("d", style=f"bold {p.primary}")
+            nav_text.append("] Eliminar  ", style=p.muted)
         nav_text.append("[", style=p.muted)
         nav_text.append("q", style=f"bold {p.primary}")
         nav_text.append("] Salir", style=p.muted)
@@ -160,3 +179,27 @@ def interactive_hydrograph_viewer(
             active_filters = {}
             filtered_analyses = all_analyses
             current_idx = 0
+        elif key == 'e' and on_edit_note:
+            # Editar nota del análisis actual
+            analysis = filtered_analyses[current_idx]
+            current_note = getattr(analysis, 'note', None) or ""
+            new_note = on_edit_note(analysis.id, current_note)
+            if new_note is not None:
+                analysis.note = new_note if new_note else None
+        elif key == 'd' and on_delete:
+            # Eliminar análisis actual
+            analysis = filtered_analyses[current_idx]
+            if on_delete(analysis.id):
+                # Eliminar de ambas listas
+                all_analyses = [a for a in all_analyses if a.id != analysis.id]
+                filtered_analyses = [a for a in filtered_analyses if a.id != analysis.id]
+                # Ajustar índice
+                if current_idx >= len(filtered_analyses):
+                    current_idx = max(0, len(filtered_analyses) - 1)
+                # Si no quedan análisis, salir
+                if not all_analyses:
+                    clear_screen()
+                    console.print("\n  Todos los análisis han sido eliminados.\n")
+                    return all_analyses
+
+    return all_analyses

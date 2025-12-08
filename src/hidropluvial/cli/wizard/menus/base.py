@@ -219,10 +219,12 @@ class SessionMenu(BaseMenu):
 
     def show_analysis_cards(self, analyses: list = None, name: str = None) -> None:
         """
-        Muestra el visor interactivo de fichas de analisis.
+        Muestra el visor interactivo de fichas de análisis.
+
+        Permite navegar y también editar notas (e) o eliminar (d) análisis.
 
         Args:
-            analyses: Lista de analisis (default: self.basin.analyses)
+            analyses: Lista de análisis (default: self.basin.analyses)
             name: Nombre a mostrar (default: self.basin.name)
         """
         if analyses is None:
@@ -231,8 +233,125 @@ class SessionMenu(BaseMenu):
             name = self._basin.name
 
         if not analyses:
-            self.echo("  No hay analisis disponibles.")
+            self.echo("  No hay análisis disponibles.")
             return
 
         from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
-        interactive_hydrograph_viewer(analyses, name)
+        from hidropluvial.database import get_database
+        from hidropluvial.cli.viewer.terminal import clear_screen
+
+        db = get_database()
+
+        def on_edit_note(analysis_id: str, current_note: str) -> str:
+            """Callback para editar nota de un análisis."""
+            clear_screen()
+            print(f"\n  Editando nota del análisis {analysis_id[:8]}...\n")
+            new_note = questionary.text(
+                "Nueva nota (vacío para eliminar):",
+                default=current_note or "",
+                **get_text_kwargs(),
+            ).ask()
+            if new_note is not None:
+                db.update_analysis_note(analysis_id, new_note if new_note else None)
+                return new_note
+            return None
+
+        def on_delete(analysis_id: str) -> bool:
+            """Callback para eliminar un análisis."""
+            clear_screen()
+            print(f"\n  ¿Eliminar análisis {analysis_id[:8]}?\n")
+            if questionary.confirm(
+                "¿Confirmar eliminación?",
+                default=False,
+                **get_confirm_kwargs(),
+            ).ask():
+                if db.delete_analysis(analysis_id):
+                    # También eliminar de la lista del basin
+                    self._basin.analyses = [a for a in self._basin.analyses if a.id != analysis_id]
+                    return True
+            return False
+
+        updated_analyses = interactive_hydrograph_viewer(
+            analyses, name,
+            on_edit_note=on_edit_note,
+            on_delete=on_delete,
+        )
+
+        # Actualizar la lista de análisis del basin
+        if updated_analyses is not None:
+            self._basin.analyses = updated_analyses
+
+    def show_summary_table(self, analyses: list = None, name: str = None) -> None:
+        """
+        Muestra el visor interactivo de tabla resumen.
+
+        Permite navegar con ↑↓ y también editar notas (e) o eliminar (d) análisis.
+
+        Args:
+            analyses: Lista de análisis (default: self.basin.analyses)
+            name: Nombre a mostrar (default: self.basin.name)
+        """
+        if analyses is None:
+            analyses = self._basin.analyses
+        if name is None:
+            name = self._basin.name
+
+        if not analyses:
+            self.echo("  No hay análisis disponibles.")
+            return
+
+        from hidropluvial.cli.viewer.table_viewer import interactive_table_viewer
+        from hidropluvial.database import get_database
+        from hidropluvial.cli.viewer.terminal import clear_screen
+
+        db = get_database()
+
+        def on_edit_note(analysis_id: str, current_note: str) -> str:
+            """Callback para editar nota de un análisis."""
+            clear_screen()
+            print(f"\n  Editando nota del análisis {analysis_id[:8]}...\n")
+            new_note = questionary.text(
+                "Nueva nota (vacío para eliminar):",
+                default=current_note or "",
+                **get_text_kwargs(),
+            ).ask()
+            if new_note is not None:
+                db.update_analysis_note(analysis_id, new_note if new_note else None)
+                return new_note
+            return None
+
+        def on_delete(analysis_id: str) -> bool:
+            """Callback para eliminar un análisis."""
+            clear_screen()
+            print(f"\n  ¿Eliminar análisis {analysis_id[:8]}?\n")
+            if questionary.confirm(
+                "¿Confirmar eliminación?",
+                default=False,
+                **get_confirm_kwargs(),
+            ).ask():
+                if db.delete_analysis(analysis_id):
+                    self._basin.analyses = [a for a in self._basin.analyses if a.id != analysis_id]
+                    return True
+            return False
+
+        def on_view_detail(index: int) -> None:
+            """Callback para ver ficha detallada de un análisis."""
+            # Mostrar el visor de fichas empezando en el índice seleccionado
+            from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
+            interactive_hydrograph_viewer(
+                [self._basin.analyses[index]],
+                name,
+                on_edit_note=on_edit_note,
+                on_delete=on_delete,
+            )
+
+        updated_analyses = interactive_table_viewer(
+            analyses, name,
+            on_edit_note=on_edit_note,
+            on_delete=on_delete,
+            on_view_detail=on_view_detail,
+        )
+
+        # Actualizar la lista de análisis del basin
+        if updated_analyses is not None:
+            self._basin.analyses = updated_analyses

@@ -60,13 +60,6 @@ def wizard():
     wizard_main()
 
 
-@app.command()
-def migrate():
-    """Migra proyectos desde archivos JSON a SQLite."""
-    from hidropluvial.cli.migrate_json import main as migrate_main
-    migrate_main()
-
-
 @app.callback()
 def main():
     """

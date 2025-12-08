@@ -26,15 +26,17 @@ def build_interactive_table(
     selected_idx: int,
     title: str = "RESUMEN DE ANÁLISIS",
     sparkline_width: int = 12,
+    start_offset: int = 0,
 ) -> Table:
     """
     Construye tabla resumen con fila seleccionada destacada.
 
     Args:
         analyses: Lista de AnalysisRun
-        selected_idx: Índice de fila seleccionada
+        selected_idx: Índice de fila seleccionada (relativo a analyses)
         title: Título de la tabla
         sparkline_width: Ancho del sparkline
+        start_offset: Offset para mostrar índices correctos
 
     Returns:
         Rich Table
@@ -70,6 +72,7 @@ def build_interactive_table(
     max_qp = max(a.hydrograph.peak_flow_m3s for a in analyses) if analyses else 0
 
     for idx, analysis in enumerate(analyses):
+        real_idx = idx + start_offset  # Índice real en la lista completa
         hydro = analysis.hydrograph
         storm = analysis.storm
         tc = analysis.tc
@@ -109,7 +112,7 @@ def build_interactive_table(
         if is_selected:
             # Fila seleccionada: fondo destacado
             row_style = f"bold reverse {p.primary}"
-            idx_text = Text(f">{idx}", style=row_style)
+            idx_text = Text(f">{real_idx}", style=row_style)
             tc_method_text = Text(tc.method[:12], style=row_style)
             tc_text = Text(tc_min, style=row_style)
             x_text = Text(x_str, style=row_style)
@@ -122,7 +125,7 @@ def build_interactive_table(
             spark_text = Text(spark, style=row_style)
         else:
             # Fila normal
-            idx_text = Text(str(idx), style=p.muted)
+            idx_text = Text(str(real_idx), style=p.muted)
             tc_method_text = Text(tc.method[:12])
             tc_text = Text(tc_min, style=p.number)
             x_text = Text(x_str, style=p.number)
@@ -157,6 +160,7 @@ def interactive_table_viewer(
     on_edit_note: Optional[Callable[[str, str], Optional[str]]] = None,
     on_delete: Optional[Callable[[str], bool]] = None,
     on_view_detail: Optional[Callable[[int], None]] = None,
+    max_visible_rows: int = 10,
 ) -> list:
     """
     Visor interactivo de tabla resumen.
@@ -174,6 +178,7 @@ def interactive_table_viewer(
         on_edit_note: Callback(analysis_id, current_note) -> new_note
         on_delete: Callback(analysis_id) -> bool
         on_view_detail: Callback(index) para ver detalle
+        max_visible_rows: Máximo de filas visibles en la tabla
 
     Returns:
         Lista actualizada de análisis
@@ -205,18 +210,42 @@ def interactive_table_viewer(
         if current_idx >= n_analyses:
             current_idx = n_analyses - 1
 
+        # Calcular ventana visible centrada en current_idx
+        if n_analyses <= max_visible_rows:
+            start_idx = 0
+            end_idx = n_analyses
+        else:
+            # Centrar la ventana en current_idx
+            half = max_visible_rows // 2
+            start_idx = current_idx - half
+            end_idx = start_idx + max_visible_rows
+
+            # Ajustar si estamos cerca del inicio o final
+            if start_idx < 0:
+                start_idx = 0
+                end_idx = max_visible_rows
+            elif end_idx > n_analyses:
+                end_idx = n_analyses
+                start_idx = end_idx - max_visible_rows
+
+        visible_analyses = all_analyses[start_idx:end_idx]
+        selected_in_visible = current_idx - start_idx
+
         # Encabezado
         console.print()
         header_text = Text()
         header_text.append(f"  {session_name} ", style=f"bold {p.secondary}")
-        header_text.append(f"({n_analyses} análisis)", style=p.muted)
+        header_text.append(f"({current_idx + 1}/{n_analyses})", style=p.muted)
+        if n_analyses > max_visible_rows:
+            header_text.append(f" [mostrando {start_idx + 1}-{end_idx}]", style=f"dim {p.muted}")
         console.print(header_text)
         console.print()
 
         # Tabla con fila seleccionada
         table = build_interactive_table(
-            all_analyses,
-            current_idx,
+            visible_analyses,
+            selected_in_visible,
+            start_offset=start_idx,
             title=f"Tabla Resumen - {session_name}",
         )
         console.print(table)

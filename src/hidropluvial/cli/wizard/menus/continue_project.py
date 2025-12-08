@@ -210,17 +210,17 @@ class ContinueProjectMenu(BaseMenu):
             self._show_basin_header()
 
             action = self.select(
-                "Que deseas hacer?",
+                "¿Qué deseas hacer?",
                 choices=[
                     "Ver tabla resumen",
-                    "Ver fichas de analisis",
+                    "Ver fichas de análisis",
                     "Comparar hidrogramas",
-                    "Agregar mas analisis",
+                    "Agregar análisis",
                     "Filtrar resultados",
                     "Exportar (Excel/LaTeX)",
                     "Editar cuenca...",
                     self.back_option("Volver (elegir otra cuenca)"),
-                    self.back_option("Salir al menu principal"),
+                    self.back_option("Salir al menú principal"),
                 ],
             )
 
@@ -245,14 +245,14 @@ class ContinueProjectMenu(BaseMenu):
         self.basin_info(self.basin, project_name)
 
     def _handle_basin_action(self, action: str) -> None:
-        """Maneja la accion seleccionada para la cuenca."""
+        """Maneja la acción seleccionada para la cuenca."""
         if "tabla" in action.lower():
             self._show_table()
         elif "fichas" in action.lower():
             self._show_interactive_viewer()
         elif "Comparar" in action:
             self._compare_hydrographs()
-        elif "Agregar" in action and "analisis" in action.lower():
+        elif "Agregar" in action and "anál" in action.lower():
             self._add_analysis()
         elif "Filtrar" in action:
             self._filter_results()
@@ -269,9 +269,8 @@ class ContinueProjectMenu(BaseMenu):
             pass
 
     def _show_table(self) -> None:
-        """Muestra tabla con sparklines."""
-        from hidropluvial.cli.basin.preview import basin_preview_table
-        self._safe_call(basin_preview_table, self.basin)
+        """Muestra tabla resumen interactiva."""
+        self.show_summary_table()
 
     def _show_interactive_viewer(self) -> None:
         """Muestra visor interactivo de hidrogramas."""

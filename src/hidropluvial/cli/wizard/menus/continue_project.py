@@ -273,13 +273,8 @@ class ContinueProjectMenu(BaseMenu):
         self.show_summary_table()
 
     def _show_interactive_viewer(self) -> None:
-        """Muestra visor interactivo de hidrogramas."""
-        if not self.basin.analyses:
-            self.echo("  No hay analisis disponibles.")
-            return
-
-        from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
-        interactive_hydrograph_viewer(self.basin.analyses, self.basin.name)
+        """Muestra visor interactivo de fichas de análisis."""
+        self.show_analysis_cards()
 
     def _compare_hydrographs(self) -> None:
         """Compara hidrogramas con opcion de seleccionar cuales."""

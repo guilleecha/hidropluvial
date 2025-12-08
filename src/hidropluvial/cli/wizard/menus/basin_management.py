@@ -250,8 +250,7 @@ class BasinManagementMenu(BaseMenu):
         msg += "?"
 
         if self.confirm(msg, default=False):
-            if self.project.remove_basin(basin.id):
-                self.project_manager.save_project(self.project)
+            if self.project_manager.delete_basin(self.project, basin.id):
                 self.echo(f"\n  Cuenca '{basin.name}' eliminada.\n")
             else:
                 self.error("No se pudo eliminar la cuenca")

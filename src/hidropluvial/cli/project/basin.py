@@ -209,8 +209,7 @@ def basin_delete(
             typer.echo("  Cancelado.\n")
             return
 
-    if project.remove_basin(basin.id):
-        manager.save_project(project)
+    if manager.delete_basin(project, basin.id):
         typer.echo(f"\n  Cuenca '{basin.name}' eliminada del proyecto.\n")
     else:
         typer.echo(f"\n  Error al eliminar cuenca.\n")

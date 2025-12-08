@@ -524,8 +524,8 @@ class ContinueProjectMenu(BaseMenu):
         if self.confirm(f"Seguro que deseas eliminar la cuenca '{self.basin.name}'?", default=False):
             # Si esta en un proyecto, eliminar del proyecto
             if self.project:
-                if self.project.remove_basin(self.basin.id):
-                    self.db.save_project_model(self.project)
+                if self.db.delete_basin(self.basin.id):
+                    self.project.remove_basin(self.basin.id)
                     self.echo(f"\n  Cuenca '{self.basin.name}' eliminada del proyecto.\n")
                     return True
                 else:

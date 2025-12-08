@@ -137,6 +137,15 @@ class ProjectManager:
             notes=basin.notes,
         )
 
+    def delete_basin(self, project: Project, basin_id: str) -> bool:
+        """Elimina una cuenca del proyecto y de la base de datos."""
+        # Eliminar de la DB
+        result = self._db.delete_basin(basin_id)
+        if result:
+            # Eliminar del modelo en memoria
+            project.remove_basin(basin_id)
+        return result
+
     def add_tc_result(
         self,
         project: Project,

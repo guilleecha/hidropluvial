@@ -55,6 +55,12 @@ def get_key() -> str:
             return 'e'
         elif key == b'd' or key == b'D':
             return 'd'
+        elif key == b's' or key == b'S':
+            return 's'
+        elif key == b'y' or key == b'Y':
+            return 'y'
+        elif key == b'n' or key == b'N':
+            return 'n'
         elif key == b'\r':  # Enter
             return 'enter'
 
@@ -93,6 +99,12 @@ def get_key() -> str:
                 return 'e'
             elif key == 'd' or key == 'D':
                 return 'd'
+            elif key == 's' or key == 'S':
+                return 's'
+            elif key == 'y' or key == 'Y':
+                return 'y'
+            elif key == 'n' or key == 'N':
+                return 'n'
             elif key == '\r' or key == '\n':
                 return 'enter'
 

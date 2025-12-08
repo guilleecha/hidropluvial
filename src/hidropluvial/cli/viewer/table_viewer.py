@@ -163,6 +163,7 @@ def build_display(
     max_visible_rows: int,
     on_edit_note: bool,
     on_delete: bool,
+    confirm_delete: bool = False,
 ) -> Group:
     """Construye el display completo para Live update."""
     p = get_palette()
@@ -215,23 +216,34 @@ def build_display(
 
     # Navegación
     nav_text = Text()
-    nav_text.append("  [", style=p.muted)
-    nav_text.append("↑↓", style=f"bold {p.primary}")
-    nav_text.append("] Navegar  ", style=p.muted)
-    nav_text.append("[", style=p.muted)
-    nav_text.append("Enter", style=f"bold {p.primary}")
-    nav_text.append("] Ver ficha  ", style=p.muted)
-    if on_edit_note:
+    if confirm_delete:
+        # Modo confirmación de eliminación
+        nav_text.append("  ¿Eliminar análisis? ", style=f"bold {p.accent}")
         nav_text.append("[", style=p.muted)
-        nav_text.append("e", style=f"bold {p.primary}")
-        nav_text.append("] Nota  ", style=p.muted)
-    if on_delete:
+        nav_text.append("s/y", style=f"bold green")
+        nav_text.append("] Confirmar  ", style=p.muted)
         nav_text.append("[", style=p.muted)
-        nav_text.append("d", style=f"bold {p.primary}")
-        nav_text.append("] Eliminar  ", style=p.muted)
-    nav_text.append("[", style=p.muted)
-    nav_text.append("q", style=f"bold {p.primary}")
-    nav_text.append("] Salir", style=p.muted)
+        nav_text.append("n/Esc", style=f"bold red")
+        nav_text.append("] Cancelar", style=p.muted)
+    else:
+        # Navegación normal
+        nav_text.append("  [", style=p.muted)
+        nav_text.append("↑↓", style=f"bold {p.primary}")
+        nav_text.append("] Navegar  ", style=p.muted)
+        nav_text.append("[", style=p.muted)
+        nav_text.append("Enter", style=f"bold {p.primary}")
+        nav_text.append("] Ver ficha  ", style=p.muted)
+        if on_edit_note:
+            nav_text.append("[", style=p.muted)
+            nav_text.append("e", style=f"bold {p.primary}")
+            nav_text.append("] Nota  ", style=p.muted)
+        if on_delete:
+            nav_text.append("[", style=p.muted)
+            nav_text.append("d", style=f"bold {p.primary}")
+            nav_text.append("] Eliminar  ", style=p.muted)
+        nav_text.append("[", style=p.muted)
+        nav_text.append("q", style=f"bold {p.primary}")
+        nav_text.append("] Salir", style=p.muted)
 
     return Group(
         Text(""),  # Línea vacía arriba
@@ -282,6 +294,7 @@ def interactive_table_viewer(
 
     all_analyses = list(analyses)
     current_idx = 0
+    pending_delete = False  # Estado de confirmación de eliminación
 
     clear_screen()
 
@@ -310,41 +323,55 @@ def interactive_table_viewer(
                     break
                 continue
 
-            if key == 'q' or key == 'esc':
-                break
-            elif key == 'up':
-                current_idx = (current_idx - 1) % n_analyses
-            elif key == 'down':
-                current_idx = (current_idx + 1) % n_analyses
-            elif key == 'enter' and on_view_detail:
-                live.stop()
-                on_view_detail(current_idx)
-                clear_screen()
-                live.start()
-            elif key == 'e' and on_edit_note:
-                live.stop()
-                analysis = all_analyses[current_idx]
-                current_note = getattr(analysis, 'note', None) or ""
-                new_note = on_edit_note(analysis.id, current_note)
-                if new_note is not None:
-                    analysis.note = new_note if new_note else None
-                clear_screen()
-                live.start()
-            elif key == 'd' and on_delete:
-                live.stop()
-                analysis = all_analyses[current_idx]
-                if on_delete(analysis.id):
-                    all_analyses = [a for a in all_analyses if a.id != analysis.id]
-                    if current_idx >= len(all_analyses):
-                        current_idx = max(0, len(all_analyses) - 1)
-                clear_screen()
-                live.start()
+            # Modo confirmación de eliminación
+            if pending_delete:
+                if key in ('s', 'y'):
+                    # Confirmar eliminación
+                    analysis = all_analyses[current_idx]
+                    from hidropluvial.database import get_database
+                    db = get_database()
+                    if db.delete_analysis(analysis.id):
+                        all_analyses = [a for a in all_analyses if a.id != analysis.id]
+                        if current_idx >= len(all_analyses):
+                            current_idx = max(0, len(all_analyses) - 1)
+                    pending_delete = False
+                elif key in ('n', 'esc'):
+                    # Cancelar eliminación
+                    pending_delete = False
+                else:
+                    # Ignorar otras teclas en modo confirmación
+                    continue
             else:
-                # Tecla no reconocida, no actualizar
-                continue
+                # Navegación normal
+                if key == 'q' or key == 'esc':
+                    break
+                elif key == 'up':
+                    current_idx = (current_idx - 1) % n_analyses
+                elif key == 'down':
+                    current_idx = (current_idx + 1) % n_analyses
+                elif key == 'enter' and on_view_detail:
+                    live.stop()
+                    on_view_detail(current_idx)
+                    clear_screen()
+                    live.start()
+                elif key == 'e' and on_edit_note:
+                    live.stop()
+                    analysis = all_analyses[current_idx]
+                    current_note = getattr(analysis, 'note', None) or ""
+                    new_note = on_edit_note(analysis.id, current_note)
+                    if new_note is not None:
+                        analysis.note = new_note if new_note else None
+                    clear_screen()
+                    live.start()
+                elif key == 'd' and on_delete:
+                    # Entrar en modo confirmación
+                    pending_delete = True
+                else:
+                    # Tecla no reconocida, no actualizar
+                    continue
 
             # Ajustar índice si está fuera de rango
-            if current_idx >= n_analyses:
+            if n_analyses > 0 and current_idx >= n_analyses:
                 current_idx = n_analyses - 1
 
             # Solo actualizar display después de una acción válida
@@ -355,6 +382,7 @@ def interactive_table_viewer(
                 max_visible_rows,
                 on_edit_note is not None,
                 on_delete is not None,
+                confirm_delete=pending_delete,
             )
             live.update(display, refresh=True)
 

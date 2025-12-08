@@ -81,7 +81,11 @@ class AddAnalysisMenu(SessionMenu):
         tc_existentes = [tc.method for tc in self.basin.tc_results]
         if not tc_existentes:
             self.warning("No hay métodos de Tc calculados en esta cuenca")
-            return
+            if not self._offer_calculate_tc():
+                return
+            tc_existentes = [tc.method for tc in self.basin.tc_results]
+            if not tc_existentes:
+                return
 
         tc_choices = [
             questionary.Choice(tc, checked=(i == 0))
@@ -450,3 +454,35 @@ class AddAnalysisMenu(SessionMenu):
             )
             return tc_hr, {"c": self.c, "area_ha": self.basin.area_ha}
         return None, {}
+
+    def _offer_calculate_tc(self) -> bool:
+        """Ofrece calcular Tc si no existe. Retorna True si se calculó alguno."""
+        available = self._get_available_tc_methods([])
+        if not available:
+            self.error("No se puede calcular Tc: falta longitud de cauce o coeficiente C")
+            return False
+
+        self.echo("\n  Primero necesitas calcular al menos un tiempo de concentración.\n")
+
+        tc_method = self.select(
+            "Selecciona método de Tc:",
+            choices=available + ["← Cancelar"],
+        )
+
+        if tc_method is None or "Cancelar" in tc_method:
+            return False
+
+        method = tc_method.lower()
+        tc_hr, tc_params = self._calculate_tc_with_params(method)
+        if tc_hr:
+            from hidropluvial.database import get_database
+            db = get_database()
+            db.add_tc_result(self.basin.id, method, tc_hr, tc_params)
+            # Agregar al modelo en memoria
+            from hidropluvial.models import TcResult
+            result = TcResult(method=method, tc_hr=tc_hr, tc_min=tc_hr * 60, parameters=tc_params)
+            self.basin.add_tc_result(result)
+            self.success(f"Tc ({method}): {result.tc_min:.1f} min")
+            return True
+
+        return False

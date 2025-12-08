@@ -1,0 +1,202 @@
+# Release workflow
+# Triggered on version tags (v*)
+# Builds and publishes to PyPI, creates Windows executable and installer
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ============================================
+  # Build y publicar en PyPI
+  # ============================================
+  pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package
+        run: twine check dist/*
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
+
+  # ============================================
+  # Build ejecutable Windows
+  # ============================================
+  windows-exe:
+    name: Build Windows Executable
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
+
+      - name: Build executable
+        run: pyinstaller hidropluvial.spec
+
+      - name: Test executable
+        run: |
+          .\dist\hidropluvial\hidropluvial.exe --help
+
+      - name: Get version
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create ZIP
+        run: |
+          Compress-Archive -Path dist/hidropluvial -DestinationPath dist/HidroPluvial-${{ steps.version.outputs.VERSION }}-Windows.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/HidroPluvial-${{ steps.version.outputs.VERSION }}-Windows.zip
+
+  # ============================================
+  # Build instalador Windows (Inno Setup)
+  # ============================================
+  windows-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    needs: windows-exe
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Download executable
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-exe
+          path: artifacts/
+
+      - name: Extract executable
+        run: |
+          Expand-Archive -Path artifacts/HidroPluvial-${{ steps.version.outputs.VERSION }}-Windows.zip -DestinationPath dist/
+
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup -y
+
+      - name: Update version in ISS file
+        run: |
+          (Get-Content hidropluvial.iss) -replace '#define MyAppVersion ".*"', '#define MyAppVersion "${{ steps.version.outputs.VERSION }}"' | Set-Content hidropluvial.iss
+
+      - name: Build installer
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" hidropluvial.iss
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: installer/*.exe
+
+  # ============================================
+  # Crear GitHub Release
+  # ============================================
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [pypi, windows-exe, windows-installer]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Download Windows EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-exe
+          path: release/
+
+      - name: Download Windows Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: release/
+
+      - name: List release files
+        run: ls -la release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: HidroPluvial v${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          files: |
+            release/*
+          body: |
+            ## HidroPluvial v${{ steps.version.outputs.VERSION }}
+
+            ### Instalación
+
+            **Opción 1: pip (requiere Python 3.11+)**
+            ```bash
+            pip install hidropluvial==${{ steps.version.outputs.VERSION }}
+            ```
+
+            **Opción 2: Instalador Windows**
+            Descargar `HidroPluvial-${{ steps.version.outputs.VERSION }}-Setup.exe` y ejecutar.
+
+            **Opción 3: Ejecutable portable**
+            Descargar y extraer `HidroPluvial-${{ steps.version.outputs.VERSION }}-Windows.zip`
+
+            ### Uso
+
+            ```bash
+            # Iniciar wizard interactivo
+            hp wizard
+
+            # Ver comandos disponibles
+            hp --help
+            ```
+
+            ### Cambios
+
+            Ver [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md)

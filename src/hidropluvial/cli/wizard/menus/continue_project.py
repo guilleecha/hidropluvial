@@ -296,16 +296,13 @@ class ContinueProjectMenu(BaseMenu):
             return None
 
         def on_delete(analysis_id: str) -> bool:
-            clear_screen()
-            print(f"\n  ¿Eliminar análisis {analysis_id[:8]}?\n")
-            if questionary.confirm(
-                "¿Confirmar eliminación?",
-                default=False,
-                **get_confirm_kwargs(),
-            ).ask():
-                if db.delete_analysis(analysis_id):
-                    self.basin.analyses = [a for a in self.basin.analyses if a.id != analysis_id]
-                    return True
+            """Elimina un análisis de la base de datos."""
+            if db.delete_analysis(analysis_id):
+                self.basin.analyses = [a for a in self.basin.analyses if a.id != analysis_id]
+                # Guardar proyecto para persistir cambios
+                if self.project:
+                    self.project_manager.save_project(self.project)
+                return True
             return False
 
         updated = interactive_table_viewer(
@@ -345,16 +342,13 @@ class ContinueProjectMenu(BaseMenu):
             return None
 
         def on_delete(analysis_id: str) -> bool:
-            clear_screen()
-            print(f"\n  ¿Eliminar análisis {analysis_id[:8]}?\n")
-            if questionary.confirm(
-                "¿Confirmar eliminación?",
-                default=False,
-                **get_confirm_kwargs(),
-            ).ask():
-                if db.delete_analysis(analysis_id):
-                    self.basin.analyses = [a for a in self.basin.analyses if a.id != analysis_id]
-                    return True
+            """Elimina un análisis de la base de datos."""
+            if db.delete_analysis(analysis_id):
+                self.basin.analyses = [a for a in self.basin.analyses if a.id != analysis_id]
+                # Guardar proyecto para persistir cambios
+                if self.project:
+                    self.project_manager.save_project(self.project)
+                return True
             return False
 
         updated = interactive_hydrograph_viewer(

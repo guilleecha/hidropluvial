@@ -373,24 +373,23 @@ def interactive_table_viewer(
             # Modo confirmación de eliminación
             if pending_delete:
                 if key in ('s', 'y'):
-                    # Confirmar eliminación
-                    from hidropluvial.database import get_database
-                    db = get_database()
-
+                    # Confirmar eliminación usando el callback
                     # Determinar qué eliminar
                     if marked_indices:
                         indices_to_delete = sorted(marked_indices, reverse=True)
                     else:
                         indices_to_delete = [current_idx]
 
-                    # Eliminar de la base de datos y de la lista
+                    # Eliminar usando el callback (que persiste en DB)
+                    deleted_ids = set()
                     for idx in indices_to_delete:
                         if idx < len(all_analyses):
                             analysis = all_analyses[idx]
-                            db.delete_analysis(analysis.id)
+                            if on_delete(analysis.id):
+                                deleted_ids.add(analysis.id)
 
                     # Reconstruir lista sin los eliminados
-                    all_analyses = [a for i, a in enumerate(all_analyses) if i not in marked_indices and i != current_idx] if marked_indices else [a for i, a in enumerate(all_analyses) if i != current_idx]
+                    all_analyses = [a for a in all_analyses if a.id not in deleted_ids]
 
                     # Limpiar marcas y ajustar índice
                     marked_indices.clear()

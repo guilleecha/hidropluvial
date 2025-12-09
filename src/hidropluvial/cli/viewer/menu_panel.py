@@ -100,10 +100,10 @@ def build_menu_nav(state: MenuState) -> Text:
     nav.append("↑↓", style=f"bold {p.primary}")
     nav.append("] Navegar  ", style=p.muted)
     nav.append("[", style=p.muted)
-    nav.append("Enter", style=f"bold {p.success}")
+    nav.append("Enter", style="bold green")
     nav.append("] Confirmar  ", style=p.muted)
     nav.append("[", style=p.muted)
-    nav.append("Esc", style=f"bold {p.warning}")
+    nav.append("Esc", style="bold red")
     nav.append("] Volver", style=p.muted)
 
     return nav

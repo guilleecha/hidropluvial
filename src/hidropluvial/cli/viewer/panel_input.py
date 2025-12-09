@@ -167,10 +167,10 @@ def build_nav_bar(state: PanelState) -> Text:
         nav.append("↑↓", style=f"bold {p.accent}")
         nav.append("] Navegar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Enter", style=f"bold {p.success}")
+        nav.append("Enter", style="bold green")
         nav.append("] Confirmar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Esc", style=f"bold {p.warning}")
+        nav.append("Esc", style="bold red")
         nav.append("] Volver", style=p.muted)
 
     elif state.mode == "checkbox":
@@ -184,26 +184,28 @@ def build_nav_bar(state: PanelState) -> Text:
         nav.append("↑↓", style=f"bold {p.accent}")
         nav.append("] Navegar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Enter", style=f"bold {p.success}")
+        nav.append("Enter", style="bold green")
         nav.append("] Confirmar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Esc", style=f"bold {p.warning}")
+        nav.append("Esc", style="bold red")
         nav.append("] Volver", style=p.muted)
 
     elif state.mode == "text":
         nav.append("  [", style=p.muted)
-        nav.append("Enter", style=f"bold {p.success}")
+        nav.append("Enter", style="bold green")
         nav.append("] Confirmar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Esc", style=f"bold {p.warning}")
+        nav.append("Esc", style="bold red")
         nav.append("] Volver", style=p.muted)
 
     elif state.mode == "confirm":
         nav.append("  [", style=p.muted)
-        nav.append("s/n", style=f"bold {p.accent}")
+        nav.append("s", style="bold green")
+        nav.append("/", style=p.muted)
+        nav.append("n", style="bold red")
         nav.append("] Seleccionar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Enter", style=f"bold {p.success}")
+        nav.append("Enter", style="bold green")
         nav.append("] Confirmar", style=p.muted)
 
     return nav

@@ -349,8 +349,8 @@ def interactive_project_viewer(
 
 def _edit_project(project_manager: ProjectManager, project_id: str) -> None:
     """Edita metadatos de un proyecto."""
-    import questionary
-    from hidropluvial.cli.wizard.styles import get_text_kwargs
+    from hidropluvial.cli.viewer.panel_input import panel_text
+    from hidropluvial.cli.theme import print_section, print_success
 
     clear_screen()
     project = project_manager.get_project(project_id)
@@ -358,83 +358,77 @@ def _edit_project(project_manager: ProjectManager, project_id: str) -> None:
         print("\n  Proyecto no encontrado.\n")
         return
 
-    print(f"\n  Editando proyecto: {project.name}\n")
+    print_section(f"Editando proyecto: {project.name}")
 
-    new_name = questionary.text(
-        "Nombre:",
+    new_name = panel_text(
+        title="Nombre",
         default=project.name,
-        **get_text_kwargs(),
-    ).ask()
+    )
 
     if new_name and new_name != project.name:
         project.name = new_name
 
-    new_desc = questionary.text(
-        "Descripcion:",
+    new_desc = panel_text(
+        title="Descripcion",
         default=project.description or "",
-        **get_text_kwargs(),
-    ).ask()
+        hint="Opcional",
+    )
 
     if new_desc is not None:
         project.description = new_desc
 
-    new_author = questionary.text(
-        "Autor:",
+    new_author = panel_text(
+        title="Autor",
         default=project.author or "",
-        **get_text_kwargs(),
-    ).ask()
+        hint="Opcional",
+    )
 
     if new_author is not None:
         project.author = new_author
 
-    new_location = questionary.text(
-        "Ubicacion:",
+    new_location = panel_text(
+        title="Ubicacion",
         default=project.location or "",
-        **get_text_kwargs(),
-    ).ask()
+        hint="Opcional",
+    )
 
     if new_location is not None:
         project.location = new_location
 
     project_manager.save_project(project)
-    print("\n  Proyecto actualizado.\n")
-    questionary.press_any_key_to_continue("Presiona cualquier tecla...").ask()
+    print_success("Proyecto actualizado")
 
 
 def _create_new_project(project_manager: ProjectManager) -> None:
     """Crea un nuevo proyecto."""
-    import questionary
-    from hidropluvial.cli.wizard.styles import get_text_kwargs
+    from hidropluvial.cli.viewer.panel_input import panel_text
+    from hidropluvial.cli.theme import print_header, print_success
 
     clear_screen()
-    print("\n  Crear nuevo proyecto\n")
+    print_header("Crear nuevo proyecto")
 
-    name = questionary.text(
-        "Nombre del proyecto:",
-        validate=lambda x: len(x.strip()) > 0 or "El nombre no puede estar vacio",
-        **get_text_kwargs(),
-    ).ask()
+    name = panel_text(
+        title="Nombre del proyecto",
+        hint="Requerido",
+    )
 
     if not name:
         return
 
-    description = questionary.text(
-        "Descripcion (opcional):",
-        default="",
-        **get_text_kwargs(),
-    ).ask() or ""
+    description = panel_text(
+        title="Descripcion",
+        hint="Opcional",
+    ) or ""
 
-    author = questionary.text(
-        "Autor (opcional):",
-        default="",
-        **get_text_kwargs(),
-    ).ask() or ""
+    author = panel_text(
+        title="Autor",
+        hint="Opcional",
+    ) or ""
 
-    location = questionary.text(
-        "Ubicacion (opcional):",
-        default="",
-        **get_text_kwargs(),
-    ).ask() or ""
+    location = panel_text(
+        title="Ubicacion",
+        hint="Opcional",
+    ) or ""
 
     project = project_manager.create_project(
         name=name,
@@ -443,8 +437,7 @@ def _create_new_project(project_manager: ProjectManager) -> None:
         location=location,
     )
 
-    print(f"\n  Proyecto creado: {project.name} [{project.id}]\n")
-    questionary.press_any_key_to_continue("Presiona cualquier tecla...").ask()
+    print_success(f"Proyecto creado: {project.name} [{project.id}]")
 
 
 def _view_project_basins(project_manager: ProjectManager, project_id: str) -> None:

@@ -382,41 +382,41 @@ def _edit_basin(project_manager: ProjectManager, project: Project, basin: Basin)
 
 def _add_basin_menu(project_manager: ProjectManager, project: Project) -> None:
     """Menu para agregar cuenca: nueva o importar."""
-    import questionary
-    from hidropluvial.cli.wizard.styles import get_select_kwargs
+    from hidropluvial.cli.viewer.menu_panel import menu_panel, MenuItem
 
     clear_screen()
-    print(f"\n  Agregar cuenca al proyecto: {project.name}\n")
 
-    choice = questionary.select(
-        "Como deseas agregar la cuenca?",
-        choices=[
-            "Crear nueva cuenca (wizard completo)",
-            "Importar desde otro proyecto",
-            "<- Cancelar",
-        ],
-        **get_select_kwargs(),
-    ).ask()
+    items = [
+        MenuItem(key="n", label="Nueva cuenca", value="new", hint="Configurar desde cero"),
+        MenuItem(key="i", label="Importar cuenca", value="import", hint="Desde otro proyecto"),
+    ]
 
-    if choice is None or "Cancelar" in choice:
+    choice = menu_panel(
+        title="Agregar Cuenca",
+        items=items,
+        subtitle=f"Proyecto: {project.name}",
+        allow_back=True,
+    )
+
+    if choice is None:
         return
 
-    if "Crear nueva" in choice:
+    if choice == "new":
         _create_new_basin(project_manager, project)
-    elif "Importar" in choice:
+    elif choice == "import":
         _import_basin(project_manager, project)
 
 
 def _create_new_basin(project_manager: ProjectManager, project: Project) -> None:
-    """Crea una nueva cuenca usando el wizard completo."""
+    """Crea una nueva cuenca."""
     from hidropluvial.cli.wizard.config import WizardConfig
     from hidropluvial.cli.wizard.runner import AnalysisRunner
     from hidropluvial.cli.wizard.menus.post_execution import PostExecutionMenu
-    import questionary
-    from hidropluvial.cli.wizard.styles import get_confirm_kwargs
+    from hidropluvial.cli.theme import print_section, print_header
+    from hidropluvial.cli.viewer.panel_input import panel_confirm
 
     clear_screen()
-    print(f"\n  Configurando nueva cuenca para: {project.name}\n")
+    print_section(f"Configurar cuenca en: {project.name}")
 
     config = WizardConfig.from_wizard()
     if config is None:
@@ -424,16 +424,10 @@ def _create_new_basin(project_manager: ProjectManager, project: Project) -> None
 
     config.print_summary()
 
-    if not questionary.confirm(
-        "\nEjecutar analisis?",
-        default=True,
-        **get_confirm_kwargs(),
-    ).ask():
+    if not panel_confirm(title="Ejecutar analisis?", default=True):
         return
 
-    print("\n" + "=" * 60)
-    print("  EJECUTANDO ANALISIS")
-    print("=" * 60 + "\n")
+    print_header("EJECUTANDO ANALISIS")
 
     runner = AnalysisRunner(config, project_id=project.id)
     updated_project, basin = runner.run()
@@ -447,8 +441,9 @@ def _create_new_basin(project_manager: ProjectManager, project: Project) -> None
 
 def _import_basin(project_manager: ProjectManager, target_project: Project) -> None:
     """Importa una cuenca desde otro proyecto."""
-    import questionary
-    from hidropluvial.cli.wizard.styles import get_select_kwargs, get_text_kwargs
+    from hidropluvial.cli.viewer.menu_panel import menu_panel, MenuItem
+    from hidropluvial.cli.viewer.panel_input import panel_text
+    from hidropluvial.cli.theme import print_info, print_success
 
     clear_screen()
 
@@ -459,64 +454,69 @@ def _import_basin(project_manager: ProjectManager, target_project: Project) -> N
     ]
 
     if not other_projects:
-        print("\n  No hay otros proyectos con cuencas disponibles.\n")
-        questionary.press_any_key_to_continue("Presiona cualquier tecla...").ask()
+        print_info("No hay otros proyectos con cuencas disponibles.")
         return
 
-    # Seleccionar proyecto origen
-    choices = [
-        f"{p['id'][:8]} - {p['name']} ({p['n_basins']} cuencas)"
-        for p in other_projects
-    ]
-    choices.append("<- Cancelar")
+    # Construir items para seleccion de proyecto
+    items = []
+    for idx, p in enumerate(other_projects):
+        key = chr(ord('a') + idx) if idx < 26 else str(idx)
+        items.append(MenuItem(
+            key=key,
+            label=p['name'],
+            value=p['id'],
+            hint=f"{p['n_basins']} cuencas",
+        ))
 
-    print(f"\n  Importar cuenca al proyecto: {target_project.name}\n")
+    choice = menu_panel(
+        title="Seleccionar Proyecto Origen",
+        items=items,
+        subtitle=f"Importar cuenca a: {target_project.name}",
+        allow_back=True,
+    )
 
-    choice = questionary.select(
-        "Selecciona proyecto origen:",
-        choices=choices,
-        **get_select_kwargs(),
-    ).ask()
-
-    if choice is None or "Cancelar" in choice:
+    if choice is None:
         return
 
-    source_id = choice.split(" - ")[0]
-    source_project = project_manager.get_project(source_id)
+    source_project = project_manager.get_project(choice)
 
     if not source_project or not source_project.basins:
-        print("\n  Proyecto sin cuencas.\n")
+        print_info("Proyecto sin cuencas.")
         return
 
-    # Seleccionar cuenca
-    basin_choices = [
-        f"{b.id[:8]} - {b.name} ({len(b.analyses) if b.analyses else 0} analisis)"
-        for b in source_project.basins
-    ]
-    basin_choices.append("<- Cancelar")
+    # Construir items para seleccion de cuenca
+    basin_items = []
+    for idx, b in enumerate(source_project.basins):
+        key = chr(ord('a') + idx) if idx < 26 else str(idx)
+        n_analyses = len(b.analyses) if b.analyses else 0
+        basin_items.append(MenuItem(
+            key=key,
+            label=b.name,
+            value=b.id,
+            hint=f"{n_analyses} analisis",
+        ))
 
-    basin_choice = questionary.select(
-        "Selecciona cuenca a importar:",
-        choices=basin_choices,
-        **get_select_kwargs(),
-    ).ask()
+    basin_choice = menu_panel(
+        title="Seleccionar Cuenca",
+        items=basin_items,
+        subtitle=f"Desde: {source_project.name}",
+        allow_back=True,
+    )
 
-    if basin_choice is None or "Cancelar" in basin_choice:
+    if basin_choice is None:
         return
 
-    basin_id = basin_choice.split(" - ")[0]
-    source_basin = source_project.get_basin(basin_id)
+    source_basin = source_project.get_basin(basin_choice)
 
     if not source_basin:
-        print("\n  Cuenca no encontrada.\n")
+        print_info("Cuenca no encontrada.")
         return
 
     # Preguntar nombre para la copia
-    new_name = questionary.text(
-        "Nombre para la cuenca importada:",
+    new_name = panel_text(
+        title="Nombre para la cuenca importada",
         default=source_basin.name,
-        **get_text_kwargs(),
-    ).ask()
+    )
 
     if not new_name:
         return
@@ -533,10 +533,9 @@ def _import_basin(project_manager: ProjectManager, target_project: Project) -> N
         length_m=source_basin.length_m,
     )
 
-    print(f"\n  Cuenca '{new_name}' importada exitosamente.")
-    print(f"  Nueva ID: {new_basin.id}")
-    print(f"\n  Nota: Los analisis no se copian. Usa 'Agregar analisis' para crear nuevos.\n")
-    questionary.press_any_key_to_continue("Presiona cualquier tecla...").ask()
+    print_success(f"Cuenca '{new_name}' importada exitosamente")
+    print_info(f"Nueva ID: {new_basin.id}")
+    print_info("Los analisis no se copian. Usa 'Agregar analisis' para crear nuevos.")
 
 
 def _view_basin_analyses(project_manager: ProjectManager, project: Project, basin: Basin) -> None:

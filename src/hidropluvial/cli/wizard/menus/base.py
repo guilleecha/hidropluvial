@@ -24,6 +24,10 @@ from hidropluvial.cli.theme import (
     print_header, print_section, print_success, print_warning,
     print_error, print_info, print_note, print_suggestion, print_basin_info, print_project_info,
 )
+from hidropluvial.cli.viewer.menu_panel import menu_panel, MenuItem
+from hidropluvial.cli.viewer.panel_input import (
+    panel_select, panel_checkbox, panel_text, panel_confirm, PanelOption,
+)
 
 
 class BaseMenu(ABC):
@@ -123,37 +127,69 @@ class BaseMenu(ABC):
         )
 
     def select(self, message: str, choices: list[str]) -> Optional[str]:
-        """Muestra un menu de seleccion con iconos y colores."""
-        return questionary.select(
-            message,
-            choices=choices,
-            **get_select_kwargs(),
-        ).ask()
+        """Muestra un panel de selección con shortcuts de letras."""
+        # Convertir choices a MenuItem
+        items = []
+        for idx, choice in enumerate(choices):
+            # Detectar si es una opción especial
+            if "Volver" in choice or "←" in choice:
+                continue  # Se maneja con Esc
+            elif "Cancelar" in choice:
+                continue  # Se maneja con Esc
+            elif choice.startswith("---") or choice.startswith("─"):
+                items.append(MenuItem(key=f"sep{idx}", label="", separator=True))
+            else:
+                key = chr(ord('a') + len([i for i in items if not i.separator]))
+                items.append(MenuItem(key=key, label=choice, value=choice))
+
+        if not items:
+            return None
+
+        return menu_panel(
+            title=message,
+            items=items,
+            allow_back=True,
+        )
 
     def checkbox(self, message: str, choices: list) -> Optional[list]:
-        """Muestra un menu de checkbox con iconos y colores."""
-        return questionary.checkbox(
-            message,
-            choices=choices,
-            **get_checkbox_kwargs(),
-        ).ask()
+        """Muestra un panel de checkbox con shortcuts de letras."""
+        # Convertir choices a PanelOption
+        options = []
+        for c in choices:
+            if isinstance(c, dict):
+                options.append(PanelOption(
+                    label=c.get("name", str(c.get("value", ""))),
+                    value=c.get("value"),
+                    checked=c.get("checked", False),
+                ))
+            elif hasattr(c, 'title'):  # questionary.Choice
+                options.append(PanelOption(
+                    label=c.title,
+                    value=c.title,
+                    checked=getattr(c, 'checked', False),
+                ))
+            else:
+                options.append(PanelOption(label=str(c), value=str(c)))
+
+        return panel_checkbox(
+            title=message,
+            options=options,
+        )
 
     def confirm(self, message: str, default: bool = True) -> bool:
-        """Muestra confirmacion con estilo."""
-        result = questionary.confirm(
-            message,
+        """Muestra panel de confirmación Sí/No."""
+        result = panel_confirm(
+            title=message,
             default=default,
-            **get_confirm_kwargs(),
-        ).ask()
+        )
         return result if result is not None else False
 
     def text(self, message: str, default: str = "") -> Optional[str]:
-        """Solicita texto con estilo."""
-        return questionary.text(
-            message,
+        """Solicita texto con panel interactivo."""
+        return panel_text(
+            title=message,
             default=default,
-            **get_text_kwargs(),
-        ).ask()
+        )
 
     def back_option(self, text: str = "Volver") -> str:
         """Genera texto para opción de volver."""
@@ -240,7 +276,7 @@ class BaseMenu(ABC):
         show_post_menu: bool = True,
     ) -> Optional[tuple[Project, Basin]]:
         """
-        Agrega una nueva cuenca a un proyecto usando el wizard completo.
+        Agrega una nueva cuenca a un proyecto.
 
         Args:
             project: Proyecto al que agregar la cuenca
@@ -253,7 +289,7 @@ class BaseMenu(ABC):
         from hidropluvial.cli.wizard.runner import AnalysisRunner
         from hidropluvial.cli.wizard.menus.post_execution import PostExecutionMenu
 
-        self.echo(f"\n  Configurando nueva cuenca para: {project.name}\n")
+        self.section(f"Configurar cuenca en: {project.name}")
 
         config = WizardConfig.from_wizard()
         if config is None:
@@ -354,6 +390,80 @@ class SessionMenu(BaseMenu):
         # Subclasses that need reloading should override this
         pass
 
+    # ========================================================================
+    # Callbacks reutilizables para visores interactivos
+    # ========================================================================
+
+    def _create_edit_note_callback(self, db=None):
+        """
+        Crea callback para editar nota de un análisis.
+
+        Args:
+            db: Database instance (opcional, se obtiene automáticamente)
+
+        Returns:
+            Función callback que recibe (analysis_id, current_note) -> str
+        """
+        from hidropluvial.database import get_database
+        from hidropluvial.cli.viewer.terminal import clear_screen
+
+        if db is None:
+            db = get_database()
+
+        def on_edit_note(analysis_id: str, current_note: str) -> str:
+            clear_screen()
+            print(f"\n  Editando nota del análisis {analysis_id[:8]}...\n")
+            new_note = questionary.text(
+                "Nueva nota (vacío para eliminar):",
+                default=current_note or "",
+                **get_text_kwargs(),
+            ).ask()
+            if new_note is not None:
+                db.update_analysis_note(analysis_id, new_note if new_note else None)
+                return new_note
+            return None
+
+        return on_edit_note
+
+    def _create_delete_callback(self, db=None, confirm_prompt: bool = True):
+        """
+        Crea callback para eliminar un análisis.
+
+        Args:
+            db: Database instance (opcional, se obtiene automáticamente)
+            confirm_prompt: Si mostrar confirmación antes de eliminar
+
+        Returns:
+            Función callback que recibe (analysis_id) -> bool
+        """
+        from hidropluvial.database import get_database
+        from hidropluvial.cli.viewer.terminal import clear_screen
+
+        if db is None:
+            db = get_database()
+
+        def on_delete(analysis_id: str) -> bool:
+            if confirm_prompt:
+                clear_screen()
+                print(f"\n  ¿Eliminar análisis {analysis_id[:8]}?\n")
+                if not questionary.confirm(
+                    "¿Confirmar eliminación?",
+                    default=False,
+                    **get_confirm_kwargs(),
+                ).ask():
+                    return False
+
+            if db.delete_analysis(analysis_id):
+                self._basin.analyses = [a for a in self._basin.analyses if a.id != analysis_id]
+                return True
+            return False
+
+        return on_delete
+
+    # ========================================================================
+    # Visores interactivos
+    # ========================================================================
+
     def show_analysis_cards(self, analyses: list = None, name: str = None) -> None:
         """
         Muestra el visor interactivo de fichas de análisis.
@@ -374,47 +484,13 @@ class SessionMenu(BaseMenu):
             return
 
         from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
-        from hidropluvial.database import get_database
-        from hidropluvial.cli.viewer.terminal import clear_screen
-
-        db = get_database()
-
-        def on_edit_note(analysis_id: str, current_note: str) -> str:
-            """Callback para editar nota de un análisis."""
-            clear_screen()
-            print(f"\n  Editando nota del análisis {analysis_id[:8]}...\n")
-            new_note = questionary.text(
-                "Nueva nota (vacío para eliminar):",
-                default=current_note or "",
-                **get_text_kwargs(),
-            ).ask()
-            if new_note is not None:
-                db.update_analysis_note(analysis_id, new_note if new_note else None)
-                return new_note
-            return None
-
-        def on_delete(analysis_id: str) -> bool:
-            """Callback para eliminar un análisis."""
-            clear_screen()
-            print(f"\n  ¿Eliminar análisis {analysis_id[:8]}?\n")
-            if questionary.confirm(
-                "¿Confirmar eliminación?",
-                default=False,
-                **get_confirm_kwargs(),
-            ).ask():
-                if db.delete_analysis(analysis_id):
-                    # También eliminar de la lista del basin
-                    self._basin.analyses = [a for a in self._basin.analyses if a.id != analysis_id]
-                    return True
-            return False
 
         updated_analyses = interactive_hydrograph_viewer(
             analyses, name,
-            on_edit_note=on_edit_note,
-            on_delete=on_delete,
+            on_edit_note=self._create_edit_note_callback(),
+            on_delete=self._create_delete_callback(),
         )
 
-        # Actualizar la lista de análisis del basin
         if updated_analyses is not None:
             self._basin.analyses = updated_analyses
 
@@ -438,43 +514,13 @@ class SessionMenu(BaseMenu):
             return
 
         from hidropluvial.cli.viewer.table_viewer import interactive_table_viewer
-        from hidropluvial.database import get_database
-        from hidropluvial.cli.viewer.terminal import clear_screen
+        from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
 
-        db = get_database()
-
-        def on_edit_note(analysis_id: str, current_note: str) -> str:
-            """Callback para editar nota de un análisis."""
-            clear_screen()
-            print(f"\n  Editando nota del análisis {analysis_id[:8]}...\n")
-            new_note = questionary.text(
-                "Nueva nota (vacío para eliminar):",
-                default=current_note or "",
-                **get_text_kwargs(),
-            ).ask()
-            if new_note is not None:
-                db.update_analysis_note(analysis_id, new_note if new_note else None)
-                return new_note
-            return None
-
-        def on_delete(analysis_id: str) -> bool:
-            """Callback para eliminar un análisis."""
-            clear_screen()
-            print(f"\n  ¿Eliminar análisis {analysis_id[:8]}?\n")
-            if questionary.confirm(
-                "¿Confirmar eliminación?",
-                default=False,
-                **get_confirm_kwargs(),
-            ).ask():
-                if db.delete_analysis(analysis_id):
-                    self._basin.analyses = [a for a in self._basin.analyses if a.id != analysis_id]
-                    return True
-            return False
+        on_edit_note = self._create_edit_note_callback()
+        on_delete = self._create_delete_callback()
 
         def on_view_detail(index: int) -> None:
             """Callback para ver ficha detallada de un análisis."""
-            # Mostrar el visor de fichas empezando en el índice seleccionado
-            from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
             interactive_hydrograph_viewer(
                 [self._basin.analyses[index]],
                 name,
@@ -489,6 +535,5 @@ class SessionMenu(BaseMenu):
             on_view_detail=on_view_detail,
         )
 
-        # Actualizar la lista de análisis del basin
         if updated_analyses is not None:
             self._basin.analyses = updated_analyses

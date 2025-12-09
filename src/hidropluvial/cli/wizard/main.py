@@ -5,9 +5,8 @@ Punto de entrada principal del wizard.
 from typing import Optional
 
 import typer
-import questionary
 
-from hidropluvial.cli.wizard.styles import WIZARD_STYLE, print_banner
+from hidropluvial.cli.wizard.styles import print_banner
 from hidropluvial.cli.wizard.config import WizardConfig
 from hidropluvial.cli.wizard.runner import AnalysisRunner
 from hidropluvial.cli.wizard.menus import PostExecutionMenu
@@ -16,6 +15,10 @@ from hidropluvial.cli.theme import (
     print_header, print_section, print_success, print_warning,
     print_info, print_error,
 )
+from hidropluvial.cli.viewer.menu_panel import (
+    menu_panel, MenuItem, confirm_menu,
+)
+from hidropluvial.cli.viewer.panel_input import panel_text, panel_confirm
 
 
 def wizard_main() -> None:
@@ -25,31 +28,35 @@ def wizard_main() -> None:
     print_banner()
 
     while True:
-        # Menu principal
-        choice = questionary.select(
-            "Que deseas hacer?",
-            choices=[
-                "1. Proyectos",
-                "2. Crear proyecto",
-                "3. Nueva cuenca",
-                "4. Ver comandos disponibles",
-                "5. Salir",
-            ],
-            style=WIZARD_STYLE,
-        ).ask()
+        # Menu principal con panel interactivo
+        items = [
+            MenuItem(key="p", label="Proyectos", value="projects", hint="Ver y gestionar proyectos"),
+            MenuItem(key="c", label="Crear proyecto", value="create", hint="Nuevo proyecto vacío"),
+            MenuItem(key="n", label="Nueva cuenca", value="basin", hint="Crear cuenca con análisis"),
+            MenuItem(key="separator1", label="", separator=True),
+            MenuItem(key="?", label="Comandos disponibles", value="help", hint="Ver ayuda"),
+            MenuItem(key="q", label="Salir", value="exit"),
+        ]
 
-        if choice is None or "5." in choice:
+        choice = menu_panel(
+            title="HidroPluvial",
+            items=items,
+            subtitle="Herramienta de cálculos hidrológicos",
+            allow_back=False,
+        )
+
+        if choice is None or choice == "exit":
             print_info("Hasta pronto!")
             raise typer.Exit()
 
         try:
-            if "1." in choice:
+            if choice == "projects":
                 _projects_menu()
-            elif "2." in choice:
+            elif choice == "create":
                 _create_project()
-            elif "3." in choice:
+            elif choice == "basin":
                 _new_basin()
-            elif "4." in choice:
+            elif choice == "help":
                 from hidropluvial.cli.commands import show_commands
                 show_commands()
         except SystemExit:
@@ -79,27 +86,26 @@ def _new_basin() -> None:
     # Primero preguntar sobre el proyecto
     project = _select_or_create_project_for_basin()
     if project is None:
-        raise typer.Exit()
+        return  # Volver al menú principal
 
     print_success(f"Proyecto seleccionado: {project.name} [{project.id}]")
 
     # Recolectar configuracion de la cuenca
     config = WizardConfig.from_wizard()
     if config is None:
-        raise typer.Exit()
+        return
 
     # Mostrar resumen y confirmar
     config.print_summary()
 
-    confirmar = questionary.confirm(
-        "\nEjecutar analisis?",
+    confirmar = panel_confirm(
+        title="¿Ejecutar análisis?",
         default=True,
-        style=WIZARD_STYLE,
-    ).ask()
+    )
 
     if not confirmar:
         print_warning("Operacion cancelada")
-        raise typer.Exit()
+        return
 
     # Ejecutar con el proyecto seleccionado
     print_header("EJECUTANDO ANALISIS")
@@ -118,77 +124,74 @@ def _select_or_create_project_for_basin() -> Optional[Project]:
     projects = project_manager.list_projects()
 
     # Construir opciones
-    choices = ["Crear nuevo proyecto"]
+    items = [
+        MenuItem(key="n", label="Crear nuevo proyecto", value="new"),
+    ]
 
     if projects:
-        choices.append("--- Proyectos existentes ---")
-        for p in projects:
-            choices.append(f"{p['id']} - {p['name']} ({p['n_basins']} cuencas)")
+        items.append(MenuItem(key="sep", label="", separator=True))
+        for idx, p in enumerate(projects):
+            key = chr(ord('a') + idx) if idx < 25 else str(idx)
+            items.append(MenuItem(
+                key=key,
+                label=f"{p['name']}",
+                value=p['id'],
+                hint=f"{p['n_basins']} cuencas",
+            ))
 
-    choices.append("← Volver al menu principal")
+    choice = menu_panel(
+        title="Seleccionar Proyecto",
+        items=items,
+        subtitle="¿Dónde crear la cuenca?",
+    )
 
-    choice = questionary.select(
-        "Donde deseas crear la cuenca?",
-        choices=choices,
-        style=WIZARD_STYLE,
-    ).ask()
-
-    if choice is None or "Volver" in choice:
+    if choice is None:
         return None
 
-    if "Crear nuevo proyecto" in choice:
+    if choice == "new":
         return _create_project_quick()
-    elif choice.startswith("---"):
-        # Separador, volver a preguntar
-        return _select_or_create_project_for_basin()
-    else:
-        # Proyecto existente seleccionado
-        project_id = choice.split(" - ")[0]
-        return project_manager.get_project(project_id)
+
+    # Proyecto existente seleccionado
+    return project_manager.get_project(choice)
 
 
 def _create_project_quick() -> Optional[Project]:
     """Crea un proyecto de forma rápida (solo nombre obligatorio)."""
     print_section("Nuevo Proyecto")
 
-    name = questionary.text(
-        "Nombre del proyecto:",
-        validate=lambda x: len(x.strip()) > 0 or "El nombre no puede estar vacio",
-        style=WIZARD_STYLE,
-    ).ask()
+    name = panel_text(
+        title="Nombre del proyecto",
+        hint="Identificador único para este proyecto",
+    )
 
-    if name is None:
+    if not name:
         return None
 
     # Preguntar si quiere agregar más detalles
-    add_details = questionary.confirm(
-        "Agregar descripcion, autor y ubicacion?",
+    add_details = panel_confirm(
+        title="¿Agregar descripción, autor y ubicación?",
         default=False,
-        style=WIZARD_STYLE,
-    ).ask()
+    )
 
     description = ""
     author = ""
     location = ""
 
     if add_details:
-        description = questionary.text(
-            "Descripcion (opcional):",
-            default="",
-            style=WIZARD_STYLE,
-        ).ask() or ""
+        description = panel_text(
+            title="Descripción",
+            hint="Opcional",
+        ) or ""
 
-        author = questionary.text(
-            "Autor (opcional):",
-            default="",
-            style=WIZARD_STYLE,
-        ).ask() or ""
+        author = panel_text(
+            title="Autor",
+            hint="Opcional",
+        ) or ""
 
-        location = questionary.text(
-            "Ubicacion (opcional):",
-            default="",
-            style=WIZARD_STYLE,
-        ).ask() or ""
+        location = panel_text(
+            title="Ubicación",
+            hint="Opcional",
+        ) or ""
 
     project_manager = get_project_manager()
     project = project_manager.create_project(
@@ -207,40 +210,36 @@ def _create_project() -> None:
     print_header("CREAR NUEVO PROYECTO")
 
     # Solicitar datos del proyecto
-    name = questionary.text(
-        "Nombre del proyecto:",
-        validate=lambda x: len(x.strip()) > 0 or "El nombre no puede estar vacio",
-        style=WIZARD_STYLE,
-    ).ask()
+    name = panel_text(
+        title="Nombre del proyecto",
+        hint="Requerido",
+    )
 
-    if name is None:
-        raise typer.Exit()
+    if not name:
+        return
 
-    description = questionary.text(
-        "Descripcion (opcional):",
-        default="",
-        style=WIZARD_STYLE,
-    ).ask()
+    description = panel_text(
+        title="Descripción",
+        hint="Opcional",
+    ) or ""
 
-    author = questionary.text(
-        "Autor (opcional):",
-        default="",
-        style=WIZARD_STYLE,
-    ).ask()
+    author = panel_text(
+        title="Autor",
+        hint="Opcional",
+    ) or ""
 
-    location = questionary.text(
-        "Ubicacion (opcional):",
-        default="",
-        style=WIZARD_STYLE,
-    ).ask()
+    location = panel_text(
+        title="Ubicación",
+        hint="Opcional",
+    ) or ""
 
     # Crear el proyecto
     project_manager = get_project_manager()
     project = project_manager.create_project(
         name=name,
-        description=description or "",
-        author=author or "",
-        location=location or "",
+        description=description,
+        author=author,
+        location=location,
     )
 
     print_success(f"Proyecto creado: {project.name} [{project.id}]")

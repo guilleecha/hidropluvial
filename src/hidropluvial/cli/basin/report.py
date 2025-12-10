@@ -7,13 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from hidropluvial.models import Basin
-
-
-def _escape_latex(text: str) -> str:
-    """Escapa caracteres especiales de LaTeX en texto plano."""
-    if '\\' in text or '$' in text:
-        return text
-    return text.replace('_', r'\_')
+from hidropluvial.reports import escape_latex
 
 
 def generate_basin_report(
@@ -149,7 +143,7 @@ def _generate_main_document(
     methodology: bool = False,
 ) -> str:
     """Genera el contenido del documento LaTeX principal."""
-    safe_name = _escape_latex(basin.name)
+    safe_name = escape_latex(basin.name)
 
     lines = [
         r"\documentclass[a4paper,11pt]{article}",
@@ -166,7 +160,7 @@ def _generate_main_document(
         r"\geometry{margin=2.5cm}",
         "",
         f"\\title{{Estudio Hidrológico - {safe_name}}}",
-        f"\\author{{{_escape_latex(author)}}}" if author else r"\author{}",
+        f"\\author{{{escape_latex(author)}}}" if author else r"\author{}",
         r"\date{\today}",
         "",
         r"\begin{document}",
@@ -219,7 +213,7 @@ def _generate_main_document(
         ])
 
         for tc in basin.tc_results:
-            method_name = _escape_latex(tc.method.capitalize())
+            method_name = escape_latex(tc.method.capitalize())
             lines.append(f"{method_name} & {tc.tc_min:.1f} & {tc.tc_hr:.3f} \\\\")
 
         lines.extend([
@@ -245,7 +239,7 @@ def _generate_main_document(
         ])
 
         for a in basin.analyses:
-            method = _escape_latex(a.tc.method)
+            method = escape_latex(a.tc.method)
             storm = a.storm.type.upper()
             tr = a.storm.return_period
             p_mm = a.storm.total_depth_mm
@@ -283,7 +277,7 @@ def _generate_main_document(
             r"\begin{figure}[h]",
             r"\centering",
             f"\\input{{hidrogramas/{base_name}}}",
-            f"\\caption{{Hidrograma - {_escape_latex(base_name)}}}",
+            f"\\caption{{Hidrograma - {escape_latex(base_name)}}}",
             r"\end{figure}",
             "",
         ])
@@ -303,7 +297,7 @@ def _generate_main_document(
             r"\begin{figure}[h]",
             r"\centering",
             f"\\input{{hietogramas/{base_name}}}",
-            f"\\caption{{Hietograma - {_escape_latex(base_name)}}}",
+            f"\\caption{{Hietograma - {escape_latex(base_name)}}}",
             r"\end{figure}",
             "",
         ])

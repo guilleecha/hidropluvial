@@ -63,10 +63,20 @@ def get_key() -> str:
             return 'n'
         elif key == b'i' or key == b'I':
             return 'i'
+        elif key == b'a' or key == b'A':
+            return 'a'
+        elif key == b'b' or key == b'B':
+            return 'b'
+        elif key == b'x' or key == b'X':
+            return 'x'
         elif key == b' ':  # Espacio
             return 'space'
         elif key == b'\r':  # Enter
             return 'enter'
+        elif key == b'\x08':  # Backspace
+            return 'backspace'
+        elif key == b'\t':  # Tab
+            return 'tab'
 
         return key.decode('utf-8', errors='ignore')
     else:
@@ -111,10 +121,20 @@ def get_key() -> str:
                 return 'n'
             elif key == 'i' or key == 'I':
                 return 'i'
+            elif key == 'a' or key == 'A':
+                return 'a'
+            elif key == 'b' or key == 'B':
+                return 'b'
+            elif key == 'x' or key == 'X':
+                return 'x'
             elif key == ' ':  # Espacio
                 return 'space'
             elif key == '\r' or key == '\n':
                 return 'enter'
+            elif key == '\x7f' or key == '\x08':  # Backspace (Unix/Mac)
+                return 'backspace'
+            elif key == '\t':  # Tab
+                return 'tab'
 
             return key
         finally:

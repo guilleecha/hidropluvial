@@ -4,8 +4,6 @@ Comando 'commands' - Lista todos los comandos disponibles.
 
 import typer
 
-from hidropluvial.cli.formatters import fmt
-
 
 def show_commands():
     """

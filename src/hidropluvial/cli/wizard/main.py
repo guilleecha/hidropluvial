@@ -1,47 +1,86 @@
 """
 Punto de entrada principal del wizard.
+
+Usa imports diferidos para mejorar tiempo de inicio.
 """
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import typer
 
-from hidropluvial.cli.wizard.styles import print_banner
-from hidropluvial.cli.wizard.config import WizardConfig
-from hidropluvial.cli.wizard.runner import AnalysisRunner
-from hidropluvial.cli.wizard.menus import PostExecutionMenu
-from hidropluvial.project import Project, get_project_manager
-from hidropluvial.cli.theme import (
-    print_header, print_section, print_success, print_warning,
-    print_info, print_error,
-)
-from hidropluvial.cli.viewer.menu_panel import (
-    menu_panel, MenuItem, confirm_menu,
-)
-from hidropluvial.cli.viewer.panel_input import panel_text, panel_confirm
+# Imports diferidos - solo para type hints
+if TYPE_CHECKING:
+    from hidropluvial.project import Project
+
+
+def _build_banner_panel():
+    """Construye el panel del banner para mostrar en el menú."""
+    from rich.panel import Panel
+    from rich.text import Text
+    from rich import box
+    from hidropluvial.cli.theme import get_palette
+
+    p = get_palette()
+
+    # ASCII art logo estilizado
+    logo = r"""
+   ╦ ╦╦╔╦╗╦═╗╔═╗╔═╗╦  ╦ ╦╦  ╦╦╔═╗╦
+   ╠═╣║ ║║╠╦╝║ ║╠═╝║  ║ ║╚╗╔╝║╠═╣║
+   ╩ ╩╩═╩╝╩╚═╚═╝╩  ╩═╝╚═╝ ╚╝ ╩╩ ╩╩═╝
+"""
+
+    # Contenido del banner
+    content = Text()
+    content.append(logo, style=f"bold {p.primary}")
+    content.append("\n")
+    content.append("      ≋≋≋  ", style=f"{p.accent}")
+    content.append("Cálculos Hidrológicos", style=f"bold {p.secondary}")
+    content.append("  ≋≋≋\n", style=f"{p.accent}")
+    content.append("              Uruguay", style=p.muted)
+
+    # Panel con diseño mejorado
+    return Panel(
+        content,
+        border_style=p.primary,
+        box=box.DOUBLE,
+        padding=(0, 2),
+        width=52,
+    )
 
 
 def wizard_main() -> None:
     """
     Asistente interactivo para crear analisis hidrologicos.
     """
-    print_banner()
+    from hidropluvial.cli.theme import print_info
+    from hidropluvial.cli.viewer.menu_panel import menu_panel, MenuItem
+
+    # Construir banner para mostrar con el menú
+    banner = _build_banner_panel()
 
     while True:
-        # Menu principal con panel interactivo
+        # Menu principal simplificado
         items = [
-            MenuItem(key="p", label="Proyectos", value="projects", hint="Ver y gestionar proyectos"),
-            MenuItem(key="c", label="Crear proyecto", value="create", hint="Nuevo proyecto vacío"),
-            MenuItem(key="n", label="Nueva cuenca", value="basin", hint="Crear cuenca con análisis"),
+            MenuItem(
+                key="e",
+                label="Entrar",
+                value="enter",
+                hint="Gestionar proyectos y cuencas"
+            ),
             MenuItem(key="separator1", label="", separator=True),
-            MenuItem(key="?", label="Comandos disponibles", value="help", hint="Ver ayuda"),
+            MenuItem(
+                key="c",
+                label="Configuración",
+                value="settings",
+                hint="Ajustes de la herramienta"
+            ),
             MenuItem(key="q", label="Salir", value="exit"),
         ]
 
         choice = menu_panel(
-            title="HidroPluvial",
+            title="Menú Principal",
             items=items,
-            subtitle="Herramienta de cálculos hidrológicos",
+            info_panel=banner,
             allow_back=False,
         )
 
@@ -50,113 +89,129 @@ def wizard_main() -> None:
             raise typer.Exit()
 
         try:
-            if choice == "projects":
-                _projects_menu()
-            elif choice == "create":
-                _create_project()
-            elif choice == "basin":
-                _new_basin()
-            elif choice == "help":
-                from hidropluvial.cli.commands import show_commands
-                show_commands()
+            if choice == "enter":
+                _enter_tool()
+            elif choice == "settings":
+                _settings_menu()
         except SystemExit:
             # Capturar typer.Exit para volver al menu principal
             pass
 
 
-def _projects_menu() -> None:
-    """Muestra el visor interactivo de proyectos."""
+def _enter_tool() -> None:
+    """Entrada principal a la herramienta - visor de proyectos."""
     from hidropluvial.cli.viewer.project_viewer import interactive_project_viewer
+    from hidropluvial.cli.viewer.panel_input import panel_confirm
+    from hidropluvial.cli.theme import print_info
+    from hidropluvial.project import get_project_manager
 
     project_manager = get_project_manager()
     projects = project_manager.list_projects()
 
     if not projects:
+        # No hay proyectos - ofrecer crear uno
         print_info("\n  No hay proyectos guardados.")
-        print_info("  Usa 'Crear proyecto' o 'Nueva cuenca' para comenzar.\n")
+
+        create = panel_confirm(
+            title="¿Crear un nuevo proyecto?",
+            default=True,
+        )
+
+        if create:
+            project = _create_project_quick()
+            if project:
+                # Entrar al visor con el nuevo proyecto
+                interactive_project_viewer(project_manager)
         return
 
     interactive_project_viewer(project_manager)
 
 
-def _new_basin() -> None:
-    """Ejecuta el flujo de nueva cuenca."""
-    project_manager = get_project_manager()
+def _settings_menu() -> None:
+    """Menú de configuración (placeholder para desarrollo futuro)."""
+    from hidropluvial.cli.viewer.menu_panel import menu_panel, MenuItem
+    from hidropluvial.cli.theme import print_info
 
-    # Primero preguntar sobre el proyecto
-    project = _select_or_create_project_for_basin()
-    if project is None:
-        return  # Volver al menú principal
-
-    print_success(f"Proyecto seleccionado: {project.name} [{project.id}]")
-
-    # Recolectar configuracion de la cuenca
-    config = WizardConfig.from_wizard()
-    if config is None:
-        return
-
-    # Mostrar resumen y confirmar
-    config.print_summary()
-
-    confirmar = panel_confirm(
-        title="¿Ejecutar análisis?",
-        default=True,
-    )
-
-    if not confirmar:
-        print_warning("Operacion cancelada")
-        return
-
-    # Ejecutar con el proyecto seleccionado
-    print_header("EJECUTANDO ANALISIS")
-
-    runner = AnalysisRunner(config, project_id=project.id)
-    project, basin = runner.run()
-
-    # Menu post-ejecucion
-    menu = PostExecutionMenu(project, basin, config.c, config.cn, config.length_m)
-    menu.show()
-
-
-def _select_or_create_project_for_basin() -> Optional[Project]:
-    """Permite seleccionar un proyecto existente o crear uno nuevo para la cuenca."""
-    project_manager = get_project_manager()
-    projects = project_manager.list_projects()
-
-    # Construir opciones
     items = [
-        MenuItem(key="n", label="Crear nuevo proyecto", value="new"),
+        MenuItem(
+            key="u",
+            label="Unidades",
+            value="units",
+            hint="Sistema métrico / imperial (próximamente)"
+        ),
+        MenuItem(
+            key="t",
+            label="Tema",
+            value="theme",
+            hint="Colores de la interfaz (próximamente)"
+        ),
+        MenuItem(key="separator1", label="", separator=True),
+        MenuItem(
+            key="i",
+            label="Información",
+            value="info",
+            hint="Versión y créditos"
+        ),
     ]
 
-    if projects:
-        items.append(MenuItem(key="sep", label="", separator=True))
-        for idx, p in enumerate(projects):
-            key = chr(ord('a') + idx) if idx < 25 else str(idx)
-            items.append(MenuItem(
-                key=key,
-                label=f"{p['name']}",
-                value=p['id'],
-                hint=f"{p['n_basins']} cuencas",
-            ))
-
     choice = menu_panel(
-        title="Seleccionar Proyecto",
+        title="Configuración",
         items=items,
-        subtitle="¿Dónde crear la cuenca?",
+        allow_back=True,
     )
 
-    if choice is None:
-        return None
-
-    if choice == "new":
-        return _create_project_quick()
-
-    # Proyecto existente seleccionado
-    return project_manager.get_project(choice)
+    if choice == "units":
+        print_info("Configuración de unidades - próximamente")
+    elif choice == "theme":
+        print_info("Configuración de tema - próximamente")
+    elif choice == "info":
+        _show_info()
 
 
-def _create_project_quick() -> Optional[Project]:
+def _show_info() -> None:
+    """Muestra información sobre la herramienta."""
+    from rich.panel import Panel
+    from rich.text import Text
+    from rich import box
+    from hidropluvial.cli.theme import get_console, get_palette
+
+    console = get_console()
+    p = get_palette()
+
+    info = Text()
+    info.append("HidroPluvial\n", style=f"bold {p.primary}")
+    info.append("Herramienta de Cálculos Hidrológicos\n\n", style=p.secondary)
+    info.append("Versión: ", style=p.label)
+    info.append("1.0.0\n", style=p.number)
+    info.append("Autor: ", style=p.label)
+    info.append("Guillermo Haynes\n", style="")
+    info.append("Licencia: ", style=p.label)
+    info.append("MIT\n\n", style="")
+    info.append("Metodologías implementadas:\n", style=f"bold {p.secondary}")
+    info.append("  • Método Racional (Chow, FHWA)\n", style="")
+    info.append("  • SCS-CN para escorrentía\n", style="")
+    info.append("  • Hidrogramas: SCS, Clark, Snyder\n", style="")
+    info.append("  • IDF según DINAGUA Uruguay\n", style="")
+
+    panel = Panel(
+        info,
+        title="Información",
+        title_align="left",
+        border_style=p.primary,
+        box=box.ROUNDED,
+        padding=(1, 2),
+    )
+    console.print()
+    console.print(panel)
+    console.print()
+
+
+def _create_project_quick() -> Optional["Project"]:
     """Crea un proyecto de forma rápida (solo nombre obligatorio)."""
+    from hidropluvial.cli.theme import print_section, print_success
+    from hidropluvial.cli.viewer.panel_input import panel_text, panel_confirm
+    from hidropluvial.project import get_project_manager
+
     print_section("Nuevo Proyecto")
 
     name = panel_text(
@@ -203,58 +258,3 @@ def _create_project_quick() -> Optional[Project]:
 
     print_success(f"Proyecto creado: {project.name} [{project.id}]")
     return project
-
-
-def _create_project() -> None:
-    """Crea un nuevo proyecto y ofrece opciones para agregar cuencas."""
-    print_header("CREAR NUEVO PROYECTO")
-
-    # Solicitar datos del proyecto
-    name = panel_text(
-        title="Nombre del proyecto",
-        hint="Requerido",
-    )
-
-    if not name:
-        return
-
-    description = panel_text(
-        title="Descripción",
-        hint="Opcional",
-    ) or ""
-
-    author = panel_text(
-        title="Autor",
-        hint="Opcional",
-    ) or ""
-
-    location = panel_text(
-        title="Ubicación",
-        hint="Opcional",
-    ) or ""
-
-    # Crear el proyecto
-    project_manager = get_project_manager()
-    project = project_manager.create_project(
-        name=name,
-        description=description,
-        author=author,
-        location=location,
-    )
-
-    print_success(f"Proyecto creado: {project.name} [{project.id}]")
-
-    # Menu post-creacion
-    _post_project_creation_menu(project)
-
-
-def _post_project_creation_menu(project: Project) -> None:
-    """Menu de opciones despues de crear un proyecto."""
-    from hidropluvial.cli.wizard.menus.basin_management import BasinManagementMenu
-
-    print_info(f"Proyecto '{project.name}' creado exitosamente")
-    print_info("Ahora puedes agregar cuencas al proyecto\n")
-
-    # Usar el menú de gestión de cuencas directamente
-    menu = BasinManagementMenu(project)
-    menu.show()

@@ -20,6 +20,7 @@ from hidropluvial.reports.generator import (
     idf_to_csv,
     hyetograph_to_csv,
     hydrograph_to_csv,
+    escape_latex,
 )
 
 from hidropluvial.reports.compiler import (
@@ -60,6 +61,7 @@ __all__ = [
     "idf_to_csv",
     "hyetograph_to_csv",
     "hydrograph_to_csv",
+    "escape_latex",
     # Compiler
     "LaTeXEngine",
     "CompilationResult",

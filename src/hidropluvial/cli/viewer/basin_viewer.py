@@ -14,13 +14,13 @@ Permite navegar entre cuencas usando:
 
 from typing import Optional, Set
 
-from rich.console import Console, Group
+from rich.console import Group
 from rich.table import Table
 from rich.text import Text
 from rich.live import Live
 from rich import box
 
-from hidropluvial.cli.theme import get_palette
+from hidropluvial.cli.theme import get_palette, get_console
 from hidropluvial.cli.viewer.terminal import clear_screen, get_key
 from hidropluvial.project import ProjectManager, Project, Basin
 
@@ -49,18 +49,15 @@ def build_basins_table(
         padding=(0, 1),
     )
 
-    # Columnas
+    # Columnas - solo datos físicos de la cuenca (C, CN, Tc dependen del análisis)
     table.add_column("", justify="center", width=1)  # Marca
     table.add_column("#", justify="right", width=3)
     table.add_column("ID", justify="left", width=8)
-    table.add_column("Nombre", justify="left", min_width=18)
-    table.add_column("Area", justify="right", width=8)
-    table.add_column("Pend", justify="right", width=6)
-    table.add_column("C", justify="right", width=5)
-    table.add_column("CN", justify="right", width=4)
-    table.add_column("Long", justify="right", width=8)
-    table.add_column("Tc", justify="right", width=6)
-    table.add_column("Analisis", justify="right", width=9)
+    table.add_column("Nombre", justify="left", min_width=20)
+    table.add_column("Área (ha)", justify="right", width=10)
+    table.add_column("Pend (%)", justify="right", width=9)
+    table.add_column("Long (m)", justify="right", width=9)
+    table.add_column("Análisis", justify="right", width=9)
 
     for idx, basin in enumerate(basins):
         is_selected = idx == selected_idx
@@ -68,49 +65,33 @@ def build_basins_table(
 
         mark = "x" if is_marked else ""
 
-        # Valores
+        # Valores - solo datos físicos
         basin_id = basin.id[:8]
-        name = basin.name[:20]
-        area = f"{basin.area_ha:.1f}" if basin.area_ha else "-"
-        slope = f"{basin.slope_pct:.1f}" if basin.slope_pct else "-"
-        c_val = f"{basin.c:.2f}" if basin.c else "-"
-        cn_val = f"{basin.cn:.0f}" if basin.cn else "-"
+        name = basin.name[:22] if len(basin.name) > 22 else basin.name
+        area = f"{basin.area_ha:.2f}" if basin.area_ha else "-"
+        slope = f"{basin.slope_pct:.2f}" if basin.slope_pct else "-"
         length = f"{basin.length_m:.0f}" if basin.length_m else "-"
-
-        # Obtener Tc de los resultados si existe
-        tc_val = "-"
-        if basin.tc_results:
-            # Usar el primer Tc disponible
-            first_tc = basin.tc_results[0]
-            tc_val = f"{first_tc.tc_min:.0f}"
-
         n_analyses = len(basin.analyses) if basin.analyses else 0
 
         if is_selected:
             row_style = f"bold reverse {p.primary}"
-            mark_text = Text(mark, style="bold red reverse" if is_marked else row_style)
+            mark_text = Text(mark, style=f"bold {p.marked} reverse" if is_marked else row_style)
             idx_text = Text(f">{idx}", style=row_style)
             id_text = Text(basin_id, style=row_style)
             name_text = Text(name, style=row_style)
             area_text = Text(area, style=row_style)
             slope_text = Text(slope, style=row_style)
-            c_text = Text(c_val, style=row_style)
-            cn_text = Text(cn_val, style=row_style)
             length_text = Text(length, style=row_style)
-            tc_text = Text(tc_val, style=row_style)
             analyses_text = Text(str(n_analyses), style=row_style)
         elif is_marked:
-            mark_text = Text(mark, style="bold red")
-            idx_text = Text(str(idx), style="red")
-            id_text = Text(basin_id, style="red")
-            name_text = Text(name, style="red")
-            area_text = Text(area, style="red")
-            slope_text = Text(slope, style="red")
-            c_text = Text(c_val, style="red")
-            cn_text = Text(cn_val, style="red")
-            length_text = Text(length, style="red")
-            tc_text = Text(tc_val, style="red")
-            analyses_text = Text(str(n_analyses), style="red")
+            mark_text = Text(mark, style=f"bold {p.marked}")
+            idx_text = Text(str(idx), style=p.marked)
+            id_text = Text(basin_id, style=p.marked)
+            name_text = Text(name, style=p.marked)
+            area_text = Text(area, style=p.marked)
+            slope_text = Text(slope, style=p.marked)
+            length_text = Text(length, style=p.marked)
+            analyses_text = Text(str(n_analyses), style=p.marked)
         else:
             mark_text = Text(mark)
             idx_text = Text(str(idx), style=p.muted)
@@ -118,16 +99,12 @@ def build_basins_table(
             name_text = Text(name)
             area_text = Text(area, style=p.number)
             slope_text = Text(slope, style=p.number)
-            c_text = Text(c_val, style=p.number if c_val != "-" else p.muted)
-            cn_text = Text(cn_val, style=p.number if cn_val != "-" else p.muted)
             length_text = Text(length, style=p.number if length != "-" else p.muted)
-            tc_text = Text(tc_val, style=p.number if tc_val != "-" else p.muted)
             analyses_text = Text(str(n_analyses), style=p.number if n_analyses > 0 else p.muted)
 
         table.add_row(
             mark_text, idx_text, id_text, name_text,
-            area_text, slope_text, c_text, cn_text,
-            length_text, tc_text, analyses_text,
+            area_text, slope_text, length_text, analyses_text,
         )
 
     return table
@@ -181,7 +158,7 @@ def build_basins_display(
     if n_basins > max_visible_rows:
         header_text.append(f" [mostrando {start_idx + 1}-{end_idx}]", style=f"dim {p.muted}")
     if marked_indices:
-        header_text.append(f" [{len(marked_indices)} marcadas]", style="bold red")
+        header_text.append(f" [{len(marked_indices)} marcadas]", style=f"bold {p.marked}")
 
     # Tabla (o mensaje si no hay cuencas)
     if n_basins > 0:
@@ -205,12 +182,12 @@ def build_basins_display(
     # Navegacion
     nav_text = Text()
     if confirm_delete:
-        nav_text.append(f"  Eliminar {delete_count} cuenca(s)? ", style=f"bold {p.accent}")
+        nav_text.append(f"  Eliminar {delete_count} cuenca(s)? ", style=f"bold {p.warning}")
         nav_text.append("[", style=p.muted)
-        nav_text.append("s/y", style="bold green")
+        nav_text.append("s/y", style=f"bold {p.nav_confirm}")
         nav_text.append("] Confirmar  ", style=p.muted)
         nav_text.append("[", style=p.muted)
-        nav_text.append("n/Esc", style="bold red")
+        nav_text.append("n/Esc", style=f"bold {p.nav_cancel}")
         nav_text.append("] Cancelar", style=p.muted)
     else:
         nav_text.append("  [", style=p.muted)
@@ -265,7 +242,7 @@ def interactive_basin_viewer(
     - a: agregar cuenca (nueva o importar)
     - q/ESC: volver a proyectos
     """
-    console = Console()
+    console = get_console()
     p = get_palette()
 
     current_idx = 0

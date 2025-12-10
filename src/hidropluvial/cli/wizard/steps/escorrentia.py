@@ -19,21 +19,28 @@ class StepMetodoEscorrentia(WizardStep):
 
     def execute(self) -> StepResult:
         self.echo(f"\n-- {self.title} --\n")
+        self.echo("  Selecciona uno o ambos métodos (espacio para marcar):\n")
 
-        res, metodo = self.select(
-            "Método de escorrentía:",
+        res, metodos = self.checkbox(
+            "Métodos de escorrentía:",
             choices=[
-                "Coeficiente C (racional/GZ) - drenaje urbano",
-                "Curva Número CN (SCS) - cuencas rurales/mixtas",
-                "Ambos (C y CN) - comparar metodologías",
+                {"name": "Coeficiente C (racional) - drenaje urbano", "value": "C", "checked": True},
+                {"name": "Curva Número CN (SCS) - cuencas rurales/mixtas", "value": "CN"},
             ],
         )
 
         if res != StepResult.NEXT:
             return res
 
+        if not metodos:
+            self.error("Debes seleccionar al menos un método")
+            return self.execute()
+
+        usar_c = "C" in metodos
+        usar_cn = "CN" in metodos
+
         # Recolectar C si corresponde
-        if "Coeficiente C" in metodo or "Ambos" in metodo:
+        if usar_c:
             c_result = self._collect_c()
             if c_result == StepResult.BACK:
                 return self.execute()  # Volver a elegir método
@@ -41,10 +48,10 @@ class StepMetodoEscorrentia(WizardStep):
                 return StepResult.CANCEL
 
         # Recolectar CN si corresponde
-        if "Curva Número" in metodo or "Ambos" in metodo:
+        if usar_cn:
             cn_result = self._collect_cn()
             if cn_result == StepResult.BACK:
-                if "Ambos" in metodo and self.state.c is not None:
+                if usar_c and self.state.c is not None:
                     # Volver a C
                     self.state.c = None
                     c_result = self._collect_c()
@@ -126,23 +133,48 @@ class StepMetodoEscorrentia(WizardStep):
             self.echo("")
 
     def _collect_c(self) -> StepResult:
-        """Recolecta coeficiente C."""
+        """Recolecta coeficiente C con opciones rápidas."""
         self.echo("\n-- Coeficiente de Escorrentía C --\n")
 
+        # Menú con presets rápidos + opciones detalladas
         res, metodo = self.select(
-            "¿Cómo deseas obtener C?",
+            "¿Cómo deseas definir C?",
             choices=[
-                "Ingresar valor directamente",
-                "Calcular C ponderado por coberturas (Ven Te Chow)",
-                "Calcular C ponderado por coberturas (FHWA)",
-                "Calcular C ponderado por coberturas (Tabla Uruguay)",
+                # Presets rápidos
+                "Urbano denso (C = 0.85) - comercial, industrial, alta densidad",
+                "Residencial (C = 0.65) - viviendas, densidad media",
+                "Mixto urbano-rural (C = 0.50) - suburbano, baja densidad",
+                "Rural/Agrícola (C = 0.35) - pasturas, cultivos",
+                # Separador visual
+                "─────────────────────────────────────────────",
+                # Opciones detalladas
+                "Ingresar valor directo",
+                "Definir coberturas detalladas (Ven Te Chow)",
+                "Definir coberturas detalladas (FHWA)",
+                "Definir coberturas detalladas (Tabla Uruguay)",
             ],
         )
 
         if res != StepResult.NEXT:
             return res
 
-        if "directamente" in metodo:
+        # Presets rápidos
+        if "Urbano denso" in metodo:
+            self.state.c = 0.85
+            self.info(f"C = 0.85 (Urbano denso)")
+        elif "Residencial" in metodo:
+            self.state.c = 0.65
+            self.info(f"C = 0.65 (Residencial)")
+        elif "Mixto" in metodo:
+            self.state.c = 0.50
+            self.info(f"C = 0.50 (Mixto urbano-rural)")
+        elif "Rural" in metodo:
+            self.state.c = 0.35
+            self.info(f"C = 0.35 (Rural/Agrícola)")
+        elif "───" in metodo:
+            # Separador seleccionado, volver a mostrar menú
+            return self._collect_c()
+        elif "directo" in metodo:
             self.suggestion("C típicos: Urbano denso 0.7-0.9, Residencial 0.4-0.7, Rural 0.2-0.4")
             res, c_val = self.text(
                 "Coeficiente de escorrentía C (0.1-0.95):",
@@ -152,7 +184,7 @@ class StepMetodoEscorrentia(WizardStep):
                 return res
             self.state.c = float(c_val)
         else:
-            # Calcular ponderado
+            # Calcular ponderado con visor detallado
             if "Chow" in metodo:
                 table_key = "chow"
             elif "FHWA" in metodo:
@@ -168,136 +200,64 @@ class StepMetodoEscorrentia(WizardStep):
         return StepResult.NEXT
 
     def _calculate_weighted_c(self, table_key: str) -> Optional[float]:
-        """Calcula C ponderado (versión simplificada)."""
+        """Calcula C ponderado con visor interactivo."""
         from hidropluvial.core.coefficients import (
             C_TABLES, ChowCEntry, FHWACEntry, weighted_c
         )
-        from hidropluvial.cli.theme import (
-            print_c_table_chow, print_c_table_fhwa, print_c_table_simple
+        from hidropluvial.cli.viewer.coverage_viewer import (
+            interactive_coverage_viewer, CoverageRow
         )
+        from hidropluvial.cli.theme import print_coverage_assignments_table
 
         table_name, table_data = C_TABLES[table_key]
         first_entry = table_data[0]
         is_chow = isinstance(first_entry, ChowCEntry)
         is_fhwa = isinstance(first_entry, FHWACEntry)
 
-        # Mostrar tabla con formato Rich
-        if is_chow:
-            print_c_table_chow(table_data, table_name, selection_mode=True)
-        elif is_fhwa:
-            print_c_table_fhwa(table_data, table_name, tr=10)
-        else:
-            print_c_table_simple(table_data, table_name)
-
-        self.echo(f"\n  Área de la cuenca: {self.state.area_ha} ha")
-        self.echo("  Asigna coberturas. Selecciona '<< Volver' para cancelar.\n")
-
-        coverage_data = []
-        area_remaining = self.state.area_ha
-
-        while area_remaining > 0.001:
-            self.echo(f"  Área restante: {area_remaining:.3f} ha ({area_remaining/self.state.area_ha*100:.1f}%)")
-
-            # Construir choices
-            choices = []
-            for i, e in enumerate(table_data):
-                if is_chow:
-                    c_val = e.c_tr2
-                    choices.append(f"{i+1}. {e.category} - {e.description} (C={c_val:.2f} para Tr2)")
-                elif is_fhwa:
-                    c_val = e.c_base
-                    choices.append(f"{i+1}. {e.category} - {e.description} (C={c_val:.2f})")
-                else:
-                    choices.append(f"{i+1}. {e.category} - {e.description} (C={e.c_recommended:.2f})")
-
-            choices.append("Asignar área restante a una cobertura")
-            choices.append("Terminar y calcular")
-
-            res, selection = self.select("Selecciona cobertura:", choices)
-
-            if res != StepResult.NEXT:
-                return None
-
-            if "Terminar" in selection:
-                break
-
-            if "Asignar área" in selection:
-                cov_choices = []
-                for i, e in enumerate(table_data):
-                    if is_chow:
-                        c_val = e.c_tr2
-                    elif is_fhwa:
-                        c_val = e.c_base
-                    else:
-                        c_val = e.c_recommended
-                    cov_choices.append(f"{i+1}. {e.category} - {e.description} (C={c_val:.2f})")
-
-                res, cov_selection = self.select("Cobertura para área restante:", cov_choices)
-
-                if res == StepResult.NEXT and cov_selection:
-                    idx = int(cov_selection.split(".")[0]) - 1
-                    entry = table_data[idx]
-                    if is_chow:
-                        c_val = entry.c_tr2
-                    elif is_fhwa:
-                        c_val = entry.c_base
-                    else:
-                        c_val = entry.c_recommended
-                    coverage_data.append({
-                        "area": area_remaining,
-                        "c_val": c_val,
-                        "table_index": idx,
-                        "description": f"{entry.category}: {entry.description}",
-                    })
-                    area_remaining = 0
-                break
-
-            # Obtener índice
-            idx = int(selection.split(".")[0]) - 1
-            entry = table_data[idx]
-
-            res, area_str = self.text(f"Área (ha, max {area_remaining:.3f}):")
-
-            if res != StepResult.NEXT or not area_str:
-                continue
-
-            try:
-                area_val = float(area_str)
-                if area_val <= 0 or area_val > area_remaining:
-                    self.error(f"El área debe estar entre 0 y {area_remaining:.3f}")
-                    continue
-            except ValueError:
-                self.error("Valor inválido")
-                continue
-
+        def get_c_value(entry):
             if is_chow:
-                c_val = entry.c_tr2
+                return entry.c_tr2
             elif is_fhwa:
-                c_val = entry.c_base
-            else:
-                c_val = entry.c_recommended
+                return entry.c_base
+            return entry.c_recommended
 
-            coverage_data.append({
-                "area": area_val,
-                "c_val": c_val,
-                "table_index": idx,
-                "description": f"{entry.category}: {entry.description}",
-            })
-            area_remaining -= area_val
-            self.echo(f"  + {area_val:.3f} ha con C={c_val:.2f}")
+        # Construir filas para el visor
+        rows = []
+        for i, entry in enumerate(table_data):
+            c_val = get_c_value(entry)
+            rows.append(CoverageRow(
+                index=i,
+                category=entry.category,
+                description=entry.description,
+                value=c_val,
+                value_label="C",
+            ))
+
+        # Mostrar visor interactivo
+        coverage_data = interactive_coverage_viewer(
+            rows=rows,
+            total_area=self.state.area_ha,
+            value_label="C",
+            table_name=f"Tabla {table_name}",
+        )
 
         if not coverage_data:
             self.echo("  No se asignaron coberturas.")
             return None
 
-        # Calcular C ponderado
+        # Calcular C ponderado final
         areas = [d["area"] for d in coverage_data]
         coefficients = [d["c_val"] for d in coverage_data]
         c_weighted = weighted_c(areas, coefficients)
 
-        # Determinar Tr base según tabla
-        base_tr = 2 if is_chow else None  # Chow usa Tr2, otras tablas no dependen de Tr
+        # Mostrar resultado final
+        print_coverage_assignments_table(
+            coverage_data, self.state.area_ha, "C", c_weighted,
+            title="Resultado Final"
+        )
 
+        # Guardar datos de ponderación
+        base_tr = 2 if is_chow else None
         self.state.c_weighted_data = {
             "table_key": table_key,
             "base_tr": base_tr,
@@ -305,10 +265,7 @@ class StepMetodoEscorrentia(WizardStep):
         }
 
         if is_chow:
-            self.echo(f"\n  => C ponderado (Tr2) = {c_weighted:.3f}")
-            self.echo("     Este valor se ajustará según el Tr de cada análisis.")
-        else:
-            self.echo(f"\n  => C ponderado = {c_weighted:.3f}")
+            self.echo("  Este valor se ajustará según el Tr de cada análisis.")
 
         return c_weighted
 
@@ -427,108 +384,58 @@ class StepMetodoEscorrentia(WizardStep):
         return StepResult.NEXT
 
     def _calculate_weighted_cn(self) -> Optional[int]:
-        """Calcula CN ponderado usando tabla unificada."""
+        """Calcula CN ponderado con visor interactivo y soporte para múltiples grupos de suelo."""
         from hidropluvial.core.coefficients import CN_TABLES, weighted_cn
-        from hidropluvial.cli.theme import print_cn_table
-
-        res, soil = self.select(
-            "Grupo hidrológico de suelo:",
-            choices=[
-                "A - Alta infiltración (arena, grava)",
-                "B - Moderada infiltración (limo arenoso)",
-                "C - Baja infiltración (limo arcilloso)",
-                "D - Muy baja infiltración (arcilla)",
-            ],
+        from hidropluvial.cli.viewer.coverage_viewer import (
+            interactive_coverage_viewer, CoverageRow
         )
+        from hidropluvial.cli.theme import print_coverage_assignments_table
 
-        if res != StepResult.NEXT:
-            return None
-
-        soil_group = soil[0]
-
-        # Usar tabla unificada
         table_name, table_data = CN_TABLES["unified"]
 
-        self.echo(f"\n  Grupo de suelo: {soil_group}")
-        self.echo(f"  Área de la cuenca: {self.state.area_ha} ha\n")
+        # Construir filas para el visor (usando grupo B como referencia inicial)
+        rows = []
+        for i, entry in enumerate(table_data):
+            cn_b = entry.get_cn("B")
+            cond = f" ({entry.condition})" if entry.condition != "N/A" else ""
+            rows.append(CoverageRow(
+                index=i,
+                category=entry.category,
+                description=f"{entry.description}{cond}",
+                value=cn_b,
+                value_label="CN",
+            ))
 
-        # Mostrar tabla unificada
-        print_cn_table(table_data, table_name, soil_group)
+        # Callback para obtener CN según grupo de suelo
+        def get_cn_for_soil(idx: int, soil_group: str) -> int:
+            return table_data[idx].get_cn(soil_group)
 
-        areas = []
-        cn_values = []
-        area_remaining = self.state.area_ha
+        # Mostrar visor interactivo
+        coverage_data = interactive_coverage_viewer(
+            rows=rows,
+            total_area=self.state.area_ha,
+            value_label="CN",
+            table_name=f"Tabla {table_name}",
+            on_get_cn_for_soil=get_cn_for_soil,
+        )
 
-        while area_remaining > 0.001:
-            self.echo(f"\n  Área restante: {area_remaining:.3f} ha ({area_remaining/self.state.area_ha*100:.1f}%)")
-
-            # Construir choices mostrando solo CN para el grupo de suelo seleccionado
-            choices = []
-            for i, e in enumerate(table_data):
-                cn = e.get_cn(soil_group)
-                cond = f" ({e.condition})" if e.condition != "N/A" else ""
-                choices.append(f"{i+1}. {e.category} - {e.description}{cond} [CN={cn}]")
-
-            choices.append("Asignar todo el área restante a una cobertura")
-            choices.append("Terminar y calcular")
-
-            res, selection = self.select("Selecciona cobertura:", choices, back_option=True)
-
-            if res != StepResult.NEXT:
-                return None
-
-            if "Terminar" in selection:
-                break
-
-            if "Asignar todo" in selection:
-                # Mostrar lista simplificada para asignar resto
-                cov_choices = []
-                for i, e in enumerate(table_data):
-                    cn = e.get_cn(soil_group)
-                    cond = f" ({e.condition})" if e.condition != "N/A" else ""
-                    cov_choices.append(f"{i+1}. {e.category} - {e.description}{cond} [CN={cn}]")
-
-                res, cov_selection = self.select("Cobertura para área restante:", cov_choices)
-
-                if res == StepResult.NEXT and cov_selection:
-                    idx = int(cov_selection.split(".")[0]) - 1
-                    entry = table_data[idx]
-                    cn = entry.get_cn(soil_group)
-                    areas.append(area_remaining)
-                    cn_values.append(cn)
-                    self.echo(f"  + {area_remaining:.3f} ha con CN={cn}")
-                    area_remaining = 0
-                break
-
-            # Obtener índice de la selección
-            idx = int(selection.split(".")[0]) - 1
-            entry = table_data[idx]
-            cn = entry.get_cn(soil_group)
-
-            res, area_str = self.text(f"Área para '{entry.description}' (ha, max {area_remaining:.3f}):")
-
-            if res != StepResult.NEXT or not area_str:
-                continue
-
-            try:
-                area_val = float(area_str)
-                if area_val <= 0 or area_val > area_remaining:
-                    self.error(f"El área debe estar entre 0 y {area_remaining:.3f}")
-                    continue
-            except ValueError:
-                self.error("Valor inválido")
-                continue
-
-            areas.append(area_val)
-            cn_values.append(cn)
-            area_remaining -= area_val
-            self.echo(f"  + {area_val:.3f} ha con CN={cn}")
-
-        if not areas:
+        if not coverage_data:
             self.echo("  No se asignaron coberturas.")
             return None
 
-        cn_weighted = weighted_cn(areas, cn_values)
+        # Calcular CN ponderado final
+        cn_weighted = weighted_cn(
+            [d["area"] for d in coverage_data],
+            [d["cn_val"] for d in coverage_data]
+        )
         cn_rounded = int(round(cn_weighted))
-        self.echo(f"\n  => CN ponderado = {cn_weighted:.1f} -> {cn_rounded}")
+
+        # Mostrar resultado final
+        print_coverage_assignments_table(
+            coverage_data, self.state.area_ha, "CN", cn_weighted,
+            title="Resultado Final"
+        )
+
+        self.echo(f"  CN redondeado: {cn_rounded}")
+
         return cn_rounded

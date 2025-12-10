@@ -49,6 +49,16 @@ class ColorPalette:
     table_category: str  # Categorías en tablas
     table_highlight: str # Valores destacados en tablas
 
+    # Colores para navegación interactiva
+    nav_confirm: str     # Tecla de confirmación (Enter)
+    nav_cancel: str      # Tecla de cancelación (Esc)
+    nav_key: str         # Teclas de navegación (flechas, shortcuts)
+    input_text: str      # Texto de entrada del usuario
+
+    # Colores para estados de selección
+    marked: str          # Items marcados para eliminación
+    selected: str        # Item actualmente seleccionado/cursor
+
 
 # Tema por defecto - Estilo "programador" con colores pasteles
 THEME_DEFAULT = ColorPalette(
@@ -70,6 +80,12 @@ THEME_DEFAULT = ColorPalette(
     table_header="#5f87af", # Azul para headers de tabla
     table_category="#87afaf",  # Cyan para categorías
     table_highlight="#d7af5f", # Amarillo para valores destacados
+    nav_confirm="#87af87",  # Verde para Enter/confirmar
+    nav_cancel="#d75f5f",   # Rojo para Esc/cancelar
+    nav_key="#af87af",      # Púrpura para teclas de navegación
+    input_text="#ffffff",   # Blanco para texto de entrada
+    marked="#d75f5f",       # Rojo para items marcados
+    selected="#5f87af",     # Azul para item seleccionado
 )
 
 # Tema Monokai - Inspirado en el esquema de colores Monokai
@@ -92,6 +108,12 @@ THEME_MONOKAI = ColorPalette(
     table_header="#66d9ef", # Cyan para headers
     table_category="#a6e22e",  # Verde lima para categorías
     table_highlight="#fd971f", # Naranja para destacados
+    nav_confirm="#a6e22e",  # Verde lima para Enter
+    nav_cancel="#f92672",   # Rosa/rojo para Esc
+    nav_key="#ae81ff",      # Púrpura para navegación
+    input_text="#f8f8f2",   # Blanco para texto de entrada
+    marked="#f92672",       # Rosa/rojo para items marcados
+    selected="#66d9ef",     # Cyan para item seleccionado
 )
 
 # Tema Nord - Colores fríos y suaves
@@ -114,6 +136,12 @@ THEME_NORD = ColorPalette(
     table_header="#88c0d0", # Cyan para headers
     table_category="#81a1c1",  # Azul claro para categorías
     table_highlight="#d08770", # Naranja para destacados
+    nav_confirm="#a3be8c",  # Verde para Enter
+    nav_cancel="#bf616a",   # Rojo para Esc
+    nav_key="#b48ead",      # Púrpura para navegación
+    input_text="#eceff4",   # Blanco Nord para entrada
+    marked="#bf616a",       # Rojo Nord para items marcados
+    selected="#88c0d0",     # Cyan Nord para item seleccionado
 )
 
 # Tema Minimal - Solo grises y un acento
@@ -136,6 +164,12 @@ THEME_MINIMAL = ColorPalette(
     table_header="#5fafff", # Azul para headers
     table_category="#b0b0b0",  # Gris claro para categorías
     table_highlight="#5fafff", # Azul para destacados
+    nav_confirm="#87d787",  # Verde para Enter
+    nav_cancel="#ff8787",   # Rojo para Esc
+    nav_key="#5fafff",      # Azul para navegación
+    input_text="#ffffff",   # Blanco para entrada
+    marked="#ff8787",       # Rojo para items marcados
+    selected="#5fafff",     # Azul para item seleccionado
 )
 
 # Mapeo de nombres a temas
@@ -176,6 +210,7 @@ class CLITheme:
         if cls._console is None:
             p = cls._palette
             custom_theme = Theme({
+                # Colores base
                 "primary": p.primary,
                 "secondary": p.secondary,
                 "accent": p.accent,
@@ -189,14 +224,27 @@ class CLITheme:
                 "number": p.number,
                 "unit": p.unit,
                 "label": p.label,
+                # Estilos compuestos
                 "title": f"bold {p.primary}",
                 "subtitle": p.secondary,
                 "header": f"bold {p.primary}",
                 "value": f"bold {p.number}",
                 "param": p.label,
+                # Tablas
                 "table.header": f"bold {p.table_header}",
                 "table.category": p.table_category,
                 "table.highlight": f"bold {p.table_highlight}",
+                # Navegación
+                "nav.confirm": f"bold {p.nav_confirm}",
+                "nav.cancel": f"bold {p.nav_cancel}",
+                "nav.key": f"bold {p.nav_key}",
+                "input": f"bold {p.input_text}",
+                "input.cursor": f"blink bold {p.input_text}",
+                # Estados de selección
+                "marked": p.marked,
+                "marked.bold": f"bold {p.marked}",
+                "marked.reverse": f"bold {p.marked} reverse",
+                "selected": f"bold {p.selected}",
             })
             cls._console = Console(theme=custom_theme)
         return cls._console

@@ -17,16 +17,6 @@ Este módulo organiza los comandos CLI en sub-aplicaciones temáticas:
 
 import typer
 
-from hidropluvial.cli.export import export_app
-from hidropluvial.cli.hydrograph import hydrograph_app
-from hidropluvial.cli.idf import idf_app
-from hidropluvial.cli.report import report_app
-from hidropluvial.cli.runoff import runoff_app
-from hidropluvial.cli.project import project_app
-from hidropluvial.cli.basin import basin_app
-from hidropluvial.cli.storm import storm_app
-from hidropluvial.cli.tc import tc_app
-
 # Crear aplicación principal
 app = typer.Typer(
     name="hidropluvial",
@@ -34,16 +24,28 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-# Registrar sub-aplicaciones
-app.add_typer(idf_app, name="idf")
-app.add_typer(storm_app, name="storm")
-app.add_typer(tc_app, name="tc")
-app.add_typer(runoff_app, name="runoff")
-app.add_typer(hydrograph_app, name="hydrograph")
-app.add_typer(report_app, name="report")
-app.add_typer(export_app, name="export")
-app.add_typer(project_app, name="project")
-app.add_typer(basin_app, name="basin")
+
+def _register_subapps():
+    """Registra sub-aplicaciones de forma diferida."""
+    from hidropluvial.cli.export import export_app
+    from hidropluvial.cli.hydrograph import hydrograph_app
+    from hidropluvial.cli.idf import idf_app
+    from hidropluvial.cli.report import report_app
+    from hidropluvial.cli.runoff import runoff_app
+    from hidropluvial.cli.project import project_app
+    from hidropluvial.cli.basin import basin_app
+    from hidropluvial.cli.storm import storm_app
+    from hidropluvial.cli.tc import tc_app
+
+    app.add_typer(idf_app, name="idf")
+    app.add_typer(storm_app, name="storm")
+    app.add_typer(tc_app, name="tc")
+    app.add_typer(runoff_app, name="runoff")
+    app.add_typer(hydrograph_app, name="hydrograph")
+    app.add_typer(report_app, name="report")
+    app.add_typer(export_app, name="export")
+    app.add_typer(project_app, name="project")
+    app.add_typer(basin_app, name="basin")
 
 
 @app.command()
@@ -60,6 +62,9 @@ def wizard():
     wizard_main()
 
 
+_subapps_registered = False
+
+
 @app.callback()
 def main():
     """
@@ -68,19 +73,23 @@ def main():
     Utiliza las curvas IDF de DINAGUA y metodologías adaptadas
     para drenaje urbano y pluvial.
     """
-    pass
+    global _subapps_registered
+    if not _subapps_registered:
+        _register_subapps()
+        _subapps_registered = True
+
+
+def get_app():
+    """Obtiene la app con todas las sub-aplicaciones registradas."""
+    global _subapps_registered
+    if not _subapps_registered:
+        _register_subapps()
+        _subapps_registered = True
+    return app
 
 
 # Exportar para uso externo
 __all__ = [
     "app",
-    "idf_app",
-    "storm_app",
-    "tc_app",
-    "runoff_app",
-    "hydrograph_app",
-    "report_app",
-    "export_app",
-    "project_app",
-    "basin_app",
+    "get_app",
 ]

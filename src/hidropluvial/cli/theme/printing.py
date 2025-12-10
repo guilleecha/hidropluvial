@@ -35,21 +35,44 @@ def print_header(text: str, subtitle: str = None) -> None:
 
 
 def print_step(step_num: int, total: int, title: str) -> None:
-    """Imprime indicador de paso del wizard con barra de progreso."""
+    """Imprime indicador de paso del wizard con barra de progreso visual."""
     console = get_console()
     p = get_palette()
 
-    # Barra de progreso visual
-    filled = "●" * step_num
-    empty = "○" * (total - step_num)
-    progress_bar = filled + empty
+    # Barra de progreso visual más clara
+    bar_width = 30
+    filled_width = int((step_num / total) * bar_width)
+    empty_width = bar_width - filled_width
 
-    text = Text()
-    text.append(f"\n  {progress_bar}  ", style=p.muted)
-    text.append(f"Paso {step_num}/{total}: ", style=p.muted)
-    text.append(title, style=f"bold {p.secondary}")
-    text.append("\n")
-    console.print(text)
+    # Construir barra con bloques
+    filled_bar = "█" * filled_width
+    empty_bar = "░" * empty_width
+    percentage = int((step_num / total) * 100)
+
+    # Línea de progreso
+    progress_line = Text()
+    progress_line.append(filled_bar, style=p.primary)
+    progress_line.append(empty_bar, style=p.muted)
+    progress_line.append(f"  {percentage}%", style=p.muted)
+
+    # Crear panel con el título del paso
+    step_title = Text()
+    step_title.append(f" Paso {step_num} de {total}", style=f"bold {p.secondary}")
+
+    panel = Panel(
+        progress_line,
+        title=step_title,
+        subtitle=Text(title, style=f"italic {p.muted}"),
+        subtitle_align="left",
+        title_align="left",
+        border_style=p.border,
+        box=box.ROUNDED,
+        padding=(0, 1),
+        width=50,
+    )
+
+    console.print()
+    console.print(panel)
 
 
 def print_field(label: str, value, unit: str = None, indent: int = 2) -> None:
@@ -374,28 +397,33 @@ def print_analysis_summary(
 
 
 def print_banner() -> None:
-    """Imprime el banner de HidroPluvial."""
+    """Imprime el banner de HidroPluvial con ASCII art."""
     console = get_console()
     p = get_palette()
 
-    # Título principal
-    title = Text()
-    title.append("HIDROPLUVIAL", style=f"bold {p.primary}")
+    # ASCII art logo estilizado
+    logo = r"""
+    ╦ ╦╦╔╦╗╦═╗╔═╗╔═╗╦  ╦ ╦╦  ╦╦╔═╗╦
+    ╠═╣║ ║║╠╦╝║ ║╠═╝║  ║ ║╚╗╔╝║╠═╣║
+    ╩ ╩╩═╩╝╩╚═╚═╝╩  ╩═╝╚═╝ ╚╝ ╩╩ ╩╩═╝
+    """
 
-    # Subtítulo
-    subtitle = Text()
-    subtitle.append("Asistente de Análisis Hidrológicos\n", style=f"{p.secondary}")
-    subtitle.append("Cálculos para Uruguay", style=p.muted)
+    # Contenido del banner
+    content = Text()
+    content.append(logo, style=f"bold {p.primary}")
+    content.append("\n")
+    content.append("        ≋≋≋  ", style=f"{p.accent}")
+    content.append("Cálculos Hidrológicos", style=f"bold {p.secondary}")
+    content.append("  ≋≋≋\n", style=f"{p.accent}")
+    content.append("             Uruguay", style=p.muted)
 
     # Panel con diseño mejorado
     panel = Panel(
-        subtitle,
-        title=title,
-        title_align="center",
+        content,
         border_style=p.primary,
         box=box.DOUBLE,
-        padding=(1, 4),
-        width=60,
+        padding=(0, 2),
+        width=54,
     )
 
     console.print()

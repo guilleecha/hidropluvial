@@ -178,11 +178,11 @@ class IDFConfig(BaseModel):
 
 
 # ============================================================================
-# Modelos de Resultados
+# Modelos de Resultados (usados por módulos core)
 # ============================================================================
 
 class HyetographResult(BaseModel):
-    """Resultado de hietograma."""
+    """Resultado de hietograma (usado por core/temporal.py)."""
     time_min: list[float] = Field(..., description="Tiempo (min)")
     intensity_mmhr: list[float] = Field(..., description="Intensidad (mm/hr)")
     depth_mm: list[float] = Field(..., description="Profundidad incremental (mm)")
@@ -193,43 +193,10 @@ class HyetographResult(BaseModel):
 
 
 class RunoffResult(BaseModel):
-    """Resultado de cálculo de escorrentía."""
+    """Resultado de cálculo de escorrentía (usado por core/runoff.py)."""
     rainfall_mm: float = Field(..., description="Precipitación total (mm)")
     runoff_mm: float = Field(..., description="Escorrentía directa (mm)")
     initial_abstraction_mm: float = Field(..., description="Abstracción inicial (mm)")
     retention_mm: float = Field(..., description="Retención potencial S (mm)")
     cn_used: int = Field(..., description="CN utilizado")
     method: str = Field(..., description="Método utilizado")
-
-
-class HydrographResult(BaseModel):
-    """Resultado de hidrograma."""
-    time_hr: list[float] = Field(..., description="Tiempo (hr)")
-    flow_m3s: list[float] = Field(..., description="Caudal (m³/s)")
-    peak_flow_m3s: float = Field(..., description="Caudal pico (m³/s)")
-    time_to_peak_hr: float = Field(..., description="Tiempo al pico (hr)")
-    volume_m3: float = Field(..., description="Volumen total (m³)")
-    method: HydrographMethod = Field(..., description="Método utilizado")
-
-
-# ============================================================================
-# Configuración del Proyecto
-# ============================================================================
-
-class ProjectConfig(BaseModel):
-    """Configuración completa del proyecto."""
-    name: str = Field(..., description="Nombre del proyecto")
-    location: str = Field(default="", description="Ubicación")
-    engineer: str = Field(default="", description="Ingeniero responsable")
-    date: str = Field(default="", description="Fecha")
-    units: UnitSystem = Field(default=UnitSystem.SI, description="Sistema de unidades")
-
-
-class HydrographConfig(BaseModel):
-    """Configuración de cálculo de hidrogramas."""
-    method: HydrographMethod = Field(
-        default=HydrographMethod.SCS_CURVILINEAR,
-        description="Método de hidrograma"
-    )
-    prf: int = Field(default=484, ge=100, le=600, description="Peak rate factor")
-    dt_hr: float = Field(default=0.1, gt=0, description="Intervalo de tiempo (hr)")

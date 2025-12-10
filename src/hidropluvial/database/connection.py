@@ -48,7 +48,7 @@ def _json_dict(value: Optional[str]) -> dict:
 # Esquema de la Base de Datos
 # ============================================================================
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 5
 
 SCHEMA_SQL = """
 -- Tabla de proyectos
@@ -96,10 +96,23 @@ CREATE TABLE IF NOT EXISTS tc_results (
     UNIQUE (basin_id, method)
 );
 
--- Tabla de segmentos NRCS (método de velocidades TR-55)
-CREATE TABLE IF NOT EXISTS nrcs_segments (
+-- Tabla de templates NRCS (configuraciones guardadas de segmentos)
+CREATE TABLE IF NOT EXISTS nrcs_templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     basin_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    p2_mm REAL NOT NULL DEFAULT 50.0,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (basin_id) REFERENCES basins(id) ON DELETE CASCADE,
+    UNIQUE (basin_id, name)
+);
+
+-- Tabla de segmentos NRCS (método de velocidades TR-55)
+-- Los segmentos pueden pertenecer a un template (template_id) o directamente a una cuenca (basin_id legacy)
+CREATE TABLE IF NOT EXISTS nrcs_segments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    template_id INTEGER,  -- FK a nrcs_templates (nueva estructura)
+    basin_id TEXT,  -- FK a basins (legacy, para migración)
     segment_order INTEGER NOT NULL,  -- Orden del segmento en el recorrido
     segment_type TEXT NOT NULL,  -- 'sheet', 'shallow', 'channel'
     length_m REAL NOT NULL,
@@ -110,6 +123,7 @@ CREATE TABLE IF NOT EXISTS nrcs_segments (
     surface TEXT,  -- Tipo de superficie ('paved', 'unpaved', 'grassed', 'short_grass')
     -- Campos para channel flow
     hydraulic_radius_m REAL,
+    FOREIGN KEY (template_id) REFERENCES nrcs_templates(id) ON DELETE CASCADE,
     FOREIGN KEY (basin_id) REFERENCES basins(id) ON DELETE CASCADE
 );
 
@@ -156,6 +170,11 @@ CREATE TABLE IF NOT EXISTS analyses (
     total_depth_mm REAL NOT NULL,
     peak_intensity_mmhr REAL NOT NULL,
     n_intervals INTEGER NOT NULL,
+    -- Bimodal storm parameters (solo para storm_type='bimodal')
+    bimodal_peak1 REAL,      -- Posición primer pico (0-1)
+    bimodal_peak2 REAL,      -- Posición segundo pico (0-1)
+    bimodal_vol_split REAL,  -- División de volumen (0-1)
+    bimodal_peak_width REAL, -- Ancho de picos (0-1)
     -- Hydrograph info
     x_factor REAL,
     peak_flow_m3s REAL NOT NULL,
@@ -193,6 +212,8 @@ CREATE TABLE IF NOT EXISTS hydrograph_timeseries (
 -- Índices para búsquedas rápidas
 CREATE INDEX IF NOT EXISTS idx_basins_project ON basins(project_id);
 CREATE INDEX IF NOT EXISTS idx_tc_results_basin ON tc_results(basin_id);
+CREATE INDEX IF NOT EXISTS idx_nrcs_templates_basin ON nrcs_templates(basin_id);
+-- idx_nrcs_segments_template se crea en _ensure_nrcs_schema después de verificar la columna
 CREATE INDEX IF NOT EXISTS idx_nrcs_segments_basin ON nrcs_segments(basin_id);
 CREATE INDEX IF NOT EXISTS idx_weighted_coef_basin ON weighted_coefficients(basin_id);
 CREATE INDEX IF NOT EXISTS idx_coverage_items_coef ON coverage_items(weighted_coef_id);
@@ -233,6 +254,11 @@ class DatabaseConnection:
     def _init_database(self) -> None:
         """Inicializa el esquema de la base de datos."""
         with self.connection() as conn:
+            # Primero verificar si necesitamos agregar template_id a nrcs_segments
+            # ANTES de ejecutar el esquema completo (que tiene índices que dependen de esa columna)
+            self._ensure_nrcs_schema(conn)
+
+            # Ahora ejecutar el esquema completo
             conn.executescript(SCHEMA_SQL)
 
             # Verificar/establecer versión del esquema
@@ -250,6 +276,49 @@ class DatabaseConnection:
                 current_version = int(row["value"])
                 if current_version < SCHEMA_VERSION:
                     self._migrate(conn, current_version)
+
+    def _ensure_nrcs_schema(self, conn: sqlite3.Connection) -> None:
+        """Asegura que el esquema NRCS esté completo (columna template_id)."""
+        # Verificar si nrcs_segments existe
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='nrcs_segments'"
+        )
+        if cursor.fetchone() is None:
+            return  # La tabla no existe, se creará con el esquema completo
+
+        # Verificar si template_id existe
+        cursor = conn.execute("PRAGMA table_info(nrcs_segments)")
+        columns = [col["name"] for col in cursor]
+
+        if "template_id" not in columns:
+            # Agregar columna template_id
+            conn.execute(
+                "ALTER TABLE nrcs_segments ADD COLUMN template_id INTEGER REFERENCES nrcs_templates(id) ON DELETE CASCADE"
+            )
+
+            # Crear tabla nrcs_templates si no existe
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS nrcs_templates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    basin_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    p2_mm REAL NOT NULL DEFAULT 50.0,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (basin_id) REFERENCES basins(id) ON DELETE CASCADE,
+                    UNIQUE (basin_id, name)
+                )
+            """)
+
+            # Crear índices
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_nrcs_templates_basin ON nrcs_templates(basin_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_nrcs_segments_template ON nrcs_segments(template_id)"
+            )
+
+            # Migrar segmentos existentes a templates "Default"
+            self._migrate_nrcs_to_templates(conn)
 
     def _migrate(self, conn: sqlite3.Connection, from_version: int) -> None:
         """Ejecuta migraciones incrementales del esquema."""
@@ -322,6 +391,48 @@ class DatabaseConnection:
             # Migrar datos JSON existentes a las nuevas tablas
             self._migrate_weighted_coefficients(conn)
 
+        if from_version < 4:
+            # Migración v3 -> v4: Templates NRCS nombrados
+            # Crear tabla nrcs_templates
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS nrcs_templates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    basin_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    p2_mm REAL NOT NULL DEFAULT 50.0,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (basin_id) REFERENCES basins(id) ON DELETE CASCADE,
+                    UNIQUE (basin_id, name)
+                )
+            """)
+
+            # Agregar columna template_id a nrcs_segments si no existe
+            cursor = conn.execute("PRAGMA table_info(nrcs_segments)")
+            columns = [col["name"] for col in cursor]
+            if "template_id" not in columns:
+                conn.execute("ALTER TABLE nrcs_segments ADD COLUMN template_id INTEGER REFERENCES nrcs_templates(id) ON DELETE CASCADE")
+
+            # Crear índices
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_nrcs_templates_basin ON nrcs_templates(basin_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_nrcs_segments_template ON nrcs_segments(template_id)"
+            )
+
+            # Migrar segmentos existentes a templates "Default"
+            self._migrate_nrcs_to_templates(conn)
+
+        if from_version < 5:
+            # Migración v4 -> v5: Parámetros bimodales en análisis
+            cursor = conn.execute("PRAGMA table_info(analyses)")
+            columns = [col["name"] for col in cursor]
+            if "bimodal_peak1" not in columns:
+                conn.execute("ALTER TABLE analyses ADD COLUMN bimodal_peak1 REAL")
+                conn.execute("ALTER TABLE analyses ADD COLUMN bimodal_peak2 REAL")
+                conn.execute("ALTER TABLE analyses ADD COLUMN bimodal_vol_split REAL")
+                conn.execute("ALTER TABLE analyses ADD COLUMN bimodal_peak_width REAL")
+
         # Actualizar versión del esquema
         conn.execute(
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
@@ -390,6 +501,42 @@ class DatabaseConnection:
         except (json.JSONDecodeError, KeyError):
             # Si hay error en el JSON, ignorar este registro
             pass
+
+    def _migrate_nrcs_to_templates(self, conn: sqlite3.Connection) -> None:
+        """Migra segmentos NRCS existentes (ligados a basin) a templates nombrados."""
+        from datetime import datetime
+
+        # Obtener cuencas con segmentos NRCS
+        cursor = conn.execute("""
+            SELECT DISTINCT b.id as basin_id, b.p2_mm
+            FROM basins b
+            INNER JOIN nrcs_segments s ON s.basin_id = b.id
+            WHERE s.template_id IS NULL
+        """)
+
+        for row in cursor.fetchall():
+            basin_id = row["basin_id"]
+            p2_mm = row["p2_mm"] or 50.0
+
+            # Crear template "Default" para esta cuenca
+            template_cursor = conn.execute(
+                """
+                INSERT INTO nrcs_templates (basin_id, name, p2_mm, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (basin_id, "Default", p2_mm, datetime.now().isoformat())
+            )
+            template_id = template_cursor.lastrowid
+
+            # Actualizar segmentos existentes para apuntar al template
+            conn.execute(
+                """
+                UPDATE nrcs_segments
+                SET template_id = ?
+                WHERE basin_id = ? AND template_id IS NULL
+                """,
+                (template_id, basin_id)
+            )
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:

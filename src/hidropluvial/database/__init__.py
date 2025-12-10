@@ -189,6 +189,42 @@ class Database:
         return self._basins.clear_nrcs_segments(basin_id)
 
     # ========================================================================
+    # Operaciones de Templates NRCS
+    # ========================================================================
+
+    def create_nrcs_template(
+        self,
+        basin_id: str,
+        name: str,
+        segments: list,
+        p2_mm: float = 50.0,
+    ) -> dict:
+        """Crea un nuevo template NRCS para una cuenca."""
+        return self._basins.create_nrcs_template(basin_id, name, segments, p2_mm)
+
+    def get_nrcs_templates(self, basin_id: str) -> list[dict]:
+        """Obtiene todos los templates NRCS de una cuenca."""
+        return self._basins.get_nrcs_templates(basin_id)
+
+    def get_nrcs_template(self, template_id: int) -> dict:
+        """Obtiene un template NRCS por ID."""
+        return self._basins.get_nrcs_template(template_id)
+
+    def update_nrcs_template(
+        self,
+        template_id: int,
+        name: str = None,
+        segments: list = None,
+        p2_mm: float = None,
+    ) -> bool:
+        """Actualiza un template NRCS."""
+        return self._basins.update_nrcs_template(template_id, name, segments, p2_mm)
+
+    def delete_nrcs_template(self, template_id: int) -> bool:
+        """Elimina un template NRCS."""
+        return self._basins.delete_nrcs_template(template_id)
+
+    # ========================================================================
     # Operaciones de Coeficientes Ponderados
     # ========================================================================
 
@@ -337,6 +373,11 @@ class Database:
             n_intervals=d["storm"]["n_intervals"],
             time_min=d["storm"].get("time_min", []),
             intensity_mmhr=d["storm"].get("intensity_mmhr", []),
+            # Parámetros bimodales
+            bimodal_peak1=d["storm"].get("bimodal_peak1"),
+            bimodal_peak2=d["storm"].get("bimodal_peak2"),
+            bimodal_vol_split=d["storm"].get("bimodal_vol_split"),
+            bimodal_peak_width=d["storm"].get("bimodal_peak_width"),
         )
         hydrograph = HydrographResult(
             tc_method=d["hydrograph"]["tc_method"],
@@ -382,6 +423,19 @@ class Database:
         # Manejar segmentos NRCS
         nrcs_segments = d.get("nrcs_segments", [])
 
+        # Manejar templates NRCS
+        from hidropluvial.models.basin import NRCSTemplate
+        nrcs_templates = []
+        for tmpl_dict in d.get("nrcs_templates", []):
+            nrcs_templates.append(NRCSTemplate(
+                id=tmpl_dict.get("id"),
+                basin_id=d["id"],
+                name=tmpl_dict.get("name", ""),
+                p2_mm=tmpl_dict.get("p2_mm", 50.0),
+                segments=tmpl_dict.get("segments", []),
+                created_at=tmpl_dict.get("created_at"),
+            ))
+
         return Basin(
             id=d["id"],
             name=d["name"],
@@ -395,6 +449,7 @@ class Database:
             cn_weighted=cn_weighted,
             p2_mm=d.get("p2_mm"),
             nrcs_segments=nrcs_segments,
+            nrcs_templates=nrcs_templates,
             tc_results=tc_results,
             analyses=analyses,
             notes=d.get("notes"),

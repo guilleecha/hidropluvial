@@ -579,9 +579,9 @@ class TestGenerateUnitHydrograph:
 class TestGenerateHydrograph:
     """Tests para función principal generate_hydrograph."""
 
-    def test_returns_hydrograph_result(self):
-        """Test que retorna HydrographResult."""
-        from hidropluvial.config import HydrographResult
+    def test_returns_hydrograph_output(self):
+        """Test que retorna HydrographOutput."""
+        from hidropluvial.core.hydrograph import HydrographOutput
 
         rain = np.array([5, 15, 10, 5])
         result = generate_hydrograph(
@@ -591,7 +591,7 @@ class TestGenerateHydrograph:
             tc_hr=2,
             dt_hr=0.5
         )
-        assert isinstance(result, HydrographResult)
+        assert isinstance(result, HydrographOutput)
 
     def test_result_has_required_fields(self):
         """Test que resultado tiene campos requeridos."""

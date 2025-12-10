@@ -1,13 +1,18 @@
 """
 Menú post-ejecución de análisis.
+
+Organizado en submenús temáticos:
+- Ver resultados: tabla, fichas, comparar, hietograma, filtrar
+- Agregar/Editar: agregar análisis, editar cuenca, definir CN, notas
+- Exportar: Excel, LaTeX
 """
 
 from typing import Optional
 
 import typer
-import questionary
 
 from hidropluvial.cli.wizard.menus.base import SessionMenu
+from hidropluvial.cli.viewer.menu_panel import menu_panel, MenuItem
 from hidropluvial.project import Project
 from hidropluvial.models import Basin
 
@@ -33,72 +38,230 @@ class PostExecutionMenu(SessionMenu):
         self.length = length if length is not None else basin.length_m
 
     def show(self) -> None:
-        """Muestra el menú post-ejecución."""
+        """Muestra el menú post-ejecución con submenús agrupados."""
         while True:
-            # Recargar sesión para tener datos actualizados
             self.reload_session()
 
-            self._show_session_header()
+            n_analyses = len(self.basin.analyses) if self.basin.analyses else 0
 
-            action = self.select(
-                "¿Qué deseas hacer ahora?",
-                choices=[
-                    "Agregar análisis",
-                    "Ver tabla resumen",
-                    "Ver fichas de análisis (navegación interactiva)",
-                    "Comparar hidrogramas",
-                    "Ver hietograma",
-                    "Filtrar resultados",
-                    "Exportar (Excel/LaTeX)",
-                    "Definir CN por ponderación (tablas NRCS)",
-                    "Editar datos de la cuenca",
-                    "Agregar/editar notas",
-                    self.back_option("Volver al menú principal"),
-                ],
+            items = [
+                # Grupo: Ver resultados
+                MenuItem(
+                    key="v",
+                    label="Ver resultados",
+                    value="view",
+                    hint=f"{n_analyses} análisis",
+                ),
+                MenuItem(key="", label="", separator=True),
+                # Grupo: Agregar/Editar
+                MenuItem(
+                    key="a",
+                    label="Agregar análisis",
+                    value="add_analysis",
+                    hint="Nuevas combinaciones",
+                ),
+                MenuItem(
+                    key="e",
+                    label="Editar cuenca",
+                    value="edit",
+                    hint="Datos y parámetros",
+                ),
+                MenuItem(key="", label="", separator=True),
+                # Exportar
+                MenuItem(
+                    key="x",
+                    label="Exportar",
+                    value="export",
+                    hint="Excel / LaTeX",
+                ),
+                MenuItem(key="", label="", separator=True),
+                # Volver
+                MenuItem(
+                    key="q",
+                    label="Volver al menú principal",
+                    value="back",
+                ),
+            ]
+
+            # Construir info panel con datos de la cuenca
+            info_panel = self._build_basin_info_panel()
+
+            action = menu_panel(
+                title="Menú de Cuenca",
+                items=items,
+                subtitle=f"{self.basin.name} - {self.project.name}",
+                info_panel=info_panel,
+                allow_back=True,
             )
 
-            if action is None or "Volver" in action:
+            if action is None or action == "back":
                 self.success(f"Cuenca guardada: {self.basin.id}")
                 self.info(f"Proyecto: {self.project.name} [{self.project.id}]")
                 break
 
             self._handle_action(action)
 
-    def _show_session_header(self) -> None:
-        """Muestra encabezado con info de la sesión/cuenca."""
-        self.basin_info(self.basin, self.project.name)
+    def _build_basin_info_panel(self):
+        """Construye panel de información de la cuenca."""
+        from rich.panel import Panel
+        from rich.text import Text
+        from hidropluvial.cli.theme import get_palette
+
+        p = get_palette()
+        info = Text()
+
+        # Datos básicos
+        info.append("  Área: ", style=p.muted)
+        info.append(f"{self.basin.area_ha:.1f} ha", style=f"bold {p.number}")
+        info.append("  │  Pendiente: ", style=p.muted)
+        info.append(f"{self.basin.slope_pct:.1f}%", style=f"bold {p.number}")
+
+        # Coeficientes
+        if self.c:
+            info.append("  │  C: ", style=p.muted)
+            info.append(f"{self.c:.2f}", style=f"bold {p.number}")
+        if self.cn:
+            info.append("  │  CN: ", style=p.muted)
+            info.append(f"{self.cn}", style=f"bold {p.number}")
+
+        # Tc si existe
+        if self.basin.tc_results:
+            tc = self.basin.tc_results[0].tc_min
+            info.append("  │  Tc: ", style=p.muted)
+            info.append(f"{tc:.0f} min", style=f"bold {p.number}")
+
+        # Análisis
+        n = len(self.basin.analyses) if self.basin.analyses else 0
+        info.append("\n  Análisis: ", style=p.muted)
+        info.append(f"{n}", style=f"bold {p.primary}")
+
+        if n > 0:
+            # Resumen de tipos
+            trs = sorted(set(a.storm.return_period for a in self.basin.analyses))
+            info.append(f"  │  Tr: {trs}", style=p.muted)
+
+        return Panel(info, border_style=p.border, padding=(0, 1))
 
     def _handle_action(self, action: str) -> None:
         """Maneja la acción seleccionada."""
-        if "tabla" in action.lower():
-            self._show_table()
-        elif "fichas" in action.lower():
-            self._show_interactive_viewer()
-        elif "Comparar" in action:
-            self._compare_hydrographs()
-        elif "hietograma" in action.lower():
-            self._show_hyetograph()
-        elif "Filtrar" in action:
-            self._filter_results()
-        elif "ponderación" in action.lower():
-            self._define_weighted_cn()
-        elif "Editar" in action:
-            result = self._edit_cuenca()
-            if result == "new_session":
-                return  # Salir del menú
-        elif "notas" in action.lower():
-            self._manage_notes()
-        elif "Exportar" in action:
-            self._export()
-        elif "Agregar" in action:
+        if action == "view":
+            self._show_view_submenu()
+        elif action == "add_analysis":
             self._add_analysis()
+        elif action == "edit":
+            self._show_edit_submenu()
+        elif action == "export":
+            self._export()
+
+    def _show_view_submenu(self) -> None:
+        """Submenú para ver resultados."""
+        while True:
+            n_analyses = len(self.basin.analyses) if self.basin.analyses else 0
+            has_analyses = n_analyses > 0
+
+            items = [
+                MenuItem(
+                    key="t",
+                    label="Tabla resumen",
+                    value="table",
+                    disabled=not has_analyses,
+                ),
+                MenuItem(
+                    key="f",
+                    label="Fichas de análisis",
+                    value="cards",
+                    hint="Navegación interactiva",
+                    disabled=not has_analyses,
+                ),
+                MenuItem(
+                    key="c",
+                    label="Comparar hidrogramas",
+                    value="compare",
+                    disabled=not has_analyses,
+                ),
+                MenuItem(
+                    key="h",
+                    label="Ver hietograma",
+                    value="hyetograph",
+                    disabled=not has_analyses,
+                ),
+                MenuItem(key="", label="", separator=True),
+                MenuItem(
+                    key="r",
+                    label="Filtrar resultados",
+                    value="filter",
+                    disabled=not has_analyses,
+                ),
+            ]
+
+            action = menu_panel(
+                title="Ver Resultados",
+                items=items,
+                subtitle=f"{n_analyses} análisis disponibles",
+                allow_back=True,
+            )
+
+            if action is None:
+                break
+
+            if action == "table":
+                self._show_table()
+            elif action == "cards":
+                self._show_interactive_viewer()
+            elif action == "compare":
+                self._compare_hydrographs()
+            elif action == "hyetograph":
+                self._show_hyetograph()
+            elif action == "filter":
+                self._filter_results()
+
+    def _show_edit_submenu(self) -> None:
+        """Submenú para editar cuenca y datos."""
+        while True:
+            items = [
+                MenuItem(
+                    key="d",
+                    label="Datos de la cuenca",
+                    value="edit_data",
+                    hint="Área, pendiente, longitud",
+                ),
+                MenuItem(
+                    key="c",
+                    label="Definir CN ponderado",
+                    value="define_cn",
+                    hint="Tablas NRCS",
+                ),
+                MenuItem(
+                    key="n",
+                    label="Notas y comentarios",
+                    value="notes",
+                ),
+            ]
+
+            action = menu_panel(
+                title="Editar Cuenca",
+                items=items,
+                subtitle=self.basin.name,
+                allow_back=True,
+            )
+
+            if action is None:
+                break
+
+            if action == "edit_data":
+                result = self._edit_cuenca()
+                if result == "new_session":
+                    break
+            elif action == "define_cn":
+                self._define_weighted_cn()
+            elif action == "notes":
+                self._manage_notes()
 
     def _safe_call(self, func, *args, **kwargs) -> None:
         """Ejecuta una función capturando typer.Exit para no salir del wizard."""
         try:
             func(*args, **kwargs)
         except SystemExit:
-            # typer.Exit() lanza SystemExit, lo capturamos para continuar
             pass
 
     def _show_table(self) -> None:
@@ -113,19 +276,22 @@ class PostExecutionMenu(SessionMenu):
 
         n = len(self.basin.analyses)
         if n > 2:
-            mode = self.select(
-                "¿Qué hidrogramas comparar?",
-                choices=[
-                    "Todos",
-                    "Seleccionar cuáles",
-                    self.cancel_option(),
-                ],
+            items = [
+                MenuItem(key="t", label="Todos", value="all"),
+                MenuItem(key="s", label="Seleccionar cuáles", value="select"),
+            ]
+
+            mode = menu_panel(
+                title="Comparar Hidrogramas",
+                items=items,
+                subtitle=f"{n} análisis disponibles",
+                allow_back=True,
             )
 
-            if mode is None or "Cancelar" in mode:
+            if mode is None:
                 return
 
-            if "Seleccionar" in mode:
+            if mode == "select":
                 selected = self._select_analyses_to_compare()
                 if selected:
                     from hidropluvial.cli.basin.preview import basin_preview_compare
@@ -145,20 +311,15 @@ class PostExecutionMenu(SessionMenu):
             storm = a.storm
             x_str = f" X={hydro.x_factor:.2f}" if hydro.x_factor else ""
             label = f"[{i}] {hydro.tc_method} {storm.type} Tr{storm.return_period}{x_str} Qp={hydro.peak_flow_m3s:.2f} m³/s"
-            choices.append(questionary.Choice(label, checked=True))
+            choices.append({"name": label, "value": i, "checked": True})
 
         selected = self.checkbox("Selecciona análisis a comparar:", choices)
 
         if not selected:
             return None
 
-        # Extraer índices
-        indices = []
-        for sel in selected:
-            idx = int(sel.split("]")[0].replace("[", ""))
-            indices.append(str(idx))
-
-        return ",".join(indices)
+        # selected contiene los índices directamente
+        return ",".join(str(idx) for idx in selected)
 
     def _show_interactive_viewer(self) -> None:
         """Muestra visor interactivo de fichas de análisis."""
@@ -170,21 +331,34 @@ class PostExecutionMenu(SessionMenu):
             self.warning("No hay análisis disponibles.")
             return
 
-        # Seleccionar cuál
-        choices = []
+        from hidropluvial.cli.viewer.menu_panel import menu_panel, MenuItem
+
+        items = []
         for i, a in enumerate(self.basin.analyses):
             storm = a.storm
-            choices.append(f"{i}: {storm.type} Tr{storm.return_period} P={storm.total_depth_mm:.1f} mm")
+            key = chr(ord('a') + i) if i < 26 else str(i)
+            items.append(MenuItem(
+                key=key,
+                label=f"{storm.type} Tr{storm.return_period}",
+                value=str(i),
+                hint=f"P={storm.total_depth_mm:.1f} mm",
+            ))
 
-        selected = self.select("Selecciona análisis:", choices)
-        if selected:
-            idx = int(selected.split(":")[0])
+        selected = menu_panel(
+            title="Ver Hietograma",
+            items=items,
+            subtitle="Selecciona análisis",
+            allow_back=True,
+        )
+
+        if selected is not None:
+            idx = int(selected)
             analysis = self.basin.analyses[idx]
             from hidropluvial.cli.basin.preview import basin_preview_hyetograph
             self._safe_call(basin_preview_hyetograph, analysis, self.basin.name)
 
     def _export(self) -> None:
-        """Exporta los resultados a Excel o LaTeX con opciones de filtrado."""
+        """Exporta los resultados a Excel o LaTeX."""
         from hidropluvial.cli.wizard.menus.export_menu import ExportMenu
         export_menu = ExportMenu(self.basin, self.project)
         export_menu.show()
@@ -192,33 +366,32 @@ class PostExecutionMenu(SessionMenu):
     def _define_weighted_cn(self) -> None:
         """Define el CN mediante ponderación por áreas."""
         from hidropluvial.cli.runoff import collect_weighted_cn_interactive
+        from hidropluvial.cli.viewer.menu_panel import menu_panel, MenuItem
 
         self.header("DEFINIR CN POR PONDERACIÓN")
 
-        # Mostrar CN actual si existe
         if self.basin.cn:
             self.info(f"CN actual: {self.basin.cn}")
             if hasattr(self.basin, 'cn_weighted') and self.basin.cn_weighted:
                 n_items = len(self.basin.cn_weighted.items)
                 self.echo(f"  (calculado por ponderación con {n_items} coberturas)")
 
-        # Preguntar grupo hidrológico
-        soil_group = self.select(
-            "\nGrupo hidrológico del suelo:",
-            choices=[
-                "A - Arena, grava (alta infiltración)",
-                "B - Limos, suelos moderados",
-                "C - Arcilla limosa (baja infiltración)",
-                "D - Arcilla, suelos impermeables",
-            ],
+        items = [
+            MenuItem(key="a", label="A - Arena, grava", value="A", hint="Alta infiltración"),
+            MenuItem(key="b", label="B - Limos, suelos moderados", value="B"),
+            MenuItem(key="c", label="C - Arcilla limosa", value="C", hint="Baja infiltración"),
+            MenuItem(key="d", label="D - Arcilla, impermeables", value="D"),
+        ]
+
+        soil = menu_panel(
+            title="Grupo Hidrológico del Suelo",
+            items=items,
+            allow_back=True,
         )
 
-        if soil_group is None:
+        if soil is None:
             return
 
-        soil = soil_group[0]  # Extraer letra A, B, C o D
-
-        # Recopilar datos de ponderación
         weighted_result = collect_weighted_cn_interactive(
             area_total=self.basin.area_ha,
             soil_group=soil,
@@ -229,19 +402,16 @@ class PostExecutionMenu(SessionMenu):
             self.info("Operación cancelada.")
             return
 
-        # Confirmar
         cn_value = int(round(weighted_result.weighted_value))
         self.echo(f"\n  Se actualizará el CN de la cuenca a: {cn_value}")
         if not self.confirm("¿Aplicar cambios?"):
             return
 
-        # Guardar en la cuenca
         self.basin.cn = cn_value
         if hasattr(self.basin, 'cn_weighted'):
             self.basin.cn_weighted = weighted_result
         self.cn = cn_value
 
-        # Save project
         from hidropluvial.project import get_project_manager
         project_manager = get_project_manager()
         project_manager.save_project(self.project)
@@ -257,44 +427,72 @@ class PostExecutionMenu(SessionMenu):
 
     def _filter_results(self) -> None:
         """Muestra menú de filtrado de resultados."""
-        self.section("FILTRAR RESULTADOS")
+        from hidropluvial.cli.viewer.menu_panel import menu_panel, MenuItem
 
-        # Obtener valores únicos de la cuenca
+        # Obtener valores únicos
         tr_values = sorted(set(a.storm.return_period for a in self.basin.analyses))
         x_values = sorted(set(a.hydrograph.x_factor for a in self.basin.analyses if a.hydrograph.x_factor))
         tc_methods = sorted(set(a.hydrograph.tc_method for a in self.basin.analyses))
         storm_types = sorted(set(a.storm.type for a in self.basin.analyses))
 
-        # Obtener métodos de escorrentía disponibles
         runoff_methods = set()
         for a in self.basin.analyses:
             if a.tc.parameters and "runoff_method" in a.tc.parameters:
                 runoff_methods.add(a.tc.parameters["runoff_method"])
             elif a.tc.parameters:
-                # Inferir de parámetros existentes para análisis antiguos
                 if "cn_adjusted" in a.tc.parameters:
                     runoff_methods.add("scs-cn")
                 elif "c" in a.tc.parameters:
                     runoff_methods.add("racional")
         runoff_methods = sorted(runoff_methods)
 
-        x_choice = f"Factor X: {x_values}" if x_values else "Factor X: (no disponible)"
-        runoff_choice = f"Método escorrentía: {runoff_methods}" if runoff_methods else "Método escorrentía: (no disponible)"
+        items = [
+            MenuItem(
+                key="t",
+                label="Por período de retorno",
+                value="tr",
+                hint=f"Tr: {tr_values}",
+            ),
+            MenuItem(
+                key="x",
+                label="Por factor X",
+                value="x",
+                hint=f"X: {[f'{v:.2f}' for v in x_values]}" if x_values else "No disponible",
+                disabled=not x_values,
+            ),
+            MenuItem(
+                key="m",
+                label="Por método Tc",
+                value="tc",
+                hint=f"{len(tc_methods)} métodos",
+            ),
+            MenuItem(
+                key="s",
+                label="Por tipo de tormenta",
+                value="storm",
+                hint=f"{len(storm_types)} tipos",
+            ),
+            MenuItem(
+                key="e",
+                label="Por método escorrentía",
+                value="runoff",
+                disabled=not runoff_methods,
+            ),
+            MenuItem(key="", label="", separator=True),
+            MenuItem(
+                key="c",
+                label="Combinación personalizada",
+                value="combined",
+            ),
+        ]
 
-        filter_type = self.select(
-            "Filtrar por:",
-            choices=[
-                f"Período de retorno (Tr): {tr_values}",
-                x_choice,
-                f"Método Tc: {tc_methods}",
-                f"Tipo de tormenta: {storm_types}",
-                runoff_choice,
-                "Combinación personalizada",
-                self.cancel_option(),
-            ],
+        filter_type = menu_panel(
+            title="Filtrar Resultados",
+            items=items,
+            allow_back=True,
         )
 
-        if filter_type is None or "Cancelar" in filter_type:
+        if filter_type is None:
             return
 
         filters = self._collect_filters(filter_type, tr_values, x_values, tc_methods, storm_types, runoff_methods)
@@ -316,45 +514,44 @@ class PostExecutionMenu(SessionMenu):
         storm_filter = None
         runoff_filter = None
 
-        if "Período de retorno" in filter_type:
-            tr_choices = [questionary.Choice(str(v), checked=False) for v in tr_values]
+        if filter_type == "tr":
+            tr_choices = [{"name": str(v), "value": str(v), "checked": False} for v in tr_values]
             selected = self.checkbox("Selecciona período(s) de retorno:", tr_choices)
             if selected:
                 tr_filter = ",".join(selected)
 
-        elif "Factor X" in filter_type and x_values:
-            x_choices = [questionary.Choice(f"{v:.2f}", checked=False) for v in x_values]
+        elif filter_type == "x" and x_values:
+            x_choices = [{"name": f"{v:.2f}", "value": f"{v:.2f}", "checked": False} for v in x_values]
             selected = self.checkbox("Selecciona factor(es) X:", x_choices)
             if selected:
                 x_filter = ",".join(selected)
 
-        elif "Método Tc" in filter_type:
-            tc_choices = [questionary.Choice(v, checked=False) for v in tc_methods]
+        elif filter_type == "tc":
+            tc_choices = [{"name": v, "value": v, "checked": False} for v in tc_methods]
             selected = self.checkbox("Selecciona método(s) Tc:", tc_choices)
             if selected:
                 tc_filter = ",".join(selected)
 
-        elif "tormenta" in filter_type.lower():
-            storm_choices = [questionary.Choice(v, checked=False) for v in storm_types]
+        elif filter_type == "storm":
+            storm_choices = [{"name": v, "value": v, "checked": False} for v in storm_types]
             selected = self.checkbox("Selecciona tipo(s) de tormenta:", storm_choices)
             if selected:
                 storm_filter = ",".join(selected)
 
-        elif "escorrentía" in filter_type.lower() and runoff_methods:
-            # Mostrar etiquetas amigables
+        elif filter_type == "runoff" and runoff_methods:
             runoff_labels = {
                 "racional": "Racional (C)",
                 "scs-cn": "SCS-CN (CN)",
             }
             runoff_choices = [
-                questionary.Choice(runoff_labels.get(v, v), value=v, checked=False)
+                {"name": runoff_labels.get(v, v), "value": v, "checked": False}
                 for v in runoff_methods
             ]
             selected = self.checkbox("Selecciona método(s) de escorrentía:", runoff_choices)
             if selected:
                 runoff_filter = ",".join(selected)
 
-        elif "Combinación" in filter_type:
+        elif filter_type == "combined":
             tr_filter, x_filter, tc_filter, runoff_filter = self._collect_combined_filters(
                 tr_values, x_values, tc_methods, runoff_methods
             )
@@ -380,18 +577,18 @@ class PostExecutionMenu(SessionMenu):
         tc_filter = None
         runoff_filter = None
 
-        tr_choices = [questionary.Choice(str(v), checked=False) for v in tr_values]
+        tr_choices = [{"name": str(v), "value": str(v), "checked": False} for v in tr_values]
         tr_selected = self.checkbox("Períodos de retorno (Enter para todos):", tr_choices)
         if tr_selected:
             tr_filter = ",".join(tr_selected)
 
         if x_values:
-            x_choices = [questionary.Choice(f"{v:.2f}", checked=False) for v in x_values]
+            x_choices = [{"name": f"{v:.2f}", "value": f"{v:.2f}", "checked": False} for v in x_values]
             x_selected = self.checkbox("Factores X (Enter para todos):", x_choices)
             if x_selected:
                 x_filter = ",".join(x_selected)
 
-        tc_choices = [questionary.Choice(v, checked=False) for v in tc_methods]
+        tc_choices = [{"name": v, "value": v, "checked": False} for v in tc_methods]
         tc_selected = self.checkbox("Métodos Tc (Enter para todos):", tc_choices)
         if tc_selected:
             tc_filter = ",".join(tc_selected)
@@ -402,7 +599,7 @@ class PostExecutionMenu(SessionMenu):
                 "scs-cn": "SCS-CN (CN)",
             }
             runoff_choices = [
-                questionary.Choice(runoff_labels.get(v, v), value=v, checked=False)
+                {"name": runoff_labels.get(v, v), "value": v, "checked": False}
                 for v in runoff_methods
             ]
             runoff_selected = self.checkbox("Métodos escorrentía (Enter para todos):", runoff_choices)
@@ -432,27 +629,16 @@ class PostExecutionMenu(SessionMenu):
             runoff=runoff_filter,
         )
 
-        # Ofrecer comparar filtrados
         if self.confirm("¿Comparar hidrogramas filtrados?", default=False):
-            # Filter analyses
             filtered_analyses = self.basin.analyses
-            # Apply filters...
-            # For now, pass all analyses - filtering logic would need to be implemented
             self._safe_call(basin_preview_compare, filtered_analyses, self.basin.name)
 
     def _edit_cuenca(self) -> str:
-        """
-        Permite editar los datos de la cuenca.
-
-        Returns:
-            "modified" si se modificó la cuenca
-            "cancelled" si se canceló
-        """
+        """Permite editar los datos de la cuenca."""
         from hidropluvial.cli.wizard.menus.cuenca_editor import CuencaEditor
         editor = CuencaEditor(self.basin)
         result = editor.edit()
 
-        # Reload project after edit
         if result == "modified":
             from hidropluvial.project import get_project_manager
             project_manager = get_project_manager()
@@ -462,54 +648,67 @@ class PostExecutionMenu(SessionMenu):
 
     def _manage_notes(self) -> None:
         """Gestiona notas de la cuenca y análisis."""
-        self.header("NOTAS Y COMENTARIOS")
+        from hidropluvial.cli.viewer.menu_panel import menu_panel, MenuItem
 
-        # Mostrar notas actuales
-        if self.basin.notes:
-            self.echo(f"\n  Notas de la cuenca:")
-            self.echo(f"  {'-'*50}")
-            for line in self.basin.notes.split('\n'):
-                self.echo(f"    {line}")
-            self.echo("")
+        while True:
+            # Mostrar notas actuales
+            has_basin_notes = bool(self.basin.notes)
+            analyses_with_notes = [a for a in self.basin.analyses if a.note]
 
-        # Contar análisis con notas
-        analyses_with_notes = [a for a in self.basin.analyses if a.note]
-        if analyses_with_notes:
-            self.info(f"Análisis con notas: {len(analyses_with_notes)}")
+            items = [
+                MenuItem(
+                    key="c",
+                    label="Notas de la cuenca",
+                    value="basin",
+                    hint="Editar" if has_basin_notes else "Agregar",
+                ),
+                MenuItem(
+                    key="a",
+                    label="Nota a un análisis",
+                    value="analysis",
+                    hint="Agregar/editar",
+                    disabled=not self.basin.analyses,
+                ),
+            ]
 
-        # Menú de opciones
-        choices = [
-            "Editar notas de la cuenca",
-            "Agregar nota a un análisis",
-        ]
-        if analyses_with_notes:
-            choices.append("Ver notas de análisis")
-        choices.append(self.back_option())
+            if analyses_with_notes:
+                items.append(MenuItem(
+                    key="v",
+                    label="Ver notas de análisis",
+                    value="view",
+                    hint=f"{len(analyses_with_notes)} con notas",
+                ))
 
-        action = self.select("\n¿Qué deseas hacer?", choices)
+            action = menu_panel(
+                title="Notas y Comentarios",
+                items=items,
+                allow_back=True,
+            )
 
-        if action is None or "Volver" in action:
-            return
+            if action is None:
+                break
 
-        if "cuenca" in action.lower():
-            self._edit_basin_notes()
-        elif "Agregar" in action:
-            self._add_analysis_note()
-        elif "Ver" in action:
-            self._view_analysis_notes()
+            if action == "basin":
+                self._edit_basin_notes()
+            elif action == "analysis":
+                self._add_analysis_note()
+            elif action == "view":
+                self._view_analysis_notes()
 
     def _edit_basin_notes(self) -> None:
         """Edita las notas generales de la cuenca."""
-        self.echo("\n  Notas de la cuenca:")
-        self.echo("  (Dejar vacío para eliminar notas existentes)\n")
+        from hidropluvial.cli.viewer.panel_input import panel_text
 
         current = self.basin.notes or ""
 
-        new_notes = self.text("Notas:", default=current)
+        new_notes = panel_text(
+            title="Notas de la Cuenca",
+            default=current,
+            hint="Dejar vacío para eliminar",
+        )
 
         if new_notes is not None:
             self.basin.notes = new_notes
-            # Save project
             from hidropluvial.project import get_project_manager
             project_manager = get_project_manager()
             project_manager.save_project(self.project)
@@ -525,59 +724,76 @@ class PostExecutionMenu(SessionMenu):
             self.warning("No hay análisis disponibles.")
             return
 
-        # Mostrar lista de análisis
-        choices = []
+        from hidropluvial.cli.viewer.menu_panel import menu_panel, MenuItem
+
+        items = []
         for i, a in enumerate(self.basin.analyses):
             hydro = a.hydrograph
             storm = a.storm
             x_str = f" X={hydro.x_factor:.2f}" if hydro.x_factor else ""
             note_indicator = " [nota]" if a.note else ""
-            choices.append(
-                f"{a.id}: {hydro.tc_method} Tr{storm.return_period}{x_str} "
-                f"Qp={hydro.peak_flow_m3s:.2f} m³/s{note_indicator}"
-            )
+            key = chr(ord('a') + i) if i < 26 else str(i)
+            items.append(MenuItem(
+                key=key,
+                label=f"{hydro.tc_method} Tr{storm.return_period}{x_str}",
+                value=a.id,
+                hint=f"Qp={hydro.peak_flow_m3s:.2f}{note_indicator}",
+            ))
 
-        selected = self.select("Selecciona análisis:", choices)
+        selected_id = menu_panel(
+            title="Seleccionar Análisis",
+            items=items,
+            allow_back=True,
+        )
 
-        if selected is None:
+        if selected_id is None:
             return
 
-        analysis_id = selected.split(":")[0]
+        from hidropluvial.cli.viewer.panel_input import panel_text
 
-        # Buscar análisis y mostrar nota actual si existe
         for a in self.basin.analyses:
-            if a.id == analysis_id:
-                if a.note:
-                    self.info(f"Nota actual: {a.note}")
-
-                new_note = self.text(
-                    "Nueva nota (vacío para eliminar):",
+            if a.id == selected_id:
+                new_note = panel_text(
+                    title="Nota del Análisis",
                     default=a.note or "",
+                    hint="Vacío para eliminar",
                 )
 
                 if new_note is not None:
                     a.note = new_note
-                    # Save project
                     from hidropluvial.project import get_project_manager
                     project_manager = get_project_manager()
                     project_manager.save_project(self.project)
 
                     if new_note:
-                        self.success(f"Nota guardada para análisis {analysis_id}.")
+                        self.success(f"Nota guardada.")
                     else:
-                        self.info(f"Nota eliminada de análisis {analysis_id}.")
+                        self.info(f"Nota eliminada.")
                 break
 
     def _view_analysis_notes(self) -> None:
         """Muestra las notas de todos los análisis."""
-        self.echo("\n  Notas de análisis:")
-        self.echo(f"  {'-'*50}")
+        from rich.table import Table
+        from hidropluvial.cli.theme import get_palette, get_console
+
+        console = get_console()
+        p = get_palette()
+
+        table = Table(
+            title="Notas de Análisis",
+            title_style=f"bold {p.primary}",
+            border_style=p.border,
+        )
+        table.add_column("Análisis", style="bold")
+        table.add_column("Nota")
 
         for a in self.basin.analyses:
             if a.note:
                 hydro = a.hydrograph
                 storm = a.storm
                 x_str = f" X={hydro.x_factor:.2f}" if hydro.x_factor else ""
-                self.echo(f"\n  [{a.id}] {hydro.tc_method} Tr{storm.return_period}{x_str}")
-                self.echo(f"    Qp={hydro.peak_flow_m3s:.2f} m³/s")
-                self.echo(f"    Nota: {a.note}")
+                label = f"{hydro.tc_method} Tr{storm.return_period}{x_str}"
+                table.add_row(label, a.note)
+
+        console.print(table)
+        input("\n  Presiona Enter para continuar...")

@@ -154,3 +154,206 @@ def create_summary_panel(title: str, content: str) -> Panel:
         box=box.ROUNDED,
         padding=(0, 1),
     )
+
+
+# =============================================================================
+# Navigation Bar Helpers
+# =============================================================================
+
+def styled_nav_key(key: str, label: str = "") -> Text:
+    """
+    Crea un segmento de tecla de navegación estilizado.
+
+    Args:
+        key: Tecla (ej: "Enter", "Esc", "↑↓", "a-z")
+        label: Descripción de la acción (ej: "Confirmar", "Volver")
+
+    Returns:
+        Text estilizado: [key] label
+    """
+    p = get_palette()
+    text = Text()
+    text.append("[", style=p.muted)
+    text.append(key, style=f"bold {p.nav_key}")
+    text.append("]", style=p.muted)
+    if label:
+        text.append(f" {label}", style=p.muted)
+    return text
+
+
+def styled_nav_confirm(key: str = "Enter", label: str = "Confirmar") -> Text:
+    """Crea segmento de tecla de confirmación."""
+    p = get_palette()
+    text = Text()
+    text.append("[", style=p.muted)
+    text.append(key, style=f"bold {p.nav_confirm}")
+    text.append("]", style=p.muted)
+    if label:
+        text.append(f" {label}", style=p.muted)
+    return text
+
+
+def styled_nav_cancel(key: str = "Esc", label: str = "Volver") -> Text:
+    """Crea segmento de tecla de cancelación."""
+    p = get_palette()
+    text = Text()
+    text.append("[", style=p.muted)
+    text.append(key, style=f"bold {p.nav_cancel}")
+    text.append("]", style=p.muted)
+    if label:
+        text.append(f" {label}", style=p.muted)
+    return text
+
+
+def styled_nav_bar(
+    items: list[tuple[str, str]],
+    confirm_key: str = None,
+    cancel_key: str = None,
+    indent: int = 2,
+) -> Text:
+    """
+    Crea una barra de navegación completa y estilizada.
+
+    Args:
+        items: Lista de tuplas (key, label) para teclas normales
+        confirm_key: Si se proporciona, agrega tecla de confirmación con este label
+        cancel_key: Si se proporciona, agrega tecla de cancelación con este label
+        indent: Espacios de indentación inicial
+
+    Returns:
+        Text con la barra de navegación completa
+
+    Example:
+        styled_nav_bar(
+            [("↑↓", "Navegar"), ("a-z", "Seleccionar")],
+            confirm_key="Confirmar",
+            cancel_key="Volver"
+        )
+        # Resultado: "  [↑↓] Navegar  [a-z] Seleccionar  [Enter] Confirmar  [Esc] Volver"
+    """
+    p = get_palette()
+    nav = Text()
+    nav.append(" " * indent)
+
+    # Agregar items normales
+    for key, label in items:
+        nav.append_text(styled_nav_key(key, label))
+        nav.append("  ")
+
+    # Agregar confirmación
+    if confirm_key:
+        nav.append_text(styled_nav_confirm("Enter", confirm_key))
+        nav.append("  ")
+
+    # Agregar cancelación
+    if cancel_key:
+        nav.append_text(styled_nav_cancel("Esc", cancel_key))
+
+    return nav
+
+
+def styled_nav_bar_select() -> Text:
+    """Barra de navegación estándar para paneles de selección."""
+    return styled_nav_bar(
+        [("a-z", "Seleccionar"), ("↑↓", "Navegar")],
+        confirm_key="Confirmar",
+        cancel_key="Volver",
+    )
+
+
+def styled_nav_bar_checkbox() -> Text:
+    """Barra de navegación estándar para paneles de checkbox."""
+    return styled_nav_bar(
+        [("a-z", "Marcar"), ("Space", "Toggle"), ("↑↓", "Navegar")],
+        confirm_key="Confirmar",
+        cancel_key="Volver",
+    )
+
+
+def styled_nav_bar_text() -> Text:
+    """Barra de navegación estándar para entrada de texto."""
+    return styled_nav_bar(
+        [],
+        confirm_key="Confirmar",
+        cancel_key="Volver",
+    )
+
+
+def styled_nav_bar_confirm() -> Text:
+    """Barra de navegación estándar para confirmación Sí/No."""
+    p = get_palette()
+    nav = Text()
+    nav.append("  [", style=p.muted)
+    nav.append("s", style=f"bold {p.nav_confirm}")
+    nav.append("/", style=p.muted)
+    nav.append("n", style=f"bold {p.nav_cancel}")
+    nav.append("] Seleccionar  ", style=p.muted)
+    nav.append_text(styled_nav_confirm("Enter", "Confirmar"))
+    return nav
+
+
+def styled_delete_confirm(count: int, entity: str = "item(s)") -> Text:
+    """
+    Crea la barra de confirmación para eliminación.
+
+    Args:
+        count: Número de items a eliminar
+        entity: Nombre de la entidad (ej: "cuenca(s)", "proyecto(s)")
+
+    Returns:
+        Text con mensaje de confirmación estilizado
+    """
+    p = get_palette()
+    nav = Text()
+    nav.append(f"  Eliminar {count} {entity}? ", style=f"bold {p.warning}")
+    nav.append("[", style=p.muted)
+    nav.append("s/y", style=f"bold {p.nav_confirm}")
+    nav.append("] Confirmar  ", style=p.muted)
+    nav.append("[", style=p.muted)
+    nav.append("n/Esc", style=f"bold {p.nav_cancel}")
+    nav.append("] Cancelar", style=p.muted)
+    return nav
+
+
+def styled_marked_text(text: str, is_selected: bool = False) -> Text:
+    """
+    Crea texto estilizado para items marcados para eliminación.
+
+    Args:
+        text: Texto a mostrar
+        is_selected: Si el item también está seleccionado
+
+    Returns:
+        Text con estilo de marcado
+    """
+    p = get_palette()
+    if is_selected:
+        return Text(text, style=f"bold {p.marked} reverse")
+    return Text(text, style=p.marked)
+
+
+def styled_input_field(label: str, value: str, show_cursor: bool = True) -> Text:
+    """
+    Crea un campo de entrada estilizado.
+
+    Args:
+        label: Etiqueta del campo
+        value: Valor actual del campo
+        show_cursor: Si mostrar cursor parpadeante
+
+    Returns:
+        Text con campo de entrada estilizado
+    """
+    p = get_palette()
+    text = Text()
+    text.append(f"  {label}: ", style=f"bold {p.accent}")
+    text.append(value, style=f"bold {p.input_text}")
+    if show_cursor:
+        text.append("_", style=f"blink bold {p.input_text}")
+    return text
+
+
+def styled_warning_message(text: str) -> Text:
+    """Crea un mensaje de advertencia para estados vacíos o sin datos."""
+    p = get_palette()
+    return Text(f"  {text}", style=p.warning)

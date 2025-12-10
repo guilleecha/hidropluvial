@@ -14,7 +14,8 @@ from hidropluvial.reports.charts import (
     _minutes_to_hour_label,
     _generate_hour_ticks,
 )
-from hidropluvial.config import HydrographResult, HyetographResult, HydrographMethod
+from hidropluvial.config import HyetographResult, HydrographMethod
+from hidropluvial.core.hydrograph import HydrographOutput
 
 
 class TestHelperFunctions:
@@ -246,8 +247,8 @@ class TestResultConversion:
     """Tests para conversión de resultados a TikZ."""
 
     def test_hydrograph_result_to_tikz(self):
-        """Test conversión de HydrographResult."""
-        result = HydrographResult(
+        """Test conversión de HydrographOutput."""
+        result = HydrographOutput(
             time_hr=[0, 0.5, 1.0, 1.5, 2.0],
             flow_m3s=[0, 5, 10, 5, 2],
             peak_flow_m3s=10,

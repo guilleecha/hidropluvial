@@ -6,6 +6,7 @@ El paquete está organizado en módulos:
 - datos_cuenca: Pasos para nombre, datos y longitud de cuenca
 - escorrentia: Paso para método de escorrentía (C y CN)
 - tc_tormenta: Pasos para tiempo de concentración, tormenta y salida
+- config_analisis_form: Formulario unificado de configuración de análisis
 """
 
 # Re-exportar todo para mantener compatibilidad
@@ -23,6 +24,16 @@ from hidropluvial.cli.wizard.steps.datos_cuenca import (
     StepNombre,
     StepDatosCuenca,
     StepLongitud,
+)
+
+# Desde datos_cuenca_form (formulario interactivo)
+from hidropluvial.cli.wizard.steps.datos_cuenca_form import (
+    StepDatosCuencaForm,
+)
+
+# Desde config_analisis_form (formulario unificado)
+from hidropluvial.cli.wizard.steps.config_analisis_form import (
+    StepConfigAnalisisForm,
 )
 
 # Desde escorrentia
@@ -47,6 +58,10 @@ __all__ = [
     "StepNombre",
     "StepDatosCuenca",
     "StepLongitud",
+    # datos_cuenca_form
+    "StepDatosCuencaForm",
+    # config_analisis_form
+    "StepConfigAnalisisForm",
     # escorrentia
     "StepMetodoEscorrentia",
     # tc_tormenta

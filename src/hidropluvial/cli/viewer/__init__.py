@@ -20,8 +20,10 @@ from hidropluvial.cli.viewer.coverage_viewer import (
 from hidropluvial.cli.viewer.form_viewer import (
     interactive_form,
     FormField,
+    FormState,
     FieldType,
     FieldStatus,
+    FormResult,
 )
 from hidropluvial.cli.viewer.config_form import interactive_config_form
 from hidropluvial.cli.viewer.panel_input import (
@@ -49,8 +51,10 @@ __all__ = [
     "interactive_form",
     "interactive_config_form",
     "FormField",
+    "FormState",
     "FieldType",
     "FieldStatus",
+    "FormResult",
     # Panel input
     "panel_select",
     "panel_checkbox",

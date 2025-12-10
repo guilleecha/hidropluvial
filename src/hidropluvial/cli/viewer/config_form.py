@@ -11,13 +11,13 @@ Extiende el form_viewer con soporte especial para:
 from dataclasses import dataclass, field
 from typing import Callable, Optional, List, Any, Union
 
-from rich.console import Console, Group
+from rich.console import Group
 from rich.table import Table
 from rich.text import Text
 from rich.panel import Panel
 from rich import box
 
-from hidropluvial.cli.theme import get_palette, get_icons
+from hidropluvial.cli.theme import get_palette, get_icons, get_console
 from hidropluvial.cli.viewer.terminal import clear_screen, get_key
 from hidropluvial.cli.viewer.form_viewer import (
     FormField,
@@ -322,7 +322,11 @@ def build_checkbox_panel(state: ConfigFormState) -> Panel:
             shortcut_text = Text(f"[{shortcut}]", style=f"dim {p.muted}")
             marker = Text(" ", style=p.muted)
             check_box = Text("[-]", style=f"dim {p.muted}")
-            name_text = Text(f"{opt_name} (no disponible)", style=f"dim {p.muted}")
+            # Usar disabled_hint si existe, sino texto genérico
+            disabled_hint = opt.get("disabled_hint", "no disponible")
+            name_text = Text()
+            name_text.append(f"{opt_name} ", style=f"dim {p.muted}")
+            name_text.append(f"({disabled_hint})", style=f"dim {p.warning}")
         else:
             # Shortcut
             shortcut_text = Text(f"[{shortcut}]", style=f"bold {p.accent}" if shortcut else p.muted)
@@ -415,8 +419,8 @@ def build_text_panel(state: ConfigFormState) -> Panel:
         content.append(f"  {fld.hint}\n\n", style=p.info)
 
     content.append("  > ", style=f"bold {p.accent}")
-    content.append(state.input_buffer, style="bold white")
-    content.append("_", style="blink bold white")
+    content.append(state.input_buffer, style=f"bold {p.input_text}")
+    content.append("_", style=f"blink bold {p.input_text}")
 
     if fld.unit:
         content.append(f" {fld.unit}", style=p.muted)
@@ -457,55 +461,55 @@ def build_config_nav(state: ConfigFormState) -> Text:
 
     if state.mode == "navigate":
         nav.append("  [", style=p.muted)
-        nav.append("↑↓", style=f"bold {p.primary}")
+        nav.append("↑↓", style=f"bold {p.nav_key}")
         nav.append("] Navegar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Enter", style=f"bold {p.primary}")
+        nav.append("Enter", style=f"bold {p.nav_key}")
         nav.append("] Editar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("q", style="bold green")
+        nav.append("q", style=f"bold {p.nav_confirm}")
         nav.append("] Continuar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Esc", style="bold red")
+        nav.append("Esc", style=f"bold {p.nav_cancel}")
         nav.append("] Volver", style=p.muted)
 
     elif state.mode == "edit_checkbox":
         nav.append("  [", style=p.muted)
-        nav.append("a-z", style=f"bold {p.accent}")
+        nav.append("a-z", style=f"bold {p.nav_key}")
         nav.append("] Marcar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Space", style=f"bold {p.primary}")
+        nav.append("Space", style=f"bold {p.nav_key}")
         nav.append("] Toggle  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("↑↓", style=f"bold {p.primary}")
+        nav.append("↑↓", style=f"bold {p.nav_key}")
         nav.append("] Navegar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Enter", style="bold green")
+        nav.append("Enter", style=f"bold {p.nav_confirm}")
         nav.append("] Confirmar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Esc", style="bold red")
+        nav.append("Esc", style=f"bold {p.nav_cancel}")
         nav.append("] Cancelar", style=p.muted)
 
     elif state.mode == "edit_select":
         nav.append("  [", style=p.muted)
-        nav.append("a-z", style=f"bold {p.accent}")
+        nav.append("a-z", style=f"bold {p.nav_key}")
         nav.append("] Seleccionar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("↑↓", style=f"bold {p.primary}")
+        nav.append("↑↓", style=f"bold {p.nav_key}")
         nav.append("] Navegar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Enter", style="bold green")
+        nav.append("Enter", style=f"bold {p.nav_confirm}")
         nav.append("] Confirmar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Esc", style="bold red")
+        nav.append("Esc", style=f"bold {p.nav_cancel}")
         nav.append("] Cancelar", style=p.muted)
 
     elif state.mode == "edit_text":
         nav.append("  [", style=p.muted)
-        nav.append("Enter", style="bold green")
+        nav.append("Enter", style=f"bold {p.nav_confirm}")
         nav.append("] Confirmar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Esc", style="bold red")
+        nav.append("Esc", style=f"bold {p.nav_cancel}")
         nav.append("] Cancelar", style=p.muted)
 
     return nav
@@ -597,7 +601,7 @@ def interactive_config_form(
     Returns:
         Diccionario con los valores, None si cancela, o False si quiere volver atrás
     """
-    console = Console()
+    console = get_console()
     from rich.live import Live
 
     # Configurar dependencias

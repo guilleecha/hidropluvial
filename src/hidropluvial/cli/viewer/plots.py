@@ -7,32 +7,32 @@ Usa plotext para gráficos en terminal.
 import plotext as plt
 
 
-def plot_combined(
+def build_combined_plot(
     analysis,
     width: int = 70,
     height_hyeto: int = 8,
     height_hydro: int = 12,
-) -> None:
+) -> str:
     """
-    Plotea hietograma e hidrograma combinados.
+    Construye hietograma e hidrograma combinados como texto.
 
     Args:
         analysis: AnalysisRun con datos de tormenta e hidrograma
         width: Ancho total del grafico
         height_hyeto: Alto del hietograma
         height_hydro: Alto del hidrograma
+
+    Returns:
+        String con el gráfico renderizado
     """
     hydro = analysis.hydrograph
     storm = analysis.storm
 
+    result_parts = []
+
+    # --- Hietograma ---
     plt.clear_figure()
-
-    # Crear 2 filas, 1 columna
-    plt.subplots(2, 1)
-
-    # --- Hietograma (arriba) ---
-    plt.subplot(1, 1)
-    plt.plot_size(width, height_hyeto)
+    plt.plotsize(width, height_hyeto)
 
     if storm.time_min and storm.intensity_mmhr:
         # Calcular intervalo dt
@@ -70,10 +70,11 @@ def plot_combined(
         plt.title("Hietograma - Sin datos")
 
     plt.theme("clear")
+    result_parts.append(plt.build())
 
-    # --- Hidrograma (abajo) ---
-    plt.subplot(2, 1)
-    plt.plot_size(width, height_hydro)
+    # --- Hidrograma ---
+    plt.clear_figure()
+    plt.plotsize(width, height_hydro)
 
     if hydro.time_hr and hydro.flow_m3s:
         plt.plot(list(hydro.time_hr), list(hydro.flow_m3s), marker="braille", color="blue")
@@ -97,7 +98,27 @@ def plot_combined(
         plt.title("Hidrograma - Sin datos")
 
     plt.theme("clear")
-    plt.show()
+    result_parts.append(plt.build())
+
+    return "\n".join(result_parts)
+
+
+def plot_combined(
+    analysis,
+    width: int = 70,
+    height_hyeto: int = 8,
+    height_hydro: int = 12,
+) -> None:
+    """
+    Plotea hietograma e hidrograma combinados (imprime directamente).
+
+    Args:
+        analysis: AnalysisRun con datos de tormenta e hidrograma
+        width: Ancho total del grafico
+        height_hyeto: Alto del hietograma
+        height_hydro: Alto del hidrograma
+    """
+    print(build_combined_plot(analysis, width, height_hyeto, height_hydro))
 
 
 def plot_hydrograph(

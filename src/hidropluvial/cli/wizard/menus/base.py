@@ -6,17 +6,11 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 import typer
-import questionary
 
 from hidropluvial.cli.wizard.styles import (
     WIZARD_STYLE,
-    get_select_kwargs,
-    get_checkbox_kwargs,
-    get_confirm_kwargs,
-    get_text_kwargs,
     back_choice,
     cancel_choice,
-    menu_separator,
     get_icons,
 )
 from hidropluvial.project import get_project_manager, ProjectManager, Project, Basin
@@ -162,12 +156,6 @@ class BaseMenu(ABC):
                     value=c.get("value"),
                     checked=c.get("checked", False),
                 ))
-            elif hasattr(c, 'title'):  # questionary.Choice
-                options.append(PanelOption(
-                    label=c.title,
-                    value=c.title,
-                    checked=getattr(c, 'checked', False),
-                ))
             else:
                 options.append(PanelOption(label=str(c), value=str(c)))
 
@@ -176,11 +164,12 @@ class BaseMenu(ABC):
             options=options,
         )
 
-    def confirm(self, message: str, default: bool = True) -> bool:
+    def confirm(self, message: str, default: bool = True, as_popup: bool = True) -> bool:
         """Muestra panel de confirmación Sí/No."""
         result = panel_confirm(
             title=message,
             default=default,
+            as_popup=as_popup,
         )
         return result if result is not None else False
 
@@ -198,40 +187,6 @@ class BaseMenu(ABC):
     def cancel_option(self, text: str = "Cancelar") -> str:
         """Genera texto para opción de cancelar."""
         return cancel_choice(text)
-
-    def separator(self, text: str = "") -> questionary.Separator:
-        """Crea un separador de menú."""
-        return menu_separator(text)
-
-    def ask_float(self, prompt: str, current: Optional[float]) -> Optional[float]:
-        """Solicita un valor float, retorna None si no cambia."""
-        default_str = f"{current:.2f}" if current else ""
-        val = self.text(prompt, default=default_str)
-        if val is None:
-            return None
-        val = val.strip()
-        if val == "" or val == default_str:
-            return None
-        try:
-            return float(val)
-        except ValueError:
-            self.echo(f"  Valor invalido, se mantiene {current}")
-            return None
-
-    def ask_int(self, prompt: str, current: Optional[int]) -> Optional[int]:
-        """Solicita un valor int, retorna None si no cambia."""
-        default_str = str(current) if current else ""
-        val = self.text(prompt, default=default_str)
-        if val is None:
-            return None
-        val = val.strip()
-        if val == "" or val == default_str:
-            return None
-        try:
-            return int(val)
-        except ValueError:
-            self.echo(f"  Valor invalido, se mantiene {current}")
-            return None
 
     # ========================================================================
     # Métodos compartidos para operaciones de cuenca
@@ -406,6 +361,7 @@ class SessionMenu(BaseMenu):
         """
         from hidropluvial.database import get_database
         from hidropluvial.cli.viewer.terminal import clear_screen
+        from hidropluvial.cli.viewer.panel_input import panel_text
 
         if db is None:
             db = get_database()
@@ -413,11 +369,10 @@ class SessionMenu(BaseMenu):
         def on_edit_note(analysis_id: str, current_note: str) -> str:
             clear_screen()
             print(f"\n  Editando nota del análisis {analysis_id[:8]}...\n")
-            new_note = questionary.text(
-                "Nueva nota (vacío para eliminar):",
+            new_note = panel_text(
+                title="Nueva nota (vacío para eliminar):",
                 default=current_note or "",
-                **get_text_kwargs(),
-            ).ask()
+            )
             if new_note is not None:
                 db.update_analysis_note(analysis_id, new_note if new_note else None)
                 return new_note
@@ -438,6 +393,7 @@ class SessionMenu(BaseMenu):
         """
         from hidropluvial.database import get_database
         from hidropluvial.cli.viewer.terminal import clear_screen
+        from hidropluvial.cli.viewer.panel_input import panel_confirm
 
         if db is None:
             db = get_database()
@@ -446,11 +402,10 @@ class SessionMenu(BaseMenu):
             if confirm_prompt:
                 clear_screen()
                 print(f"\n  ¿Eliminar análisis {analysis_id[:8]}?\n")
-                if not questionary.confirm(
-                    "¿Confirmar eliminación?",
+                if not panel_confirm(
+                    title="¿Confirmar eliminación?",
                     default=False,
-                    **get_confirm_kwargs(),
-                ).ask():
+                ):
                     return False
 
             if db.delete_analysis(analysis_id):
@@ -484,11 +439,15 @@ class SessionMenu(BaseMenu):
             return
 
         from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
+        from hidropluvial.database import get_database
 
+        db = get_database()
         updated_analyses = interactive_hydrograph_viewer(
             analyses, name,
             on_edit_note=self._create_edit_note_callback(),
             on_delete=self._create_delete_callback(),
+            basin_id=self._basin.id,
+            db=db,
         )
 
         if updated_analyses is not None:
@@ -515,25 +474,37 @@ class SessionMenu(BaseMenu):
 
         from hidropluvial.cli.viewer.table_viewer import interactive_table_viewer
         from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
+        from hidropluvial.database import get_database
 
+        db = get_database()
         on_edit_note = self._create_edit_note_callback()
         on_delete = self._create_delete_callback()
 
-        def on_view_detail(index: int) -> None:
+        def on_view_detail(index: int, filtered_analyses: list, active_filters: dict) -> None:
             """Callback para ver ficha detallada de un análisis."""
             interactive_hydrograph_viewer(
-                [self._basin.analyses[index]],
+                filtered_analyses,  # Usar lista ya filtrada
                 name,
                 on_edit_note=on_edit_note,
                 on_delete=on_delete,
+                start_index=index,
+                basin_id=self._basin.id,
+                db=db,
+                inherited_filters=active_filters,
             )
 
-        updated_analyses = interactive_table_viewer(
+        result = interactive_table_viewer(
             analyses, name,
             on_edit_note=on_edit_note,
             on_delete=on_delete,
             on_view_detail=on_view_detail,
         )
+
+        # Desempaquetar resultado (lista, needs_reload)
+        if isinstance(result, tuple):
+            updated_analyses, _ = result
+        else:
+            updated_analyses = result
 
         if updated_analyses is not None:
             self._basin.analyses = updated_analyses

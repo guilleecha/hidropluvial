@@ -162,7 +162,7 @@ class StepConfigAnalisisForm(WizardStep):
         # Dependencia OR: C existe en state O usuario selecciona método C
         has_c = self.state.c is not None
         options.append({
-            "name": f"Desbordes (urbano){' - C=' + f'{self.state.c:.2f}' if has_c else ' - requiere C'}",
+            "name": f"Desbordes (urbano){' - C=' + f'{self.state.c:.2f}' if has_c else ''}",
             "value": "desbordes",
             "checked": has_c,
             # Dependencia: disponible si C existe en state O si se selecciona método C
@@ -170,6 +170,7 @@ class StepConfigAnalisisForm(WizardStep):
                 ("_state.c", [True]),  # C ya existe en el state
                 ("metodo_escorrentia", ["C"]),  # O se va a calcular C
             ]),
+            "disabled_hint": "seleccionar método C en escorrentía",
         })
 
         # Kirpich y Temez: requieren longitud

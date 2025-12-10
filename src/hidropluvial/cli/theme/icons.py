@@ -10,12 +10,12 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-def _detect_unicode_support() -> bool:
+def detect_unicode_support() -> bool:
     """Detecta si el terminal soporta caracteres Unicode."""
     try:
         encoding = getattr(sys.stdout, 'encoding', None) or 'ascii'
         # Probar con varios caracteres Unicode que usaremos
-        test_chars = "❯◉○✓✗▸◂■□"
+        test_chars = "❯◉○✓✗▸◂■□█▁▂▃▄▅▆▇"  # Incluye caracteres de menu e histograma
         test_chars.encode(encoding)
         return True
     except (UnicodeEncodeError, LookupError):
@@ -109,7 +109,7 @@ ICONS_ASCII = IconSet(
     # Navegación y selección
     pointer=">",
     pointer_alt=">",
-    selected="[x]",
+    selected="[+]",
     unselected="[ ]",
 
     # Estados
@@ -155,7 +155,7 @@ def get_icons() -> IconSet:
     global _active_icons, _unicode_supported
 
     if _active_icons is None:
-        _unicode_supported = _detect_unicode_support()
+        _unicode_supported = detect_unicode_support()
         _active_icons = ICONS_UNICODE if _unicode_supported else ICONS_ASCII
 
     return _active_icons
@@ -166,7 +166,7 @@ def supports_unicode() -> bool:
     global _unicode_supported
 
     if _unicode_supported is None:
-        _unicode_supported = _detect_unicode_support()
+        _unicode_supported = detect_unicode_support()
 
     return _unicode_supported
 

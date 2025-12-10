@@ -2,12 +2,7 @@
 Pasos del wizard para datos básicos de la cuenca.
 """
 
-import questionary
-
-from hidropluvial.cli.wizard.styles import (
-    WIZARD_STYLE,
-    validate_positive_float,
-)
+from hidropluvial.cli.wizard.styles import validate_positive_float
 from hidropluvial.cli.wizard.steps.base import WizardStep, WizardState, StepResult
 
 
@@ -21,14 +16,14 @@ class StepNombre(WizardStep):
     def execute(self) -> StepResult:
         self.echo(f"\n-- {self.title} --\n")
 
-        result = questionary.text(
+        res, result = self.text(
             "Nombre de la cuenca:",
             validate=lambda x: len(x) > 0 or "El nombre no puede estar vacío",
             default=self.state.nombre,
-            style=WIZARD_STYLE,
-        ).ask()
+            back_option=False,
+        )
 
-        if result is None:
+        if res != StepResult.NEXT or result is None:
             return StepResult.CANCEL
 
         self.state.nombre = result
@@ -46,6 +41,7 @@ class StepDatosCuenca(WizardStep):
         self.echo(f"\n-- {self.title} --\n")
 
         # Área
+        self.suggestion("Típico: 1-50 ha (urbano), 50-500 ha (subcuenca)")
         default_area = str(self.state.area_ha) if self.state.area_ha > 0 else ""
         res, area = self.text(
             "Área de la cuenca (ha):",
@@ -58,6 +54,7 @@ class StepDatosCuenca(WizardStep):
         self.state.area_ha = float(area)
 
         # Pendiente
+        self.suggestion("Típico: 0.5-2% (llano), 2-5% (ondulado), >5% (pronunciado)")
         default_slope = str(self.state.slope_pct) if self.state.slope_pct > 0 else ""
         res, slope = self.text(
             "Pendiente media (%):",
@@ -73,7 +70,7 @@ class StepDatosCuenca(WizardStep):
         self.state.slope_pct = float(slope)
 
         # P3,10
-        self.suggestion("Consulta la tabla IDF de DINAGUA para tu estación")
+        self.suggestion("Consulta la tabla IDF de DINAGUA. Montevideo: ~55mm")
         default_p3 = str(self.state.p3_10) if self.state.p3_10 > 0 else ""
         res, p3_10 = self.text(
             "Precipitación P(3h, Tr=10) en mm:",
@@ -106,6 +103,7 @@ class StepLongitud(WizardStep):
             return res
 
         if tiene:
+            self.suggestion("Típico: 200-2000m (urbano), 1-10km (rural)")
             default_length = str(int(self.state.length_m)) if self.state.length_m else ""
             res, length = self.text(
                 "Longitud del cauce (m):",

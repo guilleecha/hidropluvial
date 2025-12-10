@@ -19,7 +19,7 @@ from hidropluvial import __version__
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 
 
-def _escape_latex(text: str) -> str:
+def escape_latex(text: str) -> str:
     """Escapa caracteres especiales de LaTeX."""
     if not isinstance(text, str):
         return str(text)
@@ -54,7 +54,7 @@ def _create_jinja_env() -> Environment:
         autoescape=False,
         loader=FileSystemLoader(str(_TEMPLATE_DIR)),
     )
-    env.filters['escape_latex'] = _escape_latex
+    env.filters['escape_latex'] = escape_latex
     return env
 
 
@@ -226,7 +226,7 @@ class ReportGenerator:
                 value_str = f"{value:.4f}"
             else:
                 value_str = str(value)
-            rows.append(f"{_escape_latex(param)} & {value_str} " + r"\\")
+            rows.append(f"{escape_latex(param)} & {value_str} " + r"\\")
 
         rows_str = "\n\t\t".join(rows)
 
@@ -271,7 +271,7 @@ class ReportGenerator:
 \\pgfplotsset{compat=1.18}
 """
 
-        author_line = f"\\author{{{_escape_latex(author)}}}" if author else ""
+        author_line = f"\\author{{{escape_latex(author)}}}" if author else ""
         date_line = f"\\date{{{datetime.now().strftime('%d de %B de %Y')}}}"
 
         tex = f"""\\documentclass[11pt, a4paper]{{article}}
@@ -291,7 +291,7 @@ class ReportGenerator:
 {tikz_packages}
 
 % Metadatos
-\\title{{{_escape_latex(title)}}}
+\\title{{{escape_latex(title)}}}
 {author_line}
 {date_line}
 

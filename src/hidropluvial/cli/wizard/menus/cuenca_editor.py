@@ -1,17 +1,25 @@
 """
-Editor de parametros de cuenca.
+Editor de parametros de cuenca usando formulario interactivo.
+
+Separa edición de metadatos (nombre, notas) que NO invalidan análisis,
+de parámetros físicos (área, pendiente, etc.) que SÍ los invalidan.
 """
 
 from typing import Optional
 
-import typer
-import questionary
-
-from hidropluvial.cli.wizard.styles import WIZARD_STYLE
 from hidropluvial.cli.theme import (
-    print_header, print_section, print_info, print_warning,
-    print_success, print_error, get_console, get_palette,
+    print_info, print_warning, print_success,
+    get_console, get_palette,
 )
+from hidropluvial.cli.viewer.panel_input import panel_confirm
+from hidropluvial.cli.viewer.menu_panel import menu_panel, MenuItem
+from hidropluvial.cli.viewer.form_viewer import (
+    interactive_form,
+    FormField,
+    FieldType,
+    FormResult,
+)
+from hidropluvial.cli.viewer.terminal import clear_screen
 from rich.panel import Panel
 from rich.text import Text
 from rich.table import Table
@@ -19,64 +27,162 @@ from rich import box
 
 
 class CuencaEditor:
-    """Editor para modificar parametros de una cuenca."""
+    """Editor para modificar parametros de una cuenca usando formulario interactivo."""
 
-    def __init__(self, basin):
+    # Campos que invalidan análisis si cambian
+    PARAMS_THAT_INVALIDATE = {"area_ha", "slope_pct", "p3_10", "length_m", "c", "cn"}
+
+    def __init__(self, basin, project_manager=None):
+        """
+        Inicializa el editor.
+
+        Args:
+            basin: Cuenca a editar
+            project_manager: ProjectManager (opcional, para compatibilidad)
+        """
         self.basin = basin
-        self._area_changed = False
-        self._original_area = self.basin.area_ha
-
-    def echo(self, message: str) -> None:
-        """Wrapper para print."""
-        typer.echo(message)
+        self.project_manager = project_manager
 
     def edit(self) -> str:
         """
-        Permite editar los datos de la cuenca.
+        Muestra menú para elegir qué editar.
 
         Returns:
-            "new_session" si se creo nueva sesion
-            "modified" si se modifico la sesion actual
-            "cancelled" si se cancelo
+            "modified" si se modificó la cuenca
+            "cancelled" si se canceló
         """
+        n_analyses = len(self.basin.analyses) if self.basin.analyses else 0
+
+        items = [
+            MenuItem(
+                key="m",
+                label="Editar metadatos",
+                value="metadata",
+                hint="Nombre, notas (no afecta análisis)",
+            ),
+            MenuItem(
+                key="p",
+                label="Editar parámetros físicos",
+                value="params",
+                hint=f"Área, pendiente, etc. (elimina {n_analyses} análisis)" if n_analyses else "Área, pendiente, P3,10...",
+            ),
+        ]
+
+        choice = menu_panel(
+            title=f"Editar Cuenca: {self.basin.name}",
+            items=items,
+            subtitle=f"{n_analyses} análisis" if n_analyses else "Sin análisis",
+            allow_back=True,
+        )
+
+        if choice is None:
+            return "cancelled"
+
+        if choice == "metadata":
+            return self._edit_metadata()
+        elif choice == "params":
+            return self._edit_params()
+
+        return "cancelled"
+
+    def _edit_metadata(self) -> str:
+        """Edita metadatos sin afectar análisis."""
+        clear_screen()
+
+        fields = [
+            FormField(
+                key="name",
+                label="Nombre de la cuenca",
+                field_type=FieldType.TEXT,
+                required=True,
+                default=self.basin.name,
+                hint="Identificador de la cuenca",
+            ),
+            FormField(
+                key="notes",
+                label="Notas",
+                field_type=FieldType.TEXT,
+                required=False,
+                default=self.basin.notes or "",
+                hint="Observaciones adicionales",
+            ),
+        ]
+
+        result = interactive_form(
+            title=f"Metadatos: {self.basin.name}",
+            fields=fields,
+            allow_back=True,
+        )
+
+        if result is None or result.get("_result") == FormResult.BACK:
+            return "cancelled"
+
+        # Aplicar cambios
+        changed = False
+        if result.get("name") and result["name"] != self.basin.name:
+            self.basin.name = result["name"]
+            changed = True
+
+        new_notes = result.get("notes") or None
+        if new_notes != self.basin.notes:
+            self.basin.notes = new_notes
+            changed = True
+
+        if changed:
+            print_success("Metadatos actualizados.")
+            return "modified"
+        else:
+            print_info("No se realizaron cambios.")
+            return "cancelled"
+
+    def _edit_params(self) -> str:
+        """Edita parámetros físicos (puede invalidar análisis)."""
+        clear_screen()
+
         self._show_current_values()
         self._show_warnings()
 
-        action = self._ask_action()
-        if action == "cancelled":
+        # Preguntar si quiere continuar
+        if not self._confirm_edit():
             return "cancelled"
 
-        new_values = self._collect_new_values()
-        if not self._has_changes(new_values):
-            self.echo("\n  No se especificaron cambios.")
+        # Mostrar formulario con datos precargados
+        new_values = self._show_edit_form()
+        if new_values is None:
             return "cancelled"
 
-        # Si cambio el area, manejar C/CN
-        if self._area_changed:
-            c_cn_result = self._handle_area_change(new_values)
-            if c_cn_result == "cancelled":
-                return "cancelled"
-
-        self._show_changes(new_values)
-        if not self._confirm_changes():
+        # Verificar si hay cambios
+        changes = self._get_changes(new_values)
+        if not changes:
+            print_info("No se realizaron cambios.")
             return "cancelled"
 
-        return self._modify_in_place(new_values)
+        # Mostrar resumen de cambios
+        self._show_changes(changes)
+
+        # Confirmar cambios
+        if not panel_confirm(title="¿Aplicar estos cambios?", default=True):
+            return "cancelled"
+
+        # Aplicar cambios
+        return self._apply_changes(new_values, changes)
 
     def _show_current_values(self) -> None:
-        """Muestra los valores actuales de la cuenca."""
+        """Muestra los valores actuales de la cuenca en un panel."""
         console = get_console()
         p = get_palette()
 
-        # Crear tabla con los valores actuales
         table = Table(
             show_header=False,
             box=None,
             padding=(0, 2),
             expand=True,
         )
-        table.add_column("Label", style=p.label, width=12)
+        table.add_column("Label", style=p.label, width=20)
         table.add_column("Value")
+
+        # Nombre
+        table.add_row("Nombre", Text(self.basin.name, style=f"bold {p.primary}"))
 
         # Área
         area_text = Text()
@@ -94,21 +200,24 @@ class CuencaEditor:
         p310_text = Text()
         p310_text.append(f"{self.basin.p3_10:.1f}", style=f"bold {p.number}")
         p310_text.append(" mm", style=p.unit)
-        table.add_row("P3,10", p310_text)
+        table.add_row("P(3h, Tr=10)", p310_text)
 
-        if self.basin.c:
-            table.add_row("Coef. C", Text(f"{self.basin.c:.2f}", style=f"bold {p.number}"))
-
-        if self.basin.cn:
-            table.add_row("CN", Text(str(self.basin.cn), style=f"bold {p.number}"))
-
+        # Longitud (opcional)
         if self.basin.length_m:
             len_text = Text()
             len_text.append(f"{self.basin.length_m:.0f}", style=f"bold {p.number}")
             len_text.append(" m", style=p.unit)
-            table.add_row("Longitud", len_text)
+            table.add_row("Longitud cauce", len_text)
+        else:
+            table.add_row("Longitud cauce", Text("No definida", style=p.muted))
 
-        title = Text("Editar datos de la cuenca", style=f"bold {p.primary}")
+        # C y CN
+        if self.basin.c:
+            table.add_row("Coef. C", Text(f"{self.basin.c:.2f}", style=f"bold {p.number}"))
+        if self.basin.cn:
+            table.add_row("CN", Text(str(self.basin.cn), style=f"bold {p.number}"))
+
+        title = Text(f"Editar cuenca: {self.basin.name}", style=f"bold {p.primary}")
 
         console.print()
         panel = Panel(
@@ -126,634 +235,214 @@ class CuencaEditor:
         n_analyses = len(self.basin.analyses) if self.basin.analyses else 0
 
         if n_analyses > 0:
-            print_warning(f"Esta cuenca tiene {n_analyses} análisis.")
-            print_warning("Los cambios INVALIDARÁN estos resultados.")
+            print_warning(f"Esta cuenca tiene {n_analyses} análisis que serán ELIMINADOS al modificar los datos.")
 
-    def _ask_action(self) -> str:
-        """Pregunta que accion tomar."""
-        action = questionary.select(
-            "\nQue deseas hacer?",
-            choices=[
-                "Modificar cuenca actual (elimina analisis existentes)",
-                "Cancelar",
-            ],
-            style=WIZARD_STYLE,
-        ).ask()
+    def _confirm_edit(self) -> bool:
+        """Confirma que el usuario quiere editar."""
+        n_analyses = len(self.basin.analyses) if self.basin.analyses else 0
 
-        if action is None or "Cancelar" in action:
-            return "cancelled"
-        return "modify"
-
-    def _collect_new_values(self) -> dict:
-        """Recolecta los nuevos valores del usuario (sin C/CN si area cambia)."""
-        self.echo("\n  Ingresa nuevos valores (Enter para mantener actual):\n")
-
-        new_values = {}
-
-        # Area
-        val = self._ask_float(f"Area (ha) [{self.basin.area_ha:.2f}]:", self.basin.area_ha)
-        if val is not None:
-            new_values["area_ha"] = val
-            self._area_changed = True
-            self.echo(f"\n  [!] El area cambio de {self._original_area:.2f} a {val:.2f} ha")
-            self.echo(f"      Los valores de C y CN dependen del area de coberturas.")
-            self.echo(f"      Se solicitara recalcular o ingresar nuevos valores.\n")
-
-        # Pendiente
-        val = self._ask_float(f"Pendiente (%) [{self.basin.slope_pct:.2f}]:", self.basin.slope_pct)
-        if val is not None:
-            new_values["slope_pct"] = val
-
-        # P3,10
-        val = self._ask_float(f"P3,10 (mm) [{self.basin.p3_10:.1f}]:", self.basin.p3_10)
-        if val is not None:
-            new_values["p3_10"] = val
-
-        # Longitud
-        length_default = self.basin.length_m if self.basin.length_m else "N/A"
-        val = self._ask_float(f"Longitud (m) [{length_default}]:", self.basin.length_m or 0)
-        if val is not None and val != 0:
-            new_values["length_m"] = val
-
-        # Si NO cambio el area, permitir editar C/CN directamente
-        if not self._area_changed:
-            self._collect_c_cn_values(new_values)
-
-        return new_values
-
-    def _collect_c_cn_values(self, new_values: dict) -> None:
-        """Recolecta valores de C y CN (area no cambio)."""
-        area = self.basin.area_ha
-
-        # Preguntar si quiere modificar C
-        if self.basin.c:
-            c_result = self._ask_coefficient_edit("C", self.basin.c, area)
-            if c_result is not None:
-                new_values["c"] = c_result
-        else:
-            # No tiene C, preguntar si quiere agregar
-            add_c = questionary.confirm(
-                "Agregar coeficiente C (Racional)?",
+        if n_analyses > 0:
+            return panel_confirm(
+                title="¿Continuar con la edición?",
+                message="Los análisis existentes serán eliminados",
                 default=False,
-                style=WIZARD_STYLE,
-            ).ask()
-            if add_c:
-                c_result = self._ask_new_coefficient("C", area)
-                if c_result is not None:
-                    new_values["c"] = c_result
+            )
+        return True
 
-        # Preguntar si quiere modificar CN
-        if self.basin.cn:
-            cn_result = self._ask_cn_edit(self.basin.cn, area)
-            if cn_result is not None:
-                new_values["cn"] = cn_result
-        else:
-            # No tiene CN, preguntar si quiere agregar
-            add_cn = questionary.confirm(
-                "Agregar CN (SCS)?",
-                default=False,
-                style=WIZARD_STYLE,
-            ).ask()
-            if add_cn:
-                cn_result = self._ask_new_cn(area)
-                if cn_result is not None:
-                    new_values["cn"] = cn_result
+    def _show_edit_form(self) -> Optional[dict]:
+        """Muestra el formulario de edición con datos precargados."""
+        fields = [
+            FormField(
+                key="name",
+                label="Nombre de la cuenca",
+                field_type=FieldType.TEXT,
+                required=True,
+                default=self.basin.name,
+                hint="Identificador único para esta cuenca",
+            ),
+            FormField(
+                key="area_ha",
+                label="Área",
+                field_type=FieldType.FLOAT,
+                required=True,
+                unit="ha",
+                default=self.basin.area_ha,
+                min_value=0.01,
+                max_value=10000,
+                hint="Típico: 1-50 ha (urbano), 50-500 ha (subcuenca)",
+            ),
+            FormField(
+                key="slope_pct",
+                label="Pendiente media",
+                field_type=FieldType.FLOAT,
+                required=True,
+                unit="%",
+                default=self.basin.slope_pct,
+                min_value=0.01,
+                max_value=100,
+                hint="Típico: 0.5-2% (llano), 2-5% (ondulado), >5% (pronunciado)",
+            ),
+            FormField(
+                key="p3_10",
+                label="Precipitación P(3h, Tr=10)",
+                field_type=FieldType.FLOAT,
+                required=True,
+                unit="mm",
+                default=self.basin.p3_10,
+                min_value=1,
+                max_value=500,
+                hint="Consulta tabla IDF de DINAGUA. Montevideo: ~55mm",
+            ),
+            FormField(
+                key="length_m",
+                label="Longitud del cauce",
+                field_type=FieldType.FLOAT,
+                required=False,
+                unit="m",
+                default=self.basin.length_m if self.basin.length_m else None,
+                min_value=1,
+                max_value=100000,
+                hint="Típico: 200-2000m (urbano), 1-10km (rural)",
+            ),
+            FormField(
+                key="c",
+                label="Coeficiente C (Racional)",
+                field_type=FieldType.FLOAT,
+                required=False,
+                default=self.basin.c if self.basin.c else None,
+                min_value=0.1,
+                max_value=0.95,
+                hint="Típico: 0.7-0.9 (urbano), 0.4-0.7 (residencial), 0.2-0.4 (rural)",
+            ),
+            FormField(
+                key="cn",
+                label="Número de Curva CN (SCS)",
+                field_type=FieldType.INT,
+                required=False,
+                default=self.basin.cn if self.basin.cn else None,
+                min_value=30,
+                max_value=98,
+                hint="Típico: 85-95 (urbano), 70-85 (residencial), 55-70 (bosque)",
+            ),
+        ]
 
-    def _ask_coefficient_edit(self, coef_name: str, current: float, area: float) -> Optional[float]:
-        """Pregunta como editar un coeficiente C existente."""
-        choice = questionary.select(
-            f"Coeficiente {coef_name} actual = {current:.2f}. Que deseas hacer?",
-            choices=[
-                f"Mantener {coef_name} = {current:.2f}",
-                f"Recalcular {coef_name} usando tablas de coberturas",
-                f"Ingresar nuevo valor de {coef_name} directamente",
-            ],
-            style=WIZARD_STYLE,
-        ).ask()
+        result = interactive_form(
+            title=f"Editar: {self.basin.name}",
+            fields=fields,
+            allow_back=True,
+        )
 
-        if choice is None or "Mantener" in choice:
+        if result is None:
             return None
 
-        if "Recalcular" in choice:
-            return self._recalculate_c(area)
-
-        if "Ingresar" in choice:
-            val = self._ask_float(f"Nuevo valor de {coef_name} (0.1-1.0):", current)
-            return val
-
-        return None
-
-    def _ask_new_coefficient(self, coef_name: str, area: float) -> Optional[float]:
-        """Pregunta como ingresar un nuevo coeficiente C."""
-        choice = questionary.select(
-            f"Como deseas configurar {coef_name}?",
-            choices=[
-                f"Calcular {coef_name} usando tablas de coberturas",
-                f"Ingresar valor de {coef_name} directamente",
-                "Cancelar",
-            ],
-            style=WIZARD_STYLE,
-        ).ask()
-
-        if choice is None or "Cancelar" in choice:
+        if result.get("_result") == FormResult.BACK:
             return None
 
-        if "Calcular" in choice:
-            return self._recalculate_c(area)
+        return result
 
-        if "Ingresar" in choice:
-            val = self._ask_float(f"Valor de {coef_name} (0.1-1.0):", 0.5)
-            return val
+    def _get_changes(self, new_values: dict) -> dict:
+        """Compara valores nuevos con actuales y retorna solo los cambios."""
+        changes = {}
 
-        return None
+        # Comparar cada campo
+        if new_values.get("name") != self.basin.name:
+            changes["name"] = (self.basin.name, new_values.get("name"))
 
-    def _ask_cn_edit(self, current_cn: int, area: float) -> Optional[int]:
-        """Pregunta como editar un CN existente."""
-        choice = questionary.select(
-            f"CN actual = {current_cn}. Que deseas hacer?",
-            choices=[
-                f"Mantener CN = {current_cn}",
-                "Recalcular CN usando tablas de coberturas",
-                "Ingresar nuevo valor de CN directamente",
-            ],
-            style=WIZARD_STYLE,
-        ).ask()
+        if new_values.get("area_ha") != self.basin.area_ha:
+            changes["area_ha"] = (self.basin.area_ha, new_values.get("area_ha"))
 
-        if choice is None or "Mantener" in choice:
-            return None
+        if new_values.get("slope_pct") != self.basin.slope_pct:
+            changes["slope_pct"] = (self.basin.slope_pct, new_values.get("slope_pct"))
 
-        if "Recalcular" in choice:
-            return self._recalculate_cn(area)
+        if new_values.get("p3_10") != self.basin.p3_10:
+            changes["p3_10"] = (self.basin.p3_10, new_values.get("p3_10"))
 
-        if "Ingresar" in choice:
-            cn_str = questionary.text(
-                "Nuevo valor de CN (30-98):",
-                default=str(current_cn),
-                style=WIZARD_STYLE,
-            ).ask()
-            if cn_str:
-                try:
-                    return int(cn_str)
-                except ValueError:
-                    pass
+        # Campos opcionales
+        new_length = new_values.get("length_m")
+        if new_length != self.basin.length_m:
+            changes["length_m"] = (self.basin.length_m, new_length)
 
-        return None
+        new_c = new_values.get("c")
+        if new_c != self.basin.c:
+            changes["c"] = (self.basin.c, new_c)
 
-    def _ask_new_cn(self, area: float) -> Optional[int]:
-        """Pregunta como ingresar un nuevo CN."""
-        choice = questionary.select(
-            "Como deseas configurar CN?",
-            choices=[
-                "Calcular CN usando tablas de coberturas",
-                "Ingresar valor de CN directamente",
-                "Cancelar",
-            ],
-            style=WIZARD_STYLE,
-        ).ask()
+        new_cn = new_values.get("cn")
+        if new_cn != self.basin.cn:
+            changes["cn"] = (self.basin.cn, new_cn)
 
-        if choice is None or "Cancelar" in choice:
-            return None
+        return changes
 
-        if "Calcular" in choice:
-            return self._recalculate_cn(area)
-
-        if "Ingresar" in choice:
-            cn_str = questionary.text(
-                "Valor de CN (30-98):",
-                default="75",
-                style=WIZARD_STYLE,
-            ).ask()
-            if cn_str:
-                try:
-                    return int(cn_str)
-                except ValueError:
-                    pass
-
-        return None
-
-    def _handle_area_change(self, new_values: dict) -> str:
-        """
-        Maneja el cambio de area - solicita recalcular o ingresar C/CN.
-
-        Returns:
-            "ok" si se configuro C/CN
-            "cancelled" si se cancelo
-        """
-        new_area = new_values.get("area_ha", self.cuenca.area_ha)
-
+    def _show_changes(self, changes: dict) -> None:
+        """Muestra resumen de cambios a aplicar."""
         console = get_console()
         p = get_palette()
 
-        # Crear tabla con los valores
         table = Table(
-            show_header=False,
-            box=None,
-            padding=(0, 2),
-            expand=True,
+            show_header=True,
+            box=box.SIMPLE,
+            padding=(0, 1),
         )
-        table.add_column("Label", style=p.label, width=14)
-        table.add_column("Value")
+        table.add_column("Campo", style=p.label)
+        table.add_column("Anterior", style=p.muted)
+        table.add_column("→", style=p.muted, width=2)
+        table.add_column("Nuevo", style=f"bold {p.number}")
 
-        area_ant = Text()
-        area_ant.append(f"{self._original_area:.2f}", style=p.muted)
-        area_ant.append(" ha", style=p.unit)
-        table.add_row("Área anterior", area_ant)
+        field_labels = {
+            "name": "Nombre",
+            "area_ha": "Área (ha)",
+            "slope_pct": "Pendiente (%)",
+            "p3_10": "P3,10 (mm)",
+            "length_m": "Longitud (m)",
+            "c": "Coef. C",
+            "cn": "CN",
+        }
 
-        area_new = Text()
-        area_new.append(f"{new_area:.2f}", style=f"bold {p.number}")
-        area_new.append(" ha", style=p.unit)
-        table.add_row("Área nueva", area_new)
-
-        title = Text("Configurar C y CN para nueva área", style=f"bold {p.secondary}")
+        for key, (old, new) in changes.items():
+            label = field_labels.get(key, key)
+            old_str = self._format_value(old)
+            new_str = self._format_value(new)
+            table.add_row(label, old_str, "→", new_str)
 
         console.print()
         panel = Panel(
             table,
-            title=title,
+            title=Text("Cambios a aplicar", style=f"bold {p.secondary}"),
             title_align="left",
             border_style=p.secondary,
             box=box.ROUNDED,
-            padding=(1, 2),
+            padding=(0, 1),
         )
         console.print(panel)
 
-        # Preguntar que hacer con C (si existia)
-        if self.basin.c:
-            c_result = self._handle_coefficient_change("C", self.basin.c, new_area)
-            if c_result == "cancelled":
-                return "cancelled"
-            if c_result is not None:
-                new_values["c"] = c_result
+    def _format_value(self, value) -> str:
+        """Formatea un valor para mostrar."""
+        if value is None:
+            return "-"
+        if isinstance(value, float):
+            return f"{value:.2f}"
+        return str(value)
 
-        # Preguntar que hacer con CN (si existia)
-        if self.basin.cn:
-            cn_result = self._handle_cn_change(self.basin.cn, new_area)
-            if cn_result == "cancelled":
-                return "cancelled"
-            if cn_result is not None:
-                new_values["cn"] = cn_result
-
-        return "ok"
-
-    def _handle_coefficient_change(self, coef_name: str, current_value: float, new_area: float) -> Optional[float]:
-        """
-        Maneja el cambio de un coeficiente (C) cuando cambia el area.
-
-        Returns:
-            Nuevo valor, None para mantener, o "cancelled"
-        """
-        self.echo(f"\n  Coeficiente {coef_name} actual: {current_value:.2f}")
-        self.echo(f"  Este valor fue calculado para un area de {self._original_area:.2f} ha")
-
-        choice = questionary.select(
-            f"Como deseas configurar {coef_name} para la nueva area?",
-            choices=[
-                f"Mantener {coef_name} = {current_value:.2f} (asume coberturas similares)",
-                f"Recalcular {coef_name} usando tablas de coberturas",
-                f"Ingresar nuevo valor de {coef_name} directamente",
-                "Cancelar edicion",
-            ],
-            style=WIZARD_STYLE,
-        ).ask()
-
-        if choice is None or "Cancelar" in choice:
-            return "cancelled"
-
-        if "Mantener" in choice:
-            return None  # No cambiar
-
-        if "Recalcular" in choice:
-            return self._recalculate_c(new_area)
-
-        if "Ingresar" in choice:
-            val = self._ask_float(f"Nuevo valor de {coef_name} (0.1-1.0):", current_value)
-            return val if val is not None else current_value
-
-        return None
-
-    def _handle_cn_change(self, current_cn: int, new_area: float) -> Optional[int]:
-        """
-        Maneja el cambio de CN cuando cambia el area.
-
-        Returns:
-            Nuevo valor, None para mantener, o "cancelled"
-        """
-        self.echo(f"\n  CN actual: {current_cn}")
-        self.echo(f"  Este valor fue calculado para un area de {self._original_area:.2f} ha")
-
-        choice = questionary.select(
-            "Como deseas configurar CN para la nueva area?",
-            choices=[
-                f"Mantener CN = {current_cn} (asume coberturas similares)",
-                "Recalcular CN usando tablas de coberturas",
-                "Ingresar nuevo valor de CN directamente",
-                "Cancelar edicion",
-            ],
-            style=WIZARD_STYLE,
-        ).ask()
-
-        if choice is None or "Cancelar" in choice:
-            return "cancelled"
-
-        if "Mantener" in choice:
-            return None  # No cambiar
-
-        if "Recalcular" in choice:
-            return self._recalculate_cn(new_area)
-
-        if "Ingresar" in choice:
-            cn_str = questionary.text(
-                "Nuevo valor de CN (30-98):",
-                default=str(current_cn),
-                style=WIZARD_STYLE,
-            ).ask()
-            if cn_str:
-                try:
-                    return int(cn_str)
-                except ValueError:
-                    return current_cn
-            return current_cn
-
-        return None
-
-    def _recalculate_c(self, new_area: float) -> Optional[float]:
-        """Recalcula C usando tablas de coberturas."""
-        from hidropluvial.core.coefficients import (
-            C_TABLES, ChowCEntry, FHWACEntry, weighted_c
-        )
-        from hidropluvial.cli.theme import (
-            print_c_table_chow, print_c_table_fhwa, print_c_table_simple
-        )
-
-        print_info(f"Calculando C ponderado para área de {new_area:.2f} ha")
-
-        # Seleccionar tabla
-        table_choice = questionary.select(
-            "Selecciona tabla de coeficientes:",
-            choices=[
-                "Ven Te Chow (C según cobertura y Tr)",
-                "FHWA (C único por uso)",
-                "Tabla Uruguay",
-            ],
-            style=WIZARD_STYLE,
-        ).ask()
-
-        if table_choice is None:
-            return None
-
-        if "Chow" in table_choice:
-            table_key = "chow"
-        elif "FHWA" in table_choice:
-            table_key = "fhwa"
-        else:
-            table_key = "uruguay"
-
-        table_name, table_data = C_TABLES[table_key]
-        first_entry = table_data[0]
-
-        # Mostrar tabla estilizada según tipo
-        if isinstance(first_entry, ChowCEntry):
-            print_c_table_chow(table_data, table_name, selection_mode=True)
-        elif isinstance(first_entry, FHWACEntry):
-            print_c_table_fhwa(table_data, table_name, tr=10)
-        else:
-            print_c_table_simple(table_data, table_name)
-
-        # Para tabla Chow siempre se usa Tr=2 como base
-        is_chow = table_key == "chow"
-
-        areas = []
-        coefficients = []
-        area_remaining = new_area
-
-        while area_remaining > 0.001:
-            self.echo(f"\n  Area restante: {area_remaining:.3f} ha ({area_remaining/new_area*100:.1f}%)")
-
-            choices = []
-            for i, entry in enumerate(table_data):
-                if isinstance(entry, ChowCEntry):
-                    c_val = entry.c_tr2  # Siempre Tr=2 para Chow
-                elif isinstance(entry, FHWACEntry):
-                    c_val = entry.c
-                else:
-                    c_val = entry.c
-                choices.append(f"{i+1}. {entry.description} (C={c_val:.2f})")
-
-            choices.append("Terminar (asignar resto a ultima cobertura)")
-            choices.append("Cancelar")
-
-            selection = questionary.select("Selecciona cobertura:", choices, style=WIZARD_STYLE).ask()
-
-            if selection is None or "Cancelar" in selection:
-                return None
-
-            if "Terminar" in selection:
-                if areas:
-                    # Asignar resto a ultima cobertura
-                    areas[-1] += area_remaining
-                break
-
-            idx = int(selection.split(".")[0]) - 1
-            entry = table_data[idx]
-
-            if isinstance(entry, ChowCEntry):
-                c_val = entry.c_tr2  # Siempre Tr=2 para Chow
-            elif isinstance(entry, FHWACEntry):
-                c_val = entry.c
-            else:
-                c_val = entry.c
-
-            area_str = questionary.text(
-                f"Area para '{entry.description}' (ha, max {area_remaining:.2f}):",
-                default=f"{area_remaining:.2f}",
-                style=WIZARD_STYLE,
-            ).ask()
-
-            if area_str:
-                try:
-                    area_val = float(area_str)
-                    area_val = min(area_val, area_remaining)
-                    areas.append(area_val)
-                    coefficients.append(c_val)
-                    area_remaining -= area_val
-                except ValueError:
-                    pass
-
-        if not areas:
-            return None
-
-        c_weighted = weighted_c(areas, coefficients)
-        self.echo(f"\n  C ponderado calculado: {c_weighted:.2f}")
-        return round(c_weighted, 2)
-
-    def _recalculate_cn(self, new_area: float) -> Optional[int]:
-        """Recalcula CN usando tablas de coberturas."""
-        from hidropluvial.core.coefficients import CN_TABLES, weighted_cn
-
-        self.echo(f"\n  Calculando CN ponderado para area de {new_area:.2f} ha")
-
-        # Seleccionar grupo de suelo
-        soil_choice = questionary.select(
-            "Grupo hidrologico de suelo:",
-            choices=[
-                "A - Alta infiltracion (arena, grava)",
-                "B - Moderada infiltracion (limo arenoso)",
-                "C - Baja infiltracion (limo arcilloso)",
-                "D - Muy baja infiltracion (arcilla)",
-            ],
-            style=WIZARD_STYLE,
-        ).ask()
-
-        if soil_choice is None:
-            return None
-
-        soil_group = soil_choice[0]
-
-        areas = []
-        cn_values = []
-        area_remaining = new_area
-
-        while area_remaining > 0.001:
-            self.echo(f"\n  Area restante: {area_remaining:.3f} ha ({area_remaining/new_area*100:.1f}%)")
-
-            # Seleccionar tabla
-            table_choice = questionary.select(
-                "Agregar cobertura de:",
-                choices=[
-                    "Tabla Urbana (residencial, comercial, industrial)",
-                    "Tabla Agricola (cultivos, pasturas, bosque)",
-                    "Terminar (asignar resto a ultima cobertura)",
-                    "Cancelar",
-                ],
-                style=WIZARD_STYLE,
-            ).ask()
-
-            if table_choice is None or "Cancelar" in table_choice:
-                return None
-
-            if "Terminar" in table_choice:
-                if areas:
-                    areas[-1] += area_remaining
-                break
-
-            table_key = "urban" if "Urbana" in table_choice else "agricultural"
-            table_name, table_data = CN_TABLES[table_key]
-
-            choices = []
-            for i, entry in enumerate(table_data):
-                cn = entry.get_cn(soil_group)
-                cond = f" ({entry.condition})" if entry.condition != "N/A" else ""
-                choices.append(f"{i+1}. {entry.category} - {entry.description}{cond} (CN={cn})")
-
-            choices.append("Volver")
-
-            selection = questionary.select("Selecciona cobertura:", choices, style=WIZARD_STYLE).ask()
-
-            if selection is None or "Volver" in selection:
-                continue
-
-            idx = int(selection.split(".")[0]) - 1
-            entry = table_data[idx]
-            cn = entry.get_cn(soil_group)
-
-            area_str = questionary.text(
-                f"Area para esta cobertura (ha, max {area_remaining:.2f}):",
-                default=f"{area_remaining:.2f}",
-                style=WIZARD_STYLE,
-            ).ask()
-
-            if area_str:
-                try:
-                    area_val = float(area_str)
-                    area_val = min(area_val, area_remaining)
-                    areas.append(area_val)
-                    cn_values.append(cn)
-                    area_remaining -= area_val
-                except ValueError:
-                    pass
-
-        if not areas:
-            return None
-
-        cn_weighted = weighted_cn(areas, cn_values)
-        self.echo(f"\n  CN ponderado calculado: {cn_weighted}")
-        return cn_weighted
-
-    def _ask_float(self, prompt: str, current: Optional[float]) -> Optional[float]:
-        """Solicita un valor float."""
-        default_str = f"{current:.2f}" if current else ""
-        val = questionary.text(prompt, default=default_str, style=WIZARD_STYLE).ask()
-        if val is None:
-            return None
-        val = val.strip()
-        if val == "" or val == default_str:
-            return None
-        try:
-            return float(val)
-        except ValueError:
-            self.echo(f"  Valor invalido, se mantiene {current}")
-            return None
-
-    def _has_changes(self, new_values: dict) -> bool:
-        """Verifica si hay cambios."""
-        return len(new_values) > 0
-
-    def _show_changes(self, new_values: dict) -> None:
-        """Muestra los cambios a aplicar."""
-        self.echo(f"\n  Cambios a aplicar:")
+    def _apply_changes(self, new_values: dict, changes: dict) -> str:
+        """Aplica los cambios a la cuenca."""
+        # Aplicar todos los valores nuevos
         if "area_ha" in new_values:
-            self.echo(f"    Area: {self.basin.area_ha} -> {new_values['area_ha']} ha")
+            self.basin.area_ha = new_values["area_ha"]
         if "slope_pct" in new_values:
-            self.echo(f"    Pendiente: {self.basin.slope_pct} -> {new_values['slope_pct']}%")
+            self.basin.slope_pct = new_values["slope_pct"]
         if "p3_10" in new_values:
-            self.echo(f"    P3,10: {self.basin.p3_10} -> {new_values['p3_10']} mm")
-        if "c" in new_values:
-            self.echo(f"    C: {self.basin.c} -> {new_values['c']}")
-        if "cn" in new_values:
-            self.echo(f"    CN: {self.basin.cn} -> {new_values['cn']}")
-        if "length_m" in new_values:
-            self.echo(f"    Longitud: {self.basin.length_m} -> {new_values['length_m']} m")
+            self.basin.p3_10 = new_values["p3_10"]
 
-    def _confirm_changes(self) -> bool:
-        """Confirma los cambios."""
-        return questionary.confirm(
-            "\nAplicar cambios?",
-            default=True,
-            style=WIZARD_STYLE,
-        ).ask()
+        # Campos opcionales
+        self.basin.length_m = new_values.get("length_m")
+        self.basin.c = new_values.get("c")
+        self.basin.cn = new_values.get("cn")
 
-    def _modify_in_place(self, new_values: dict) -> str:
-        """Modifica la cuenca actual."""
-        # Apply changes to basin
-        for key, value in new_values.items():
-            setattr(self.basin, key, value)
+        # Eliminar análisis si hay cambios en parámetros que los afectan
+        if any(key in changes for key in self.PARAMS_THAT_INVALIDATE):
+            n_deleted = len(self.basin.analyses) if self.basin.analyses else 0
+            self.basin.analyses = []
+            if n_deleted > 0:
+                print_warning(f"Se eliminaron {n_deleted} análisis (parámetros cambiaron).")
 
-        # Clear analyses since basin parameters changed
-        self.basin.analyses = []
-
-        changes = []
-        if "area_ha" in new_values:
-            changes.append(f"Area actualizada a {new_values['area_ha']:.2f} ha")
-        if "slope_pct" in new_values:
-            changes.append(f"Pendiente actualizada a {new_values['slope_pct']:.2f}%")
-        if "p3_10" in new_values:
-            changes.append(f"P3,10 actualizada a {new_values['p3_10']:.1f} mm")
-        if "c" in new_values:
-            changes.append(f"C actualizado a {new_values['c']:.2f}")
-        if "cn" in new_values:
-            changes.append(f"CN actualizado a {new_values['cn']}")
-        if "length_m" in new_values:
-            changes.append(f"Longitud actualizada a {new_values['length_m']:.0f} m")
-        changes.append("Analisis eliminados (parametros de cuenca cambiaron)")
-
-        if changes:
-            self.echo(f"\n  Cuenca actualizada.")
-            self.echo(f"\n  Cambios aplicados:")
-            for change in changes:
-                self.echo(f"    - {change}")
-
-            self.echo(f"\n  Debes ejecutar nuevos analisis con los parametros actualizados.")
-
-            return "modified"
-
-        return "cancelled"
+        print_success("Cuenca actualizada correctamente.")
+        return "modified"

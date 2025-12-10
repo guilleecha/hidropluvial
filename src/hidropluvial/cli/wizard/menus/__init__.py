@@ -5,7 +5,6 @@ Menus interactivos para el wizard.
 from hidropluvial.cli.wizard.menus.post_execution import PostExecutionMenu
 from hidropluvial.cli.wizard.menus.add_analysis import AddAnalysisMenu
 from hidropluvial.cli.wizard.menus.basin_management import BasinManagementMenu
-from hidropluvial.cli.wizard.menus.continue_project import ContinueProjectMenu
 from hidropluvial.cli.wizard.menus.export_menu import ExportMenu, ExportBasinSelector
 
 
@@ -19,7 +18,6 @@ __all__ = [
     "PostExecutionMenu",
     "AddAnalysisMenu",
     "BasinManagementMenu",
-    "ContinueProjectMenu",
     "ExportMenu",
     "ExportBasinSelector",
     "export_basin_menu",

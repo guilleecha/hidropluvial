@@ -40,36 +40,6 @@ def create_results_table(
     return table
 
 
-def create_analysis_table(show_method: bool = True) -> Table:
-    """Crea tabla para resultados de análisis."""
-    p = get_palette()
-
-    columns = []
-    if show_method:
-        columns.append(("Metodo Tc", "left"))
-    columns.extend([
-        ("Tr", "center"),
-        ("Tc", "right"),
-        ("tp", "right"),
-        ("Tp", "right"),
-        ("Qp", "right"),
-        ("Vol", "right"),
-    ])
-
-    table = Table(
-        border_style=p.border,
-        header_style=f"bold {p.secondary}",
-        box=box.SIMPLE,
-        show_header=True,
-        padding=(0, 1),
-    )
-
-    for name, justify in columns:
-        table.add_column(name, justify=justify)
-
-    return table
-
-
 def create_projects_table(title: str = None) -> Table:
     """Crea tabla para listar proyectos."""
     p = get_palette()
@@ -227,6 +197,124 @@ def print_basins_detail_table(basins, title: str = "CUENCAS") -> None:
     console.print(table)
 
 
+def _format_analysis_row(analysis, max_qp: float, p) -> list:
+    """
+    Formatea una fila de análisis para tablas resumen.
+
+    Helper interno para evitar duplicación entre print_analyses_summary_table
+    y print_comparison_table.
+
+    Args:
+        analysis: AnalysisRun
+        max_qp: Qp máximo para destacar
+        p: Paleta de colores
+
+    Returns:
+        Lista con valores formateados (sin índice ni sparkline)
+    """
+    from hidropluvial.cli.formatters import format_flow
+
+    hydro = analysis.hydrograph
+    storm = analysis.storm
+    tc = analysis.tc
+
+    # Formatear valores básicos
+    tc_min = f"{tc.tc_min:.0f}" if tc.tc_min else "-"
+    x_str = f"{hydro.x_factor:.2f}" if hydro.x_factor else "-"
+    tp_unit = f"{hydro.tp_unit_min:.0f}" if hydro.tp_unit_min else "-"
+
+    # Abstracción: obtener C o CN de los parámetros
+    abst_str = "-"
+    params = tc.parameters or {}
+    if "c" in params:
+        abst_str = f"C={params['c']:.2f}"
+    elif "cn_adjusted" in params:
+        abst_str = f"CN={params['cn_adjusted']:.0f}"
+    elif "cn" in params:
+        abst_str = f"CN={params['cn']:.0f}"
+
+    # Tormenta
+    storm_type = storm.type.upper()[:6]
+    dur_hr = f"{storm.duration_hr:.1f}" if storm.duration_hr else "-"
+
+    # Precipitación
+    p_total = f"{storm.total_depth_mm:.1f}" if storm.total_depth_mm else "-"
+    pe = f"{hydro.runoff_mm:.1f}" if hydro.runoff_mm else "-"
+
+    # Qp con formato especial - destacar el máximo
+    qp_val = hydro.peak_flow_m3s
+    qp_str = format_flow(qp_val)
+    if qp_val == max_qp:
+        qp_text = Text(qp_str, style=f"bold {p.accent}")
+    else:
+        qp_text = Text(qp_str, style=p.number)
+
+    # Volumen con 2 decimales
+    vol_hm3 = hydro.volume_m3 / 1e6
+    vol_str = f"{vol_hm3:.2f}"
+
+    return [
+        tc.method[:12],
+        tc_min,
+        x_str,
+        tp_unit,
+        abst_str,
+        storm_type,
+        dur_hr,
+        str(storm.return_period),
+        p_total,
+        pe,
+        qp_text,
+        vol_str,
+    ]
+
+
+def _create_analysis_summary_table(title: str, show_sparkline: bool = False) -> Table:
+    """
+    Crea tabla para resumen de análisis.
+
+    Helper interno para evitar duplicación de definición de columnas.
+
+    Args:
+        title: Título de la tabla
+        show_sparkline: Si incluir columna de sparkline
+
+    Returns:
+        Rich Table configurada
+    """
+    p = get_palette()
+
+    table = Table(
+        title=title,
+        title_style=f"bold {p.primary}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    # Columnas agrupadas lógicamente
+    table.add_column("#", justify="right", style=p.muted, width=3)
+    table.add_column("Metodo Tc", justify="left")
+    table.add_column("Tc", justify="right", style=p.number)
+    table.add_column("X", justify="right", style=p.number)
+    table.add_column("tp", justify="right", style=p.muted)
+    table.add_column("Abst", justify="left")
+    table.add_column("Tormenta", justify="left")
+    table.add_column("Dur", justify="right", style=p.number)
+    table.add_column("Tr", justify="right", style=p.number)
+    table.add_column("P", justify="right", style=p.number)
+    table.add_column("Pe", justify="right", style=p.number)
+    table.add_column("Qp", justify="right")
+    table.add_column("Vol", justify="right", style=p.number)
+
+    if show_sparkline:
+        table.add_column("Hidrograma", justify="left")
+
+    return table
+
+
 def print_analyses_summary_table(
     analyses,
     title: str = "RESUMEN DE ANALISIS",
@@ -244,7 +332,7 @@ def print_analyses_summary_table(
     - tp: Tiempo pico del hidrograma unitario (min)
     - Abst: Metodo de abstraccion y coeficiente (C o CN)
     - Tormenta: Tipo de tormenta
-    - Dur: Duracion de la tormenta (min)
+    - Dur: Duracion de la tormenta (h)
     - Tr: Periodo de retorno (anos)
     - P: Precipitacion total (mm)
     - Pe: Escorrentia efectiva (mm)
@@ -258,8 +346,7 @@ def print_analyses_summary_table(
         show_sparkline: Si mostrar sparklines
         sparkline_width: Ancho del sparkline
     """
-    from hidropluvial.cli.preview import sparkline
-    from hidropluvial.cli.formatters import format_flow
+    from hidropluvial.cli.preview import sparkline as make_sparkline
 
     console = get_console()
     p = get_palette()
@@ -268,98 +355,19 @@ def print_analyses_summary_table(
         console.print("  No hay analisis.", style=p.muted)
         return
 
-    table = Table(
-        title=title,
-        title_style=f"bold {p.primary}",
-        border_style=p.border,
-        header_style=f"bold {p.secondary}",
-        box=box.ROUNDED,
-        show_header=True,
-        padding=(0, 1),
-    )
+    table = _create_analysis_summary_table(title, show_sparkline)
 
-    # Columnas agrupadas logicamente
-    table.add_column("#", justify="right", style=p.muted, width=3)
-    table.add_column("Metodo Tc", justify="left")
-    table.add_column("Tc", justify="right", style=p.number)
-    table.add_column("X", justify="right", style=p.number)
-    table.add_column("tp", justify="right", style=p.muted)
-    table.add_column("Abst", justify="left")  # Abstraccion: C=0.5 o CN=75
-    table.add_column("Tormenta", justify="left")
-    table.add_column("Dur", justify="right", style=p.number)  # Duracion (h)
-    table.add_column("Tr", justify="right", style=p.number)
-    table.add_column("P", justify="right", style=p.number)
-    table.add_column("Pe", justify="right", style=p.number)
-    table.add_column("Qp", justify="right")
-    table.add_column("Vol", justify="right", style=p.number)
-    if show_sparkline:
-        table.add_column("Hidrograma", justify="left")
-
-    # Encontrar Qp maximo para destacar
+    # Encontrar Qp máximo para destacar
     max_qp = max(a.hydrograph.peak_flow_m3s for a in analyses) if analyses else 0
 
     for idx, analysis in enumerate(analyses):
-        hydro = analysis.hydrograph
-        storm = analysis.storm
-        tc = analysis.tc
-
-        # Formatear valores basicos
-        tc_min = f"{tc.tc_min:.0f}" if tc.tc_min else "-"
-        x_str = f"{hydro.x_factor:.2f}" if hydro.x_factor else "-"
-        tp_unit = f"{hydro.tp_unit_min:.0f}" if hydro.tp_unit_min else "-"
-
-        # Abstraccion: obtener C o CN de los parametros
-        abst_str = "-"
-        params = tc.parameters or {}
-        if "c" in params:
-            c_val = params["c"]
-            abst_str = f"C={c_val:.2f}"
-        elif "cn_adjusted" in params:
-            cn_val = params["cn_adjusted"]
-            abst_str = f"CN={cn_val:.0f}"
-        elif "cn" in params:
-            cn_val = params["cn"]
-            abst_str = f"CN={cn_val:.0f}"
-
-        # Tormenta
-        storm_type = storm.type.upper()[:6]
-        dur_hr = f"{storm.duration_hr:.1f}" if storm.duration_hr else "-"
-
-        # Precipitacion
-        p_total = f"{storm.total_depth_mm:.1f}" if storm.total_depth_mm else "-"
-        pe = f"{hydro.runoff_mm:.1f}" if hydro.runoff_mm else "-"
-
-        # Qp con formato especial - destacar el maximo
-        qp_val = hydro.peak_flow_m3s
-        qp_str = format_flow(qp_val)
-        if qp_val == max_qp:
-            qp_text = Text(qp_str, style=f"bold {p.accent}")
-        else:
-            qp_text = Text(qp_str, style=p.number)
-
-        # Volumen con 2 decimales
-        vol_hm3 = hydro.volume_m3 / 1e6
-        vol_str = f"{vol_hm3:.2f}"
-
-        row = [
-            str(idx),
-            tc.method[:12],
-            tc_min,
-            x_str,
-            tp_unit,
-            abst_str,
-            storm_type,
-            dur_hr,
-            str(storm.return_period),
-            p_total,
-            pe,
-            qp_text,
-            vol_str,
-        ]
+        row_data = _format_analysis_row(analysis, max_qp, p)
+        row = [str(idx)] + row_data
 
         if show_sparkline:
+            hydro = analysis.hydrograph
             if hydro.flow_m3s:
-                spark = sparkline(hydro.flow_m3s, width=sparkline_width)
+                spark = make_sparkline(hydro.flow_m3s, width=sparkline_width)
                 row.append(Text(spark, style=p.info))
             else:
                 row.append("-")
@@ -370,7 +378,8 @@ def print_analyses_summary_table(
 
     # Leyenda de unidades
     console.print(
-        f"  [dim]Tc, tp: min | Dur: h | Abst: C o CN | P, Pe: mm | Qp: m3/s | Vol: hm3[/dim]"
+        f"  Tc, tp: min | Dur: h | Abst: C o CN | P, Pe: mm | Qp: m3/s | Vol: hm3",
+        style=p.muted,
     )
 
 
@@ -389,8 +398,6 @@ def print_comparison_table(
         all_analyses: Lista completa de analisis (para obtener indice original)
         title: Titulo de la tabla
     """
-    from hidropluvial.cli.formatters import format_flow
-
     console = get_console()
     p = get_palette()
 
@@ -401,104 +408,28 @@ def print_comparison_table(
     if all_analyses is None:
         all_analyses = analyses_to_show
 
-    table = Table(
-        title=title,
-        title_style=f"bold {p.primary}",
-        border_style=p.border,
-        header_style=f"bold {p.secondary}",
-        box=box.ROUNDED,
-        show_header=True,
-        padding=(0, 1),
-    )
+    table = _create_analysis_summary_table(title, show_sparkline=False)
 
-    # Columnas - mismas que print_analyses_summary_table (sin sparkline)
-    table.add_column("#", justify="right", style=p.muted, width=3)
-    table.add_column("Metodo Tc", justify="left")
-    table.add_column("Tc", justify="right", style=p.number)
-    table.add_column("X", justify="right", style=p.number)
-    table.add_column("tp", justify="right", style=p.muted)
-    table.add_column("Abst", justify="left")  # Abstraccion: C=0.5 o CN=75
-    table.add_column("Tormenta", justify="left")
-    table.add_column("Dur", justify="right", style=p.number)  # Duracion (h)
-    table.add_column("Tr", justify="right", style=p.number)
-    table.add_column("P", justify="right", style=p.number)
-    table.add_column("Pe", justify="right", style=p.number)
-    table.add_column("Qp", justify="right")  # Estilo especial para destacar max
-    table.add_column("Vol", justify="right", style=p.number)
-
-    # Encontrar Qp maximo para destacar
+    # Encontrar Qp máximo para destacar
     max_qp = max(a.hydrograph.peak_flow_m3s for a in analyses_to_show)
 
     for analysis in analyses_to_show:
-        # Obtener indice original
+        # Obtener índice original
         try:
             orig_idx = all_analyses.index(analysis)
         except ValueError:
             orig_idx = 0
 
-        hydro = analysis.hydrograph
-        storm = analysis.storm
-        tc = analysis.tc
-
-        # Formatear valores basicos
-        tc_min = f"{tc.tc_min:.0f}" if tc.tc_min else "-"
-        x_str = f"{hydro.x_factor:.2f}" if hydro.x_factor else "-"
-        tp_unit = f"{hydro.tp_unit_min:.0f}" if hydro.tp_unit_min else "-"
-
-        # Abstraccion: obtener C o CN de los parametros
-        abst_str = "-"
-        params = tc.parameters or {}
-        if "c" in params:
-            c_val = params["c"]
-            abst_str = f"C={c_val:.2f}"
-        elif "cn_adjusted" in params:
-            cn_val = params["cn_adjusted"]
-            abst_str = f"CN={cn_val:.0f}"
-        elif "cn" in params:
-            cn_val = params["cn"]
-            abst_str = f"CN={cn_val:.0f}"
-
-        # Tormenta
-        storm_type = storm.type.upper()[:6]
-        dur_hr = f"{storm.duration_hr:.1f}" if storm.duration_hr else "-"
-
-        # Precipitacion
-        p_total = f"{storm.total_depth_mm:.1f}" if storm.total_depth_mm else "-"
-        pe = f"{hydro.runoff_mm:.1f}" if hydro.runoff_mm else "-"
-
-        # Qp con formato especial - destacar el maximo
-        qp_val = hydro.peak_flow_m3s
-        qp_str = format_flow(qp_val)
-        if qp_val == max_qp:
-            qp_text = Text(qp_str, style=f"bold {p.accent}")
-        else:
-            qp_text = Text(qp_str, style=p.number)
-
-        # Volumen con 2 decimales
-        vol_hm3 = hydro.volume_m3 / 1e6
-        vol_str = f"{vol_hm3:.2f}"
-
-        table.add_row(
-            str(orig_idx),
-            tc.method[:12],
-            tc_min,
-            x_str,
-            tp_unit,
-            abst_str,
-            storm_type,
-            dur_hr,
-            str(storm.return_period),
-            p_total,
-            pe,
-            qp_text,
-            vol_str,
-        )
+        row_data = _format_analysis_row(analysis, max_qp, p)
+        row = [str(orig_idx)] + row_data
+        table.add_row(*row)
 
     console.print(table)
 
-    # Leyenda de unidades (misma que print_analyses_summary_table)
+    # Leyenda de unidades
     console.print(
-        f"  [dim]Tc, tp: min | Dur: h | Abst: C o CN | P, Pe: mm | Qp: m3/s | Vol: hm3[/dim]"
+        f"  Tc, tp: min | Dur: h | Abst: C o CN | P, Pe: mm | Qp: m3/s | Vol: hm3",
+        style=p.muted,
     )
 
 
@@ -799,80 +730,6 @@ def print_cn_table(
         ], title="GRUPOS DE SUELO"))
 
 
-def print_summary_table(session_name: str, rows: list[dict]) -> None:
-    """
-    Imprime tabla resumen comparativa de analisis con formato Rich.
-
-    Args:
-        session_name: Nombre de la sesion
-        rows: Lista de diccionarios con datos de cada analisis
-    """
-    from hidropluvial.cli.formatters import format_flow, format_volume_hm3
-
-    console = get_console()
-    p = get_palette()
-
-    if not rows:
-        console.print("  No hay analisis.", style=p.muted)
-        return
-
-    table = Table(
-        title=f"RESUMEN COMPARATIVO - {session_name}",
-        title_style=f"bold {p.primary}",
-        border_style=p.border,
-        header_style=f"bold {p.secondary}",
-        box=box.ROUNDED,
-        show_header=True,
-        padding=(0, 1),
-    )
-
-    # Columnas
-    table.add_column("ID", style=p.accent, justify="left")
-    table.add_column("Tc", justify="left")
-    table.add_column("Tc(min)", justify="right", style=p.number)
-    table.add_column("tp(min)", justify="right", style=p.muted)
-    table.add_column("X", justify="right", style=p.number)
-    table.add_column("tb(min)", justify="right", style=p.muted)
-    table.add_column("Tormenta", justify="left")
-    table.add_column("Tr", justify="right", style=p.number)
-    table.add_column("Qp(m3/s)", justify="right")
-    table.add_column("Tp(min)", justify="right", style=p.number)
-    table.add_column("Vol(hm3)", justify="right", style=p.number)
-
-    # Encontrar maximo Qp
-    max_qp = max(r['qpeak_m3s'] for r in rows) if rows else 0
-
-    for r in rows:
-        x_str = f"{r['x']:.2f}" if r.get('x') else "-"
-        tp_str = f"{r['tp_min']:.1f}" if r.get('tp_min') else "-"
-        tb_str = f"{r['tb_min']:.1f}" if r.get('tb_min') else "-"
-        Tp_str = f"{r['Tp_min']:.1f}" if r.get('Tp_min') else "-"
-
-        # Destacar Qp maximo
-        qp_val = r['qpeak_m3s']
-        qp_str = format_flow(qp_val)
-        if qp_val == max_qp:
-            qp_text = Text(qp_str, style=f"bold {p.accent}")
-        else:
-            qp_text = Text(qp_str, style=p.number)
-
-        table.add_row(
-            r['id'],
-            r['tc_method'],
-            f"{r['tc_min']:.1f}",
-            tp_str,
-            x_str,
-            tb_str,
-            r['storm'],
-            str(r['tr']),
-            qp_text,
-            Tp_str,
-            format_volume_hm3(r['vol_m3']),
-        )
-
-    console.print(table)
-
-
 def print_x_factor_table(
     title: str = "Factor X Morfológico",
 ) -> None:
@@ -916,6 +773,89 @@ def print_x_factor_table(
 
     for x_val, tipo, aplicacion in x_data:
         table.add_row(x_val, tipo, aplicacion)
+
+    console.print()
+    console.print(table)
+    console.print()
+
+
+def print_coverage_assignments_table(
+    assignments: list[dict],
+    total_area: float,
+    coef_name: str = "C",
+    weighted_value: float = None,
+    title: str = None,
+) -> None:
+    """
+    Imprime tabla de coberturas asignadas para ponderación de C o CN.
+
+    Args:
+        assignments: Lista de dict con keys: area, c_val/cn_val, description
+        total_area: Área total de la cuenca (ha)
+        coef_name: "C" o "CN"
+        weighted_value: Valor ponderado calculado (opcional)
+        title: Título personalizado
+    """
+    console = get_console()
+    p = get_palette()
+
+    area_assigned = sum(a["area"] for a in assignments)
+    area_remaining = total_area - area_assigned
+    pct_assigned = (area_assigned / total_area * 100) if total_area > 0 else 0
+
+    if title is None:
+        title = f"Coberturas Asignadas ({pct_assigned:.0f}%)"
+
+    table = Table(
+        title=title,
+        title_style=f"bold {p.primary}",
+        border_style=p.border,
+        header_style=f"bold {p.secondary}",
+        box=box.ROUNDED,
+        show_header=True,
+        padding=(0, 1),
+    )
+
+    table.add_column("Cobertura", justify="left", max_width=40)
+    table.add_column("Área (ha)", justify="right", style=p.number, width=10)
+    table.add_column("%", justify="right", style=p.muted, width=6)
+    table.add_column(coef_name, justify="right", style=f"bold {p.accent}", width=6)
+
+    # Filas de coberturas asignadas
+    val_key = "c_val" if coef_name == "C" else "cn_val"
+    for a in assignments:
+        pct = a["area"] / total_area * 100 if total_area > 0 else 0
+        val = a.get(val_key) or a.get("c_val") or a.get("cn_val", 0)
+        val_str = f"{val:.2f}" if coef_name == "C" else f"{val}"
+        table.add_row(
+            a["description"][:40],
+            f"{a['area']:.2f}",
+            f"{pct:.1f}",
+            val_str,
+        )
+
+    # Separador
+    table.add_row("─" * 35, "─" * 8, "─" * 5, "─" * 5, style=p.border)
+
+    # Área restante (si hay)
+    if area_remaining > 0.001:
+        pct_remaining = area_remaining / total_area * 100
+        table.add_row(
+            Text("Área restante", style=f"italic {p.warning}"),
+            Text(f"{area_remaining:.2f}", style=p.warning),
+            Text(f"{pct_remaining:.1f}", style=p.warning),
+            Text("---", style=p.muted),
+        )
+
+    # Valor ponderado (si se calculó)
+    if weighted_value is not None and assignments:
+        val_str = f"{weighted_value:.3f}" if coef_name == "C" else f"{weighted_value:.1f}"
+        table.add_row(
+            Text(f"{coef_name} ponderado", style=f"bold {p.success}"),
+            Text(f"{area_assigned:.2f}", style=p.number),
+            Text(f"{pct_assigned:.0f}", style=p.number),
+            Text(val_str, style=f"bold {p.success}"),
+        )
 
     console.print()
     console.print(table)

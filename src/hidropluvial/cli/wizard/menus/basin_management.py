@@ -8,6 +8,7 @@ from hidropluvial.cli.wizard.menus.base import BaseMenu
 from hidropluvial.cli.theme import (
     get_console, print_basins_table, print_header, print_info,
 )
+from hidropluvial.cli.viewer.menu_panel import menu_panel, MenuItem
 from hidropluvial.project import Project, Basin, get_project_manager
 
 
@@ -31,35 +32,51 @@ class BasinManagementMenu(BaseMenu):
             self._show_overview()
 
             if not self.project.basins:
-                action = self.select(
-                    "¿Qué deseas hacer?",
-                    choices=[
-                        "Agregar nueva cuenca",
-                        "Importar cuenca desde otro proyecto",
-                        "← Volver a gestión de proyectos",
-                    ],
-                )
+                action = self._show_empty_project_menu()
             else:
-                action = self.select(
-                    "¿Qué deseas hacer?",
-                    choices=[
-                        "Ver detalles de una cuenca",
-                        "Gestionar análisis de una cuenca",
-                        "Editar cuenca",
-                        "Duplicar cuenca",
-                        "Renombrar cuenca",
-                        "Exportar cuenca (Excel/LaTeX)",
-                        "Eliminar cuenca",
-                        "Agregar nueva cuenca",
-                        "Importar cuenca desde otro proyecto",
-                        "← Volver a gestión de proyectos",
-                    ],
-                )
+                action = self._show_project_menu()
 
-            if action is None or "Volver" in action:
+            if action is None:
                 return
 
             self._handle_action(action)
+
+    def _show_empty_project_menu(self) -> Optional[str]:
+        """Menú cuando el proyecto no tiene cuencas."""
+        items = [
+            MenuItem(key="n", label="Crear nueva cuenca", value="new", hint="Wizard completo"),
+            MenuItem(key="i", label="Importar desde otro proyecto", value="import", hint="Copiar cuenca existente"),
+        ]
+
+        return menu_panel(
+            title=f"Proyecto: {self.project.name}",
+            subtitle="No hay cuencas en este proyecto",
+            items=items,
+            allow_back=True,
+        )
+
+    def _show_project_menu(self) -> Optional[str]:
+        """Menú principal cuando hay cuencas."""
+        items = [
+            MenuItem(key="v", label="Ver detalles de una cuenca", value="view"),
+            MenuItem(key="g", label="Gestionar análisis", value="analyses", hint="Agregar/eliminar"),
+            MenuItem(key="e", label="Editar cuenca", value="edit"),
+            MenuItem(key="d", label="Duplicar cuenca", value="duplicate"),
+            MenuItem(key="r", label="Renombrar cuenca", value="rename"),
+            MenuItem(key="x", label="Exportar cuenca", value="export", hint="Excel/LaTeX"),
+            MenuItem(key="separator1", label="", separator=True),
+            MenuItem(key="n", label="Crear nueva cuenca", value="new"),
+            MenuItem(key="i", label="Importar desde otro proyecto", value="import"),
+            MenuItem(key="separator2", label="", separator=True),
+            MenuItem(key="z", label="Eliminar cuenca", value="delete"),
+        ]
+
+        return menu_panel(
+            title=f"Proyecto: {self.project.name}",
+            subtitle=f"{self.project.n_basins} cuencas, {self.project.total_analyses} análisis",
+            items=items,
+            allow_back=True,
+        )
 
     def _show_overview(self) -> None:
         """Muestra resumen de cuencas del proyecto."""
@@ -73,25 +90,21 @@ class BasinManagementMenu(BaseMenu):
         console.print()
 
     def _handle_action(self, action: str) -> None:
-        """Maneja la accion seleccionada."""
-        if "Ver detalles" in action:
-            self._view_basin_details()
-        elif "Gestionar análisis" in action:
-            self._manage_analyses()
-        elif "Editar cuenca" in action:
-            self._edit_basin()
-        elif "Duplicar" in action:
-            self._duplicate_basin()
-        elif "Renombrar" in action:
-            self._rename_basin()
-        elif "Exportar" in action:
-            self._export_basin()
-        elif "Eliminar" in action:
-            self._delete_basin()
-        elif "Agregar nueva" in action:
-            self._add_new_basin()
-        elif "Importar" in action:
-            self._import_basin()
+        """Maneja la acción seleccionada."""
+        actions = {
+            "view": self._view_basin_details,
+            "analyses": self._manage_analyses,
+            "edit": self._edit_basin,
+            "duplicate": self._duplicate_basin,
+            "rename": self._rename_basin,
+            "export": self._export_basin,
+            "delete": self._delete_basin,
+            "new": self._add_new_basin,
+            "import": self._import_basin,
+        }
+        handler = actions.get(action)
+        if handler:
+            handler()
 
     def _select_basin(self, prompt: str = "Selecciona una cuenca:") -> Optional[Basin]:
         """Permite seleccionar una cuenca del proyecto."""
@@ -206,11 +219,10 @@ class BasinManagementMenu(BaseMenu):
             f"{b.id} - {b.name} ({len(b.analyses)} análisis)"
             for b in basins_with_analyses
         ]
-        choices.append("← Cancelar")
 
         choice = self.select("Selecciona cuenca a exportar:", choices)
 
-        if choice is None or "Cancelar" in choice:
+        if choice is None:
             return
 
         basin_id = choice.split(" - ")[0]
@@ -251,11 +263,10 @@ class BasinManagementMenu(BaseMenu):
             f"{p['id']} - {p['name']} ({p['n_basins']} cuencas)"
             for p in other_projects
         ]
-        choices.append("← Cancelar")
 
         choice = self.select("Selecciona proyecto origen:", choices)
 
-        if choice is None or "Cancelar" in choice:
+        if choice is None:
             return
 
         self._import_from_project(choice)
@@ -273,11 +284,10 @@ class BasinManagementMenu(BaseMenu):
             f"{b.id} - {b.name} ({len(b.analyses)} análisis)"
             for b in source_project.basins
         ]
-        basin_choices.append("← Cancelar")
 
         basin_choice = self.select("Selecciona cuenca a importar:", basin_choices)
 
-        if basin_choice is None or "Cancelar" in basin_choice:
+        if basin_choice is None:
             return
 
         basin_id = basin_choice.split(" - ")[0]
@@ -312,11 +322,10 @@ class BasinManagementMenu(BaseMenu):
             f"{b.id} - {b.name} ({len(b.analyses)} análisis)"
             for b in basins_with_analyses
         ]
-        choices.append("← Cancelar")
 
         choice = self.select("Selecciona cuenca:", choices)
 
-        if choice is None or "Cancelar" in choice:
+        if choice is None:
             return
 
         basin_id = choice.split(" - ")[0]
@@ -359,11 +368,10 @@ class BasinManagementMenu(BaseMenu):
                     "Eliminar un análisis",
                     "Agregar/editar nota de un análisis",
                     "Eliminar TODOS los análisis",
-                    "← Volver",
                 ],
             )
 
-            if action is None or "Volver" in action:
+            if action is None:
                 return
 
             db = get_database()
@@ -391,11 +399,10 @@ class BasinManagementMenu(BaseMenu):
                 f"{a.id} - {h.tc_method} {s.type.upper()} Tr{s.return_period} "
                 f"Qp={h.peak_flow_m3s:.2f}{note}"
             )
-        choices.append("← Cancelar")
 
         choice = self.select("Selecciona análisis a eliminar:", choices)
 
-        if choice is None or "Cancelar" in choice:
+        if choice is None:
             return
 
         analysis_id = choice.split(" - ")[0]
@@ -420,11 +427,10 @@ class BasinManagementMenu(BaseMenu):
             choices.append(
                 f"{a.id} - {h.tc_method} {s.type.upper()} Tr{s.return_period}{note_preview}"
             )
-        choices.append("← Cancelar")
 
         choice = self.select("Selecciona análisis:", choices)
 
-        if choice is None or "Cancelar" in choice:
+        if choice is None:
             return
 
         analysis_id = choice.split(" - ")[0]
@@ -438,11 +444,10 @@ class BasinManagementMenu(BaseMenu):
             choices=[
                 "Establecer/cambiar nota",
                 "Eliminar nota",
-                "← Cancelar",
             ],
         )
 
-        if note_action is None or "Cancelar" in note_action:
+        if note_action is None:
             return
 
         if "Eliminar nota" in note_action:

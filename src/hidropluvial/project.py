@@ -210,8 +210,13 @@ class ProjectManager:
             intensity_mmhr=storm_intensity_mmhr or [],
         )
 
-        # Calcular tb (tiempo base) = 2.67 × tp
-        tb_hr = 2.67 * tp_unit_hr if tp_unit_hr else None
+        # Calcular tb (tiempo base)
+        # Para hidrograma triangular con factor X: tb = (1 + X) × tp
+        # Para SCS curvilinear estándar (X=1.67): tb ≈ 2.67 × tp
+        if tp_unit_hr:
+            tb_hr = (1 + x_factor) * tp_unit_hr
+        else:
+            tb_hr = None
 
         hydrograph = HydrographResult(
             tc_method=tc_method,

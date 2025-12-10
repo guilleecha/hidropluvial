@@ -9,13 +9,13 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional, List, Any, Union
 from enum import Enum
 
-from rich.console import Console, Group
+from rich.console import Group
 from rich.table import Table
 from rich.text import Text
 from rich.panel import Panel
 from rich import box
 
-from hidropluvial.cli.theme import get_palette, get_icons
+from hidropluvial.cli.theme import get_palette, get_icons, get_console
 from hidropluvial.cli.viewer.terminal import clear_screen, get_key
 
 
@@ -119,8 +119,8 @@ def build_options_panel(state: PanelState) -> Panel:
             content.append(f"{state.input_hint}\n\n", style=p.info)
 
         content.append("  > ", style=f"bold {p.accent}")
-        content.append(state.input_buffer, style="bold white")
-        content.append("_", style="blink bold white")
+        content.append(state.input_buffer, style=f"bold {p.input_text}")
+        content.append("_", style=f"blink bold {p.input_text}")
         content.append("\n")
 
         if state.input_default:
@@ -161,51 +161,51 @@ def build_nav_bar(state: PanelState) -> Text:
 
     if state.mode == "select":
         nav.append("  [", style=p.muted)
-        nav.append("a-z", style=f"bold {p.accent}")
+        nav.append("a-z", style=f"bold {p.nav_key}")
         nav.append("] Seleccionar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("↑↓", style=f"bold {p.accent}")
+        nav.append("↑↓", style=f"bold {p.nav_key}")
         nav.append("] Navegar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Enter", style="bold green")
+        nav.append("Enter", style=f"bold {p.nav_confirm}")
         nav.append("] Confirmar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Esc", style="bold red")
+        nav.append("Esc", style=f"bold {p.nav_cancel}")
         nav.append("] Volver", style=p.muted)
 
     elif state.mode == "checkbox":
         nav.append("  [", style=p.muted)
-        nav.append("a-z", style=f"bold {p.accent}")
+        nav.append("a-z", style=f"bold {p.nav_key}")
         nav.append("] Marcar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Space", style=f"bold {p.accent}")
+        nav.append("Space", style=f"bold {p.nav_key}")
         nav.append("] Toggle  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("↑↓", style=f"bold {p.accent}")
+        nav.append("↑↓", style=f"bold {p.nav_key}")
         nav.append("] Navegar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Enter", style="bold green")
+        nav.append("Enter", style=f"bold {p.nav_confirm}")
         nav.append("] Confirmar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Esc", style="bold red")
+        nav.append("Esc", style=f"bold {p.nav_cancel}")
         nav.append("] Volver", style=p.muted)
 
     elif state.mode == "text":
         nav.append("  [", style=p.muted)
-        nav.append("Enter", style="bold green")
+        nav.append("Enter", style=f"bold {p.nav_confirm}")
         nav.append("] Confirmar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Esc", style="bold red")
+        nav.append("Esc", style=f"bold {p.nav_cancel}")
         nav.append("] Volver", style=p.muted)
 
     elif state.mode == "confirm":
         nav.append("  [", style=p.muted)
-        nav.append("s", style="bold green")
+        nav.append("s", style=f"bold {p.nav_confirm}")
         nav.append("/", style=p.muted)
-        nav.append("n", style="bold red")
+        nav.append("n", style=f"bold {p.nav_cancel}")
         nav.append("] Seleccionar  ", style=p.muted)
         nav.append("[", style=p.muted)
-        nav.append("Enter", style="bold green")
+        nav.append("Enter", style=f"bold {p.nav_confirm}")
         nav.append("] Confirmar", style=p.muted)
 
     return nav
@@ -274,7 +274,7 @@ def panel_select(
     Returns:
         Valor seleccionado o None si cancela
     """
-    console = Console()
+    console = get_console()
     from rich.live import Live
 
     # Asignar shortcuts con letras (a, b, c, ...)
@@ -348,7 +348,7 @@ def panel_checkbox(
     Returns:
         Lista de valores seleccionados o None si cancela
     """
-    console = Console()
+    console = get_console()
     from rich.live import Live
 
     # Asignar shortcuts con letras (a, b, c, ...)
@@ -437,7 +437,7 @@ def panel_text(
     Returns:
         Texto ingresado o None si cancela
     """
-    console = Console()
+    console = get_console()
     from rich.live import Live
 
     state = PanelState(
@@ -494,11 +494,46 @@ def panel_text(
     return None
 
 
+def build_confirm_popup(title: str, default: bool = True) -> Panel:
+    """Construye un popup compacto de confirmación."""
+    p = get_palette()
+
+    content = Text()
+
+    # Opciones Sí/No en una línea
+    yes_style = f"bold reverse {p.success}" if default else ""
+    no_style = "" if default else f"bold reverse {p.error}"
+
+    content.append("  [", style=p.muted)
+    content.append("s", style=f"bold {p.success}")
+    content.append("] ", style=p.muted)
+    content.append(" Sí ", style=yes_style)
+
+    content.append("   [", style=p.muted)
+    content.append("n", style=f"bold {p.error}")
+    content.append("] ", style=p.muted)
+    content.append(" No ", style=no_style)
+
+    content.append("   [", style=p.muted)
+    content.append("Enter", style=f"bold {p.primary}")
+    content.append("]", style=p.muted)
+    content.append(f" = {'Sí' if default else 'No'}", style=p.muted)
+
+    return Panel(
+        content,
+        title=f"[bold {p.accent}] {title} [/]",
+        border_style=p.accent,
+        box=box.DOUBLE,
+        padding=(0, 2),
+    )
+
+
 def panel_confirm(
     title: str,
     message: str = "",
     default: bool = True,
     info_panel: Any = None,
+    as_popup: bool = False,
 ) -> Optional[bool]:
     """
     Muestra un panel de confirmación Sí/No.
@@ -508,13 +543,36 @@ def panel_confirm(
         message: Mensaje adicional
         default: Valor por defecto (True = Sí)
         info_panel: Panel de información adicional (opcional)
+        as_popup: Si True, muestra como popup compacto sin limpiar pantalla
 
     Returns:
         True/False o None si cancela
     """
-    console = Console()
+    console = get_console()
     from rich.live import Live
 
+    if as_popup:
+        # Modo popup compacto
+        popup = build_confirm_popup(title, default)
+
+        with Live(console=console, auto_refresh=False, screen=False) as live:
+            live.update(Group(Text(""), popup), refresh=True)
+
+            while True:
+                key = get_key()
+
+                if key == 'esc':
+                    return None
+                elif key == 'enter':
+                    return default
+                elif key == 's' or key == 'y':
+                    return True
+                elif key == 'n':
+                    return False
+
+        return None
+
+    # Modo pantalla completa (original)
     state = PanelState(
         title=title,
         message=message,
@@ -553,6 +611,84 @@ def panel_confirm(
 
     clear_screen()
     return None
+
+
+def panel_alert_confirm(
+    title: str,
+    message: str,
+    default: bool = True,
+    yes_label: str = "Sí",
+    no_label: str = "No",
+) -> Optional[bool]:
+    """
+    Muestra un panel de confirmación estilo alerta (borde doble, magenta/warning).
+
+    Similar al diálogo de confirmación de cancelación pero personalizable.
+
+    Args:
+        title: Título del panel
+        message: Mensaje de alerta (se muestra con icono de warning)
+        default: Valor por defecto (True = Sí)
+        yes_label: Etiqueta del botón Sí
+        no_label: Etiqueta del botón No
+
+    Returns:
+        True si confirma, False si rechaza, None si cancela (Esc)
+    """
+    from rich import box
+    from rich.live import Live
+
+    console = get_console()
+    p = get_palette()
+    icons = get_icons()
+
+    # Construir contenido del panel
+    content = Text()
+    content.append(f"\n    [{icons.warning}] ", style=f"bold {p.warning}")
+    content.append(f"{message}\n\n", style=f"{p.warning}")
+    content.append("    [", style=p.muted)
+    content.append("s", style=f"bold {p.success}")
+    content.append(f"] {yes_label}    ", style=p.muted)
+    content.append("[", style=p.muted)
+    content.append("n", style=f"bold {p.error}")
+    content.append(f"] {no_label}", style=p.muted)
+    if default:
+        content.append("  (Enter = Sí)", style=p.muted)
+    else:
+        content.append("  (Enter = No)", style=p.muted)
+    content.append("\n", style=p.muted)
+
+    panel = Panel(
+        content,
+        title=f"[bold {p.warning}] {title} [/]",
+        border_style=p.warning,
+        box=box.DOUBLE,
+        padding=(0, 2),
+    )
+
+    nav_text = Text()
+    nav_text.append("\n  [s/n] Seleccionar  [Enter] Confirmar  [Esc] Cancelar", style=p.muted)
+
+    clear_screen()
+
+    with Live(console=console, auto_refresh=False, screen=False) as live:
+        live.update(Group(Text(""), panel, nav_text), refresh=True)
+
+        while True:
+            key = get_key()
+
+            if key == 'esc':
+                clear_screen()
+                return None
+            elif key == 'enter':
+                clear_screen()
+                return default
+            elif key == 's' or key == 'y':
+                clear_screen()
+                return True
+            elif key == 'n':
+                clear_screen()
+                return False
 
 
 # ============================================================================

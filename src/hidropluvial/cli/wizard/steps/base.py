@@ -15,6 +15,13 @@ from hidropluvial.cli.theme import (
     print_step, print_info, print_warning, print_error, print_note,
     print_suggestion,
 )
+from hidropluvial.cli.viewer.panel_input import (
+    panel_select,
+    panel_checkbox,
+    panel_text,
+    panel_confirm,
+    PanelOption,
+)
 
 
 class StepResult(Enum):
@@ -104,72 +111,80 @@ class WizardStep(ABC):
 
     def select(self, message: str, choices: list[str], back_option: bool = True) -> tuple[StepResult, Optional[str]]:
         """
-        Muestra selector con opción de volver atrás.
+        Muestra panel de selección con shortcuts de teclado.
 
         Returns:
             Tupla (resultado, valor_seleccionado)
         """
-        if back_option:
-            choices = choices + ["<< Volver atrás"]
+        options = [PanelOption(label=c, value=c) for c in choices]
 
-        result = questionary.select(
-            message,
-            choices=choices,
-            style=WIZARD_STYLE,
-        ).ask()
+        result = panel_select(
+            title=message,
+            options=options,
+        )
 
         if result is None:
+            if back_option:
+                return StepResult.BACK, None
             return StepResult.CANCEL, None
-        if result == "<< Volver atrás":
-            return StepResult.BACK, None
         return StepResult.NEXT, result
 
     def checkbox(self, message: str, choices: list, back_option: bool = True) -> tuple[StepResult, Optional[list]]:
-        """Muestra checkbox con instrucciones para volver."""
-        if back_option:
-            self.echo("  (Presiona Esc o deja vacío y Enter para volver atrás)\n")
+        """Muestra panel de checkbox con shortcuts de teclado."""
+        # Convertir choices a PanelOption
+        options = []
+        for c in choices:
+            if isinstance(c, dict):
+                options.append(PanelOption(
+                    label=c.get("name", str(c.get("value", ""))),
+                    value=c.get("value"),
+                    checked=c.get("checked", False),
+                ))
+            elif hasattr(c, 'title'):  # questionary.Choice
+                options.append(PanelOption(
+                    label=c.title,
+                    value=c.title,
+                    checked=getattr(c, 'checked', False),
+                ))
+            else:
+                options.append(PanelOption(label=str(c), value=str(c)))
 
-        result = questionary.checkbox(
-            message,
-            choices=choices,
-            style=WIZARD_STYLE,
-        ).ask()
+        result = panel_checkbox(
+            title=message,
+            options=options,
+            min_selections=0 if back_option else 1,
+        )
 
         if result is None:
+            if back_option:
+                return StepResult.BACK, None
             return StepResult.CANCEL, None
         if not result and back_option:
             return StepResult.BACK, None
         return StepResult.NEXT, result
 
     def text(self, message: str, validate=None, default: str = "", back_option: bool = True) -> tuple[StepResult, Optional[str]]:
-        """Muestra input de texto con opción de volver."""
-        if back_option:
-            hint = " (dejar vacío para volver)"
-            full_message = message
-        else:
-            hint = ""
-            full_message = message
-
-        result = questionary.text(
-            full_message,
-            validate=validate if not back_option else lambda x: True if x == "" else (validate(x) if validate else True),
+        """Muestra panel de entrada de texto."""
+        result = panel_text(
+            title=message,
             default=default,
-            style=WIZARD_STYLE,
-        ).ask()
+            validator=validate,
+        )
 
         if result is None:
+            if back_option:
+                return StepResult.BACK, None
             return StepResult.CANCEL, None
         if result == "" and back_option and default == "":
             return StepResult.BACK, None
         return StepResult.NEXT, result
 
     def confirm(self, message: str, default: bool = True) -> tuple[StepResult, bool]:
-        """Muestra confirmación."""
-        result = questionary.confirm(
-            message,
+        """Muestra panel de confirmación Sí/No."""
+        result = panel_confirm(
+            title=message,
             default=default,
-            style=WIZARD_STYLE,
-        ).ask()
+        )
 
         if result is None:
             return StepResult.CANCEL, False
@@ -186,28 +201,14 @@ class WizardNavigator:
 
     def _default_steps(self) -> list[WizardStep]:
         """Crea los pasos por defecto del wizard."""
-        from hidropluvial.cli.wizard.steps.datos_cuenca import (
-            StepNombre,
-            StepDatosCuenca,
-            StepLongitud,
-        )
-        from hidropluvial.cli.wizard.steps.escorrentia import StepMetodoEscorrentia
-        from hidropluvial.cli.wizard.steps.tc_tormenta import (
-            StepMetodosTc,
-            StepIntervaloTiempo,
-            StepTormenta,
-            StepSalida,
-        )
+        from hidropluvial.cli.wizard.steps.datos_cuenca_form import StepDatosCuencaForm
+        from hidropluvial.cli.wizard.steps.config_analisis_form import StepConfigAnalisisForm
+        from hidropluvial.cli.wizard.steps.tc_tormenta import StepSalida
 
         return [
-            StepNombre(self.state),
-            StepDatosCuenca(self.state),
-            StepLongitud(self.state),
-            StepMetodoEscorrentia(self.state),
-            StepMetodosTc(self.state),
-            StepIntervaloTiempo(self.state),
-            StepTormenta(self.state),
-            StepSalida(self.state),
+            StepDatosCuencaForm(self.state),  # Formulario interactivo: datos de cuenca
+            StepConfigAnalisisForm(self.state),  # Formulario interactivo: configuración
+            StepSalida(self.state),  # Configuración de salida
         ]
 
     def run(self) -> Optional[WizardState]:
@@ -229,16 +230,9 @@ class WizardNavigator:
                 else:
                     print_note("Ya estás en el primer paso")
             elif result == StepResult.CANCEL:
-                # Confirmar cancelación
-                confirm = questionary.confirm(
-                    "¿Cancelar el wizard? Se perderán los datos ingresados",
-                    default=False,
-                    style=WIZARD_STYLE,
-                ).ask()
-                if confirm:
-                    print_warning("Wizard cancelado")
-                    return None
-                # Si no confirma, continúa en el paso actual
+                # Cancelar directamente (la confirmación ya se hizo en el formulario)
+                print_warning("Wizard cancelado")
+                return None
 
         if self.current_step >= len(self.steps):
             return self.state

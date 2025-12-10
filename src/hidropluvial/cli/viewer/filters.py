@@ -169,7 +169,7 @@ def show_filter_menu(console: Console, all_analyses: list, current_filters: dict
         elif action == "Cancelar":
             return current_filters, filter_analyses(all_analyses, current_filters)
 
-    console.print(f"  [dim]Usa ESPACIO para seleccionar, ENTER para confirmar[/dim]")
+    console.print(f"  Usa ESPACIO para seleccionar, ENTER para confirmar", style=p.muted)
     console.print()
 
     # Filtro por metodo Tc (si hay más de 1)

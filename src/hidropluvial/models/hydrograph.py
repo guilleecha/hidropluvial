@@ -20,7 +20,7 @@ class HydrographResult(BaseModel):
     time_to_peak_min: float
     tp_unit_hr: Optional[float] = None  # tp - tiempo pico del HU (ΔD/2 + 0.6×Tc)
     tp_unit_min: Optional[float] = None
-    tb_hr: Optional[float] = None  # tb - tiempo base del HU (2.67×tp)
+    tb_hr: Optional[float] = None  # tb - tiempo base del HU = (1+X)×tp
     tb_min: Optional[float] = None
     volume_m3: float
     total_depth_mm: float

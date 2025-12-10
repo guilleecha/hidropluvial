@@ -9,13 +9,13 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional, List, Any, Dict
 from enum import Enum
 
-from rich.console import Console, Group
+from rich.console import Group
 from rich.table import Table
 from rich.text import Text
 from rich.panel import Panel
 from rich import box
 
-from hidropluvial.cli.theme import get_palette, get_icons
+from hidropluvial.cli.theme import get_palette, get_icons, get_console
 from hidropluvial.cli.viewer.terminal import clear_screen, get_key
 
 
@@ -94,16 +94,16 @@ def build_menu_nav(state: MenuState) -> Text:
     nav = Text()
 
     nav.append("  [", style=p.muted)
-    nav.append("a-z", style=f"bold {p.accent}")
+    nav.append("a-z", style=f"bold {p.nav_key}")
     nav.append("] Seleccionar  ", style=p.muted)
     nav.append("[", style=p.muted)
-    nav.append("↑↓", style=f"bold {p.primary}")
+    nav.append("↑↓", style=f"bold {p.nav_key}")
     nav.append("] Navegar  ", style=p.muted)
     nav.append("[", style=p.muted)
-    nav.append("Enter", style="bold green")
+    nav.append("Enter", style=f"bold {p.nav_confirm}")
     nav.append("] Confirmar  ", style=p.muted)
     nav.append("[", style=p.muted)
-    nav.append("Esc", style="bold red")
+    nav.append("Esc", style=f"bold {p.nav_cancel}")
     nav.append("] Volver", style=p.muted)
 
     return nav
@@ -177,7 +177,7 @@ def menu_panel(
         - None si presiona Esc y allow_back=True
         - Ejecuta action() si el item tiene una función
     """
-    console = Console()
+    console = get_console()
     from rich.live import Live
 
     state = MenuState(
@@ -203,14 +203,12 @@ def menu_panel(
 
             if key == 'esc':
                 if allow_back:
-                    clear_screen()
                     return None
                 continue
 
             elif key == 'enter':
                 item = state.items[state.selected_idx]
                 if not item.separator and not item.disabled:
-                    clear_screen()
                     if item.action:
                         return item.action()
                     return item.value
@@ -231,7 +229,6 @@ def menu_panel(
                 # Buscar por shortcut
                 for idx, item in enumerate(state.items):
                     if item.key.lower() == key.lower() and not item.separator and not item.disabled:
-                        clear_screen()
                         if item.action:
                             return item.action()
                         return item.value
@@ -239,7 +236,6 @@ def menu_panel(
             display = build_menu_display(state)
             live.update(display, refresh=True)
 
-    clear_screen()
     return None
 
 
@@ -306,3 +302,243 @@ def add_basin_menu() -> Optional[str]:
         items=items,
         subtitle="Selecciona cómo crear la cuenca",
     )
+
+
+# ============================================================================
+# Popup Menu (overlay sobre contenido existente)
+# ============================================================================
+
+def build_popup_panel(state: MenuState, width: int = 50) -> Panel:
+    """Construye el panel popup centrado."""
+    p = get_palette()
+    icons = get_icons()
+
+    content = Text()
+
+    for idx, item in enumerate(state.items):
+        if item.separator:
+            content.append(f"  {'─' * (width - 6)}\n", style=p.muted)
+            continue
+
+        is_selected = idx == state.selected_idx
+        is_disabled = item.disabled
+
+        # Indicador de selección
+        if is_selected:
+            content.append(" > ", style=f"bold {p.accent}")
+        else:
+            content.append("   ", style="")
+
+        # Shortcut
+        if is_disabled:
+            content.append(f"[{item.key}] ", style=f"dim {p.muted}")
+        else:
+            content.append(f"[{item.key}] ", style=f"bold {p.accent}")
+
+        # Label
+        if is_disabled:
+            content.append(f"{item.label}", style=f"dim {p.muted}")
+        elif is_selected:
+            content.append(f"{item.label}", style=f"bold {p.primary}")
+        else:
+            content.append(f"{item.label}", style="")
+
+        # Hint
+        if item.hint and not is_disabled:
+            remaining = width - len(item.label) - len(item.key) - 10
+            if remaining > 0:
+                content.append(f"  {item.hint[:remaining]}", style=p.muted)
+
+        content.append("\n")
+
+    # Navegación compacta
+    content.append("\n")
+    content.append("  [↑↓] Navegar  [Enter] OK  [Esc] Cancelar", style=p.muted)
+
+    return Panel(
+        content,
+        title=f"[bold {p.accent}]{state.title}[/]",
+        subtitle=f"[{p.muted}]{state.subtitle}[/]" if state.subtitle else None,
+        border_style=p.accent,
+        box=box.DOUBLE,
+        padding=(0, 1),
+        width=width,
+    )
+
+
+def popup_menu(
+    title: str,
+    items: List[MenuItem],
+    subtitle: str = "",
+    background: Any = None,
+    width: int = 50,
+) -> Optional[Any]:
+    """
+    Muestra un menú popup/overlay sobre el contenido existente.
+
+    A diferencia de menu_panel, este NO hace clear_screen y se muestra
+    como una ventana emergente centrada.
+
+    Args:
+        title: Título del popup
+        items: Lista de MenuItem
+        subtitle: Subtítulo opcional
+        background: Elemento Rich a mostrar como fondo (ej: la tabla del form)
+        width: Ancho del popup
+
+    Returns:
+        - El valor del item seleccionado
+        - None si presiona Esc
+    """
+    console = get_console()
+    from rich.live import Live
+    from rich.align import Align
+    from rich.columns import Columns
+
+    state = MenuState(
+        title=title,
+        items=items,
+        subtitle=subtitle,
+    )
+
+    # Posicionar en primer item válido
+    if items and (items[0].separator or items[0].disabled):
+        state.selected_idx = get_next_valid_idx(items, 0, 1)
+
+    def build_popup_display():
+        popup = build_popup_panel(state, width)
+        # Centrar el popup
+        centered = Align.center(popup, vertical="middle")
+
+        if background:
+            # Mostrar fondo atenuado + popup centrado
+            return Group(
+                Text(""),  # Espacio superior
+                centered,
+            )
+        return Group(Text(""), centered)
+
+    # No hacer clear_screen para mantener el contexto visual
+    # Solo limpiar y redibujar
+
+    with Live(console=console, auto_refresh=False, screen=True) as live:
+        display = build_popup_display()
+        live.update(display, refresh=True)
+
+        while True:
+            key = get_key()
+
+            if key == 'esc':
+                return None
+
+            elif key == 'enter':
+                item = state.items[state.selected_idx]
+                if not item.separator and not item.disabled:
+                    if item.action:
+                        return item.action()
+                    return item.value
+
+            elif key == 'up':
+                state.selected_idx = get_next_valid_idx(
+                    state.items, state.selected_idx, -1
+                )
+
+            elif key == 'down':
+                state.selected_idx = get_next_valid_idx(
+                    state.items, state.selected_idx, 1
+                )
+
+            else:
+                # Buscar por shortcut
+                for idx, item in enumerate(state.items):
+                    if item.key.lower() == key.lower() and not item.separator and not item.disabled:
+                        if item.action:
+                            return item.action()
+                        return item.value
+
+            display = build_popup_display()
+            live.update(display, refresh=True)
+
+    return None
+
+
+def popup_input(
+    title: str,
+    default: str = "",
+    hint: str = "",
+    width: int = 50,
+) -> Optional[str]:
+    """
+    Muestra un popup para entrada de texto.
+
+    Args:
+        title: Título/pregunta
+        default: Valor por defecto
+        hint: Texto de ayuda
+        width: Ancho del popup
+
+    Returns:
+        El texto ingresado o None si cancela
+    """
+    console = get_console()
+    from rich.live import Live
+    from rich.align import Align
+
+    p = get_palette()
+    input_buffer = default
+
+    def build_input_popup():
+        content = Text()
+        content.append(f"  {title}\n\n", style=f"bold {p.primary}")
+
+        if hint:
+            content.append(f"  {hint}\n\n", style=p.muted)
+
+        # Campo de entrada
+        content.append("  > ", style=f"bold {p.accent}")
+        content.append(input_buffer, style=f"bold {p.input_text}")
+        content.append("_", style=f"blink bold {p.input_text}")
+        content.append("\n\n")
+
+        # Navegación
+        nav = Text()
+        nav.append("  [", style=p.muted)
+        nav.append("Enter", style=f"bold {p.nav_confirm}")
+        nav.append("] Confirmar  ", style=p.muted)
+        nav.append("[", style=p.muted)
+        nav.append("Esc", style=f"bold {p.nav_cancel}")
+        nav.append("] Cancelar", style=p.muted)
+        content.append_text(nav)
+
+        panel = Panel(
+            content,
+            border_style=p.accent,
+            box=box.DOUBLE,
+            padding=(0, 1),
+            width=width,
+        )
+        return Align.center(panel, vertical="middle")
+
+    with Live(console=console, auto_refresh=False, screen=True) as live:
+        display = Group(Text(""), build_input_popup())
+        live.update(display, refresh=True)
+
+        while True:
+            key = get_key()
+
+            if key == 'esc':
+                return None
+
+            elif key == 'enter':
+                return input_buffer.strip()
+
+            elif key == 'backspace':
+                input_buffer = input_buffer[:-1]
+
+            elif isinstance(key, str) and len(key) == 1 and (key.isprintable() or key in '.-'):
+                input_buffer += key
+
+            display = Group(Text(""), build_input_popup())
+            live.update(display, refresh=True)
+
+    return None

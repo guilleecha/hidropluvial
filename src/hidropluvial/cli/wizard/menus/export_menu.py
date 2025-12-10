@@ -5,8 +5,6 @@ Menú para exportar sesiones a Excel o LaTeX con filtrado de análisis.
 from typing import Optional
 from pathlib import Path
 
-import questionary
-
 from hidropluvial.cli.wizard.menus.base import BaseMenu, SessionMenu
 from hidropluvial.cli.output_manager import (
     get_latex_output_dir,
@@ -115,17 +113,16 @@ class ExportMenu(SessionMenu):
                 f"{a.id}: {hydro.tc_method} + {storm.type} "
                 f"Tr{storm.return_period}{x_str} -> Qp={hydro.peak_flow_m3s:.2f} m³/s"
             )
-            choices.append(questionary.Choice(label, checked=True))
+            choices.append({"name": label, "value": a.id, "checked": True})
 
         selected = self.checkbox("Analisis:", choices)
 
         if selected is None:
             return None
 
-        # Extraer indices de los seleccionados
+        # Extraer indices de los seleccionados (selected contiene los IDs directamente)
         indices = []
-        for sel in selected:
-            analysis_id = sel.split(":")[0]
+        for analysis_id in selected:
             for i, a in enumerate(self.basin.analyses):
                 if a.id == analysis_id:
                     indices.append(i)

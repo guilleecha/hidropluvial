@@ -13,6 +13,7 @@ def basin_preview_interactive(
     basin: Basin,
     width: int = 70,
     height: int = 18,
+    db=None,
 ) -> None:
     """
     Muestra visor interactivo de análisis.
@@ -21,6 +22,7 @@ def basin_preview_interactive(
         basin: Cuenca con análisis
         width: Ancho del gráfico
         height: Alto del gráfico
+        db: DatabaseConnection (para detalles de ponderación)
     """
     from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
 
@@ -28,7 +30,11 @@ def basin_preview_interactive(
         print("  No hay análisis en esta cuenca.")
         return
 
-    interactive_hydrograph_viewer(basin.analyses, basin.name, width, height)
+    interactive_hydrograph_viewer(
+        basin.analyses, basin.name, width, height,
+        basin_id=basin.id,
+        db=db,
+    )
 
 
 def basin_preview_table(
@@ -240,3 +246,9 @@ def basin_preview_compare(
         )
     else:
         console.print("  No hay datos de hidrogramas disponibles.")
+
+    # Esperar tecla para volver
+    console.print()
+    console.print("  Presiona cualquier tecla para volver...", style="dim")
+    from hidropluvial.cli.viewer.terminal import get_key
+    get_key()

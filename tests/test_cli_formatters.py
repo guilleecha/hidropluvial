@@ -4,153 +4,81 @@ Tests para cli/formatters.py - Utilidades de formateo CLI.
 
 import pytest
 
-from hidropluvial.cli.formatters import OutputFormatter, fmt
+from hidropluvial.cli.formatters import format_flow, format_volume_hm3
 
 
-class TestOutputFormatter:
-    """Tests para OutputFormatter."""
+class TestFormatFlow:
+    """Tests para format_flow."""
 
-    def test_header(self, capsys):
-        """Test impresión de header."""
-        OutputFormatter.header("Test Header")
-        captured = capsys.readouterr()
-        assert "Test Header" in captured.out
-        assert "=" in captured.out
+    def test_none_value(self):
+        """Test valor None."""
+        assert format_flow(None) == "-"
 
-    def test_header_custom_width(self, capsys):
-        """Test header con ancho personalizado."""
-        OutputFormatter.header("Title", width=40)
-        captured = capsys.readouterr()
-        lines = captured.out.strip().split("\n")
-        assert len(lines[0]) == 40  # Primera línea de =
+    def test_zero(self):
+        """Test valor cero."""
+        assert format_flow(0) == "0"
 
-    def test_subheader(self, capsys):
-        """Test impresión de subheader."""
-        OutputFormatter.subheader("Subheader")
-        captured = capsys.readouterr()
-        assert "Subheader" in captured.out
-        assert "-" in captured.out
+    def test_large_flow(self):
+        """Test caudales grandes (>=100)."""
+        assert format_flow(100) == "100"
+        assert format_flow(150.7) == "151"
+        assert format_flow(1234.5) == "1234"  # f-string truncates
 
-    def test_field_without_unit(self, capsys):
-        """Test campo sin unidad."""
-        OutputFormatter.field("Area", "100.5")
-        captured = capsys.readouterr()
-        assert "Area: 100.5" in captured.out
+    def test_medium_flow(self):
+        """Test caudales medianos (10-100)."""
+        assert format_flow(10) == "10.0"
+        assert format_flow(50.75) == "50.8"
+        assert format_flow(99.99) == "100.0"
 
-    def test_field_with_unit(self, capsys):
-        """Test campo con unidad."""
-        OutputFormatter.field("Area", "100.5", "ha")
-        captured = capsys.readouterr()
-        assert "Area: 100.5 ha" in captured.out
+    def test_small_flow(self):
+        """Test caudales pequeños (1-10)."""
+        assert format_flow(1) == "1.00"
+        assert format_flow(5.123) == "5.12"
+        assert format_flow(9.999) == "10.00"
 
-    def test_field_custom_indent(self, capsys):
-        """Test campo con indentación personalizada."""
-        OutputFormatter.field("Label", "Value", indent=4)
-        captured = capsys.readouterr()
-        assert "    Label: Value" in captured.out
+    def test_very_small_flow(self):
+        """Test caudales muy pequeños (0.001-1) - usa 3 decimales."""
+        assert format_flow(0.1) == "0.100"
+        assert format_flow(0.567) == "0.567"
+        assert format_flow(0.999) == "0.999"
+        assert format_flow(0.05) == "0.050"
+        assert format_flow(0.001) == "0.001"
 
-    def test_field_aligned_with_unit(self, capsys):
-        """Test campo alineado con unidad."""
-        OutputFormatter.field_aligned("Flow", 123.456, "m³/s")
-        captured = capsys.readouterr()
-        assert "Flow" in captured.out
-        assert "123.456" in captured.out
-        assert "m³/s" in captured.out
-
-    def test_field_aligned_without_unit(self, capsys):
-        """Test campo alineado sin unidad."""
-        OutputFormatter.field_aligned("Value", 99.999)
-        captured = capsys.readouterr()
-        assert "99.999" in captured.out
-
-    def test_field_aligned_custom_widths(self, capsys):
-        """Test campo alineado con anchos personalizados."""
-        OutputFormatter.field_aligned("X", 1.5, label_width=10, value_width=8)
-        captured = capsys.readouterr()
-        # Verificar que hay espacios de alineación
-        assert "X" in captured.out
-        assert "1.500" in captured.out
-
-    def test_separator(self, capsys):
-        """Test separador."""
-        OutputFormatter.separator()
-        captured = capsys.readouterr()
-        assert "=" * 60 in captured.out
-
-    def test_separator_custom_width(self, capsys):
-        """Test separador con ancho personalizado."""
-        OutputFormatter.separator(width=30)
-        captured = capsys.readouterr()
-        assert "=" * 30 in captured.out
-
-    def test_blank(self, capsys):
-        """Test línea en blanco."""
-        OutputFormatter.blank()
-        captured = capsys.readouterr()
-        assert captured.out == "\n"
-
-    def test_item_default(self, capsys):
-        """Test item con prefijo default."""
-        OutputFormatter.item("Test item")
-        captured = capsys.readouterr()
-        assert "+ Test item" in captured.out
-
-    def test_item_custom_prefix(self, capsys):
-        """Test item con prefijo personalizado."""
-        OutputFormatter.item("Test item", prefix="*")
-        captured = capsys.readouterr()
-        assert "* Test item" in captured.out
-
-    def test_item_custom_indent(self, capsys):
-        """Test item con indentación personalizada."""
-        OutputFormatter.item("Text", indent=6)
-        captured = capsys.readouterr()
-        assert "      + Text" in captured.out
-
-    def test_error(self, capsys):
-        """Test mensaje de error."""
-        OutputFormatter.error("Something failed")
-        captured = capsys.readouterr()
-        assert "Error: Something failed" in captured.err
-
-    def test_warning(self, capsys):
-        """Test mensaje de advertencia."""
-        OutputFormatter.warning("Be careful")
-        captured = capsys.readouterr()
-        assert "Advertencia: Be careful" in captured.err
-
-    def test_success(self, capsys):
-        """Test mensaje de éxito."""
-        OutputFormatter.success("All good!")
-        captured = capsys.readouterr()
-        assert "All good!" in captured.out
-
-    def test_table_row(self, capsys):
-        """Test fila de tabla."""
-        columns = ["Col1", "Col2", "Col3"]
-        widths = [10, 15, 10]
-        OutputFormatter.table_row(columns, widths)
-        captured = capsys.readouterr()
-        assert "Col1" in captured.out
-        assert "Col2" in captured.out
-        assert "Col3" in captured.out
+    def test_tiny_flow(self):
+        """Test caudales diminutos (<0.001) - muestra 0.00."""
+        assert format_flow(0.0001234) == "0.00"
+        assert format_flow(0.00001) == "0.00"
 
 
-class TestFmtInstance:
-    """Tests para instancia global fmt."""
+class TestFormatVolumeHm3:
+    """Tests para format_volume_hm3 - máximo 3 decimales según rango."""
 
-    def test_fmt_is_output_formatter(self):
-        """Test que fmt es instancia de OutputFormatter."""
-        assert isinstance(fmt, OutputFormatter)
+    def test_none_value(self):
+        """Test valor None."""
+        assert format_volume_hm3(None) == "-"
 
-    def test_fmt_header(self, capsys):
-        """Test fmt.header funciona."""
-        fmt.header("Global fmt test")
-        captured = capsys.readouterr()
-        assert "Global fmt test" in captured.out
+    def test_zero_volume(self):
+        """Test volumen cero."""
+        assert format_volume_hm3(0) == "0"
 
-    def test_fmt_error(self, capsys):
-        """Test fmt.error funciona."""
-        fmt.error("Global error")
-        captured = capsys.readouterr()
-        assert "Error: Global error" in captured.err
+    def test_large_volume(self):
+        """Test volúmenes grandes (>=1 hm³)."""
+        # 1 hm³ = 1_000_000 m³
+        assert format_volume_hm3(1_000_000) == "1.00"      # 1 hm³ -> 2 decimales
+        assert format_volume_hm3(1_500_000) == "1.50"      # 1.5 hm³
+        assert format_volume_hm3(10_000_000) == "10.0"     # 10 hm³ -> 1 decimal
+        assert format_volume_hm3(12_000_000) == "12.0"     # 12 hm³
+        assert format_volume_hm3(100_000_000) == "100"     # 100 hm³ -> 0 decimales
+
+    def test_medium_volume(self):
+        """Test volúmenes medianos (0.001-1 hm³) - usa 3 decimales."""
+        assert format_volume_hm3(100_000) == "0.100"      # 0.1 hm³
+        assert format_volume_hm3(500_000) == "0.500"      # 0.5 hm³
+        assert format_volume_hm3(10_000) == "0.010"       # 0.01 hm³
+        assert format_volume_hm3(15_000) == "0.015"       # 0.015 hm³
+        assert format_volume_hm3(1_000) == "0.001"        # 0.001 hm³
+
+    def test_small_volume(self):
+        """Test volúmenes pequeños (<0.001 hm³) - muestra 0.00."""
+        assert format_volume_hm3(100) == "0.00"          # 0.0001 hm³ -> muy pequeño
+        assert format_volume_hm3(10) == "0.00"           # muy pequeño

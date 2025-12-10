@@ -45,15 +45,18 @@ class AnalysisRepository:
                     tc_method, tc_hr, tc_min, tc_parameters,
                     storm_type, return_period, duration_hr, total_depth_mm,
                     peak_intensity_mmhr, n_intervals,
+                    bimodal_peak1, bimodal_peak2, bimodal_vol_split, bimodal_peak_width,
                     x_factor, peak_flow_m3s, time_to_peak_hr, time_to_peak_min,
                     tp_unit_hr, tp_unit_min, tb_hr, tb_min, volume_m3, runoff_mm
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     analysis_id, basin_id, timestamp, note,
                     tc.method, tc.tc_hr, tc.tc_min, json.dumps(tc.parameters),
                     storm.type, storm.return_period, storm.duration_hr, storm.total_depth_mm,
                     storm.peak_intensity_mmhr, storm.n_intervals,
+                    storm.bimodal_peak1, storm.bimodal_peak2,
+                    storm.bimodal_vol_split, storm.bimodal_peak_width,
                     hydrograph.x_factor, hydrograph.peak_flow_m3s,
                     hydrograph.time_to_peak_hr, hydrograph.time_to_peak_min,
                     hydrograph.tp_unit_hr, hydrograph.tp_unit_min,
@@ -122,7 +125,7 @@ class AnalysisRepository:
 
     def _row_to_storm_dict(self, row: sqlite3.Row, storm_ts: Optional[sqlite3.Row]) -> dict:
         """Extrae datos de tormenta de una fila de análisis."""
-        return {
+        result = {
             "type": row["storm_type"],
             "return_period": row["return_period"],
             "duration_hr": row["duration_hr"],
@@ -132,6 +135,13 @@ class AnalysisRepository:
             "time_min": _json_list(storm_ts["time_min"]) if storm_ts else [],
             "intensity_mmhr": _json_list(storm_ts["intensity_mmhr"]) if storm_ts else [],
         }
+        # Agregar parámetros bimodales si existen
+        if row["bimodal_peak1"] is not None:
+            result["bimodal_peak1"] = row["bimodal_peak1"]
+            result["bimodal_peak2"] = row["bimodal_peak2"]
+            result["bimodal_vol_split"] = row["bimodal_vol_split"]
+            result["bimodal_peak_width"] = row["bimodal_peak_width"]
+        return result
 
     def _row_to_hydrograph_dict(self, row: sqlite3.Row, hydro_ts: Optional[sqlite3.Row]) -> dict:
         """Extrae datos de hidrograma de una fila de análisis."""

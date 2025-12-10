@@ -44,6 +44,20 @@ from hidropluvial.cli.theme.styled import (
     styled_suggestion,
     styled_suggestion_box,
     create_summary_panel,
+    # Navigation bar helpers
+    styled_nav_key,
+    styled_nav_confirm,
+    styled_nav_cancel,
+    styled_nav_bar,
+    styled_nav_bar_select,
+    styled_nav_bar_checkbox,
+    styled_nav_bar_text,
+    styled_nav_bar_confirm,
+    styled_delete_confirm,
+    # Additional style helpers
+    styled_marked_text,
+    styled_input_field,
+    styled_warning_message,
 )
 
 # Desde printing
@@ -80,12 +94,12 @@ from hidropluvial.cli.theme.icons import (
     get_icons,
     supports_unicode,
     icon,
+    detect_unicode_support,
 )
 
 # Desde tables
 from hidropluvial.cli.theme.tables import (
     create_results_table,
-    create_analysis_table,
     create_projects_table,
     create_basins_table,
     print_projects_table,
@@ -97,8 +111,8 @@ from hidropluvial.cli.theme.tables import (
     print_c_table_fhwa,
     print_c_table_simple,
     print_cn_table,
-    print_summary_table,
     print_x_factor_table,
+    print_coverage_assignments_table,
 )
 
 __all__ = [
@@ -129,6 +143,20 @@ __all__ = [
     "styled_suggestion",
     "styled_suggestion_box",
     "create_summary_panel",
+    # navigation bar helpers
+    "styled_nav_key",
+    "styled_nav_confirm",
+    "styled_nav_cancel",
+    "styled_nav_bar",
+    "styled_nav_bar_select",
+    "styled_nav_bar_checkbox",
+    "styled_nav_bar_text",
+    "styled_nav_bar_confirm",
+    "styled_delete_confirm",
+    # additional style helpers
+    "styled_marked_text",
+    "styled_input_field",
+    "styled_warning_message",
     # printing
     "format_number",
     "print_separator",
@@ -154,7 +182,6 @@ __all__ = [
     "print_completion_banner",
     # tables
     "create_results_table",
-    "create_analysis_table",
     "create_projects_table",
     "create_basins_table",
     "print_projects_table",
@@ -166,8 +193,8 @@ __all__ = [
     "print_c_table_fhwa",
     "print_c_table_simple",
     "print_cn_table",
-    "print_summary_table",
     "print_x_factor_table",
+    "print_coverage_assignments_table",
     # icons
     "IconSet",
     "ICONS_UNICODE",
@@ -175,4 +202,5 @@ __all__ = [
     "get_icons",
     "supports_unicode",
     "icon",
+    "detect_unicode_support",
 ]

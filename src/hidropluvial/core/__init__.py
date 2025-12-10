@@ -78,6 +78,7 @@ from hidropluvial.core.hydrograph import (
     convolve_uh,
     generate_unit_hydrograph,
     generate_hydrograph,
+    HydrographOutput,
 )
 
 __all__ = [
@@ -148,4 +149,5 @@ __all__ = [
     "convolve_uh",
     "generate_unit_hydrograph",
     "generate_hydrograph",
+    "HydrographOutput",
 ]

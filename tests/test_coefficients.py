@@ -13,7 +13,6 @@ from hidropluvial.core.coefficients import (
     # Tablas
     FHWA_C_TABLE,
     VEN_TE_CHOW_C_TABLE,
-    URUGUAY_C_TABLE,
     SCS_CN_URBAN,
     SCS_CN_AGRICULTURAL,
     C_TABLES,
@@ -163,11 +162,6 @@ class TestTables:
         assert len(VEN_TE_CHOW_C_TABLE) > 0
         assert all(isinstance(e, ChowCEntry) for e in VEN_TE_CHOW_C_TABLE)
 
-    def test_uruguay_table_not_empty(self):
-        """Test tabla Uruguay no vacia."""
-        assert len(URUGUAY_C_TABLE) > 0
-        assert all(isinstance(e, CoefficientEntry) for e in URUGUAY_C_TABLE)
-
     def test_cn_urban_table_not_empty(self):
         """Test tabla CN urbana no vacia."""
         assert len(SCS_CN_URBAN) > 0
@@ -182,7 +176,6 @@ class TestTables:
         """Test diccionario C_TABLES."""
         assert "fhwa" in C_TABLES
         assert "chow" in C_TABLES
-        assert "uruguay" in C_TABLES
 
     def test_cn_tables_dict(self):
         """Test diccionario CN_TABLES."""
@@ -201,11 +194,6 @@ class TestGetCForTRFromTable:
     def test_fhwa_table(self):
         """Test con tabla FHWA."""
         c = get_c_for_tr_from_table(0, 10, "fhwa")
-        assert 0 < c < 1
-
-    def test_uruguay_table(self):
-        """Test con tabla Uruguay."""
-        c = get_c_for_tr_from_table(0, 10, "uruguay")
         assert 0 < c < 1
 
     def test_invalid_table(self):

@@ -16,7 +16,9 @@ def handle_confirm_cancel(key: str, state: FormState) -> Optional[dict]:
         # Cancelar y volver a navegación
         state.mode = "navigate"
         state.message = ""
-    # Ignorar otras teclas
+    else:
+        # Tecla no reconocida, no actualizar display
+        return {"_no_update": True}
     return None
 
 
@@ -48,5 +50,7 @@ def handle_popup_confirm(key: str, state: FormState, allow_back: bool, live: Any
         state.mode = "popup"
         state.pending_check_opt = None
         state.message = ""
-    # Ignorar otras teclas
+    else:
+        # Tecla no reconocida, no actualizar display
+        return {"_no_update": True}
     return None

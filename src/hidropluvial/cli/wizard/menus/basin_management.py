@@ -132,8 +132,8 @@ class BasinManagementMenu(BaseMenu):
             for i, a in enumerate(basin.analyses):
                 h = a.hydrograph
                 s = a.storm
-                self.echo(
-                    f"  [{i}] {h.tc_method} {s.type} Tr{s.return_period} "
+                self.info(
+                    f"[{i}] {h.tc_method} {s.type} Tr{s.return_period} "
                     f"Qp={h.peak_flow_m3s:.2f} m³/s"
                 )
 
@@ -155,7 +155,7 @@ class BasinManagementMenu(BaseMenu):
         if result == "modified":
             # Recargar proyecto para obtener cambios
             self.project = self.project_manager.get_project(self.project.id)
-            self.echo(f"\n  Cuenca '{basin.name}' actualizada.\n")
+            self.success(f"Cuenca '{basin.name}' actualizada.")
 
     def _duplicate_basin(self) -> None:
         """Duplicar una cuenca existente."""
@@ -183,12 +183,10 @@ class BasinManagementMenu(BaseMenu):
             length_m=basin.length_m,
         )
 
-        self.echo(f"\n  Cuenca duplicada:")
-        self.echo(f"    ID original: {basin.id}")
-        self.echo(f"    ID nueva:    {new_basin.id}")
-        self.echo(f"    Nombre:      {new_basin.name}")
-        self.echo(f"\n  La nueva cuenca no tiene análisis.")
-        self.echo(f"  Usa 'Continuar proyecto' para agregar análisis.\n")
+        self.success(f"Cuenca duplicada: {new_basin.name}")
+        self.info(f"ID original: {basin.id}")
+        self.info(f"ID nueva:    {new_basin.id}")
+        self.note("La nueva cuenca no tiene análisis. Usa 'Continuar proyecto' para agregar.")
 
     def _rename_basin(self) -> None:
         """Renombrar una cuenca."""
@@ -204,7 +202,7 @@ class BasinManagementMenu(BaseMenu):
         if new_name and new_name != basin.name:
             basin.name = new_name
             self.project_manager.save_project(self.project)
-            self.echo(f"\n  Cuenca renombrada a '{new_name}'\n")
+            self.success(f"Cuenca renombrada a '{new_name}'")
 
     def _export_basin(self) -> None:
         """Exportar una cuenca a Excel o LaTeX."""
@@ -212,7 +210,7 @@ class BasinManagementMenu(BaseMenu):
         basins_with_analyses = [b for b in self.project.basins if b.analyses]
 
         if not basins_with_analyses:
-            self.echo("\n  No hay cuencas con análisis para exportar.\n")
+            self.info("No hay cuencas con análisis para exportar.")
             return
 
         choices = [
@@ -255,7 +253,7 @@ class BasinManagementMenu(BaseMenu):
         ]
 
         if not other_projects:
-            self.echo("\n  No hay otros proyectos con cuencas disponibles para importar.\n")
+            self.info("No hay otros proyectos con cuencas disponibles para importar.")
             return
 
         # Construir opciones
@@ -277,7 +275,7 @@ class BasinManagementMenu(BaseMenu):
         source_project = self.project_manager.get_project(source_id)
 
         if not source_project or not source_project.basins:
-            self.echo("\n  El proyecto no tiene cuencas.\n")
+            self.info("El proyecto no tiene cuencas.")
             return
 
         basin_choices = [
@@ -306,8 +304,8 @@ class BasinManagementMenu(BaseMenu):
                 length_m=source_basin.length_m,
             )
 
-            self.echo(f"\n  Cuenca '{new_basin.name}' importada al proyecto.")
-            self.echo(f"  (Nueva ID: {new_basin.id})\n")
+            self.success(f"Cuenca '{new_basin.name}' importada al proyecto.")
+            self.info(f"Nueva ID: {new_basin.id}")
 
     def _manage_analyses(self) -> None:
         """Gestionar análisis de una cuenca."""
@@ -315,7 +313,7 @@ class BasinManagementMenu(BaseMenu):
         basins_with_analyses = [b for b in self.project.basins if b.analyses]
 
         if not basins_with_analyses:
-            self.echo("\n  No hay cuencas con análisis para gestionar.\n")
+            self.info("No hay cuencas con análisis para gestionar.")
             return
 
         choices = [
@@ -348,7 +346,7 @@ class BasinManagementMenu(BaseMenu):
                 return
 
             self.section(f"Análisis de: {basin.name}")
-            self.echo(f"  Cuenca tiene {len(basin.analyses)} análisis\n")
+            self.info(f"Cuenca tiene {len(basin.analyses)} análisis")
 
             # Listar análisis
             if basin.analyses:
@@ -356,11 +354,10 @@ class BasinManagementMenu(BaseMenu):
                     h = a.hydrograph
                     s = a.storm
                     note = f" [{a.note}]" if a.note else ""
-                    self.echo(
-                        f"  [{a.id}] {h.tc_method} {s.type.upper()} Tr{s.return_period} "
+                    self.info(
+                        f"[{a.id}] {h.tc_method} {s.type.upper()} Tr{s.return_period} "
                         f"Qp={h.peak_flow_m3s:.2f} m³/s{note}"
                     )
-                self.echo("")
 
             action = self.select(
                 "¿Qué deseas hacer?",
@@ -387,7 +384,7 @@ class BasinManagementMenu(BaseMenu):
     def _delete_one_analysis(self, basin: Basin, db) -> None:
         """Elimina un análisis seleccionado."""
         if not basin.analyses:
-            self.echo("\n  No hay análisis para eliminar.\n")
+            self.info("No hay análisis para eliminar.")
             return
 
         choices = []
@@ -409,14 +406,14 @@ class BasinManagementMenu(BaseMenu):
 
         if self.confirm(f"¿Eliminar análisis {analysis_id}?", default=False):
             if db.delete_analysis(analysis_id):
-                self.echo(f"\n  Análisis '{analysis_id}' eliminado.\n")
+                self.success(f"Análisis '{analysis_id}' eliminado.")
             else:
                 self.error("No se pudo eliminar el análisis")
 
     def _edit_analysis_note(self, basin: Basin, db) -> None:
         """Edita la nota de un análisis."""
         if not basin.analyses:
-            self.echo("\n  No hay análisis.\n")
+            self.info("No hay análisis.")
             return
 
         choices = []
@@ -452,7 +449,7 @@ class BasinManagementMenu(BaseMenu):
 
         if "Eliminar nota" in note_action:
             db.update_analysis_note(analysis_id, None)
-            self.echo(f"\n  Nota eliminada del análisis '{analysis_id}'.\n")
+            self.success(f"Nota eliminada del análisis '{analysis_id}'.")
         else:
             new_note = self.text(
                 "Nueva nota:",
@@ -460,14 +457,14 @@ class BasinManagementMenu(BaseMenu):
             )
             if new_note is not None:
                 db.update_analysis_note(analysis_id, new_note if new_note else None)
-                self.echo(f"\n  Nota actualizada para análisis '{analysis_id}'.\n")
+                self.success(f"Nota actualizada para análisis '{analysis_id}'.")
 
     def _clear_all_analyses(self, basin: Basin, db) -> bool:
         """Elimina todos los análisis de una cuenca. Retorna True si se eliminaron."""
         n_analyses = len(basin.analyses)
 
         if n_analyses == 0:
-            self.echo("\n  No hay análisis para eliminar.\n")
+            self.info("No hay análisis para eliminar.")
             return False
 
         self.warning(f"ATENCIÓN: Se eliminarán {n_analyses} análisis de '{basin.name}'")
@@ -475,7 +472,7 @@ class BasinManagementMenu(BaseMenu):
 
         if self.confirm(f"¿Eliminar los {n_analyses} análisis?", default=False):
             deleted = db.clear_basin_analyses(basin.id)
-            self.echo(f"\n  Eliminados {deleted} análisis.\n")
+            self.success(f"Eliminados {deleted} análisis.")
             return True
 
         return False

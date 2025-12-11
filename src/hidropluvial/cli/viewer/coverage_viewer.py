@@ -260,41 +260,53 @@ def build_assignments_table(state: CoverageViewerState) -> Optional[Table]:
         padding=(0, 1),
     )
 
+    # Determinar si hay asignaciones con grupo de suelo (CN)
+    has_soil_groups = any(a.soil_group for a in state.assignments)
+
     table.add_column("#", justify="right", width=3)
-    table.add_column("Cobertura", justify="left", max_width=25)
+    table.add_column("Categoría", justify="left", width=16)
+    table.add_column("Descripción", justify="left", max_width=22)
+    if has_soil_groups:
+        table.add_column("Suelo", justify="center", width=5)
     table.add_column(state.value_label, justify="right", width=6)
     table.add_column("Área (ha)", justify="right", width=10)
-    table.add_column("Nota", justify="left", max_width=30)
+    table.add_column("Nota", justify="left", max_width=20)
 
     for idx, assign in enumerate(state.assignments):
         is_selected = state.focus_assignments and idx == state.selected_assignment_idx
 
-        # Construir descripción de cobertura
-        cov_desc = f"{assign.category}: {assign.description[:15]}"
-        if assign.soil_group:
-            cov_desc += f" [{assign.soil_group}]"
+        # Separar categoría y descripción en columnas distintas
+        cat_desc = assign.category[:16]
+        desc_text_str = assign.description[:22]
 
         if is_selected:
             row_style = f"bold reverse {p.primary}"
             idx_text = Text(f">{idx + 1}", style=row_style)
-            cov_text = Text(cov_desc[:25], style=row_style)
+            cat_text = Text(cat_desc, style=row_style)
+            desc_text = Text(desc_text_str, style=row_style)
+            soil_text = Text(assign.soil_group or "-", style=row_style) if has_soil_groups else None
             val_text = Text(
                 f"{assign.value:.2f}" if state.value_label == "C" else str(int(assign.value)),
                 style=row_style
             )
             area_text = Text(f"{assign.area:.2f}", style=row_style)
-            note_text = Text(assign.note[:30] if assign.note else "-", style=row_style)
+            note_text = Text(assign.note[:20] if assign.note else "-", style=row_style)
         else:
             idx_text = Text(str(idx + 1), style=p.muted)
-            cov_text = Text(cov_desc[:25], style=p.success)
+            cat_text = Text(cat_desc, style=p.success)
+            desc_text = Text(desc_text_str, style=p.secondary)
+            soil_text = Text(assign.soil_group or "-", style=f"bold {p.accent}") if has_soil_groups else None
             val_text = Text(
                 f"{assign.value:.2f}" if state.value_label == "C" else str(int(assign.value)),
                 style=f"bold {p.number}"
             )
             area_text = Text(f"{assign.area:.2f}", style=f"bold {p.accent}")
-            note_text = Text(assign.note[:30] if assign.note else "-", style=p.muted)
+            note_text = Text(assign.note[:20] if assign.note else "-", style=p.muted)
 
-        table.add_row(idx_text, cov_text, val_text, area_text, note_text)
+        if has_soil_groups:
+            table.add_row(idx_text, cat_text, desc_text, soil_text, val_text, area_text, note_text)
+        else:
+            table.add_row(idx_text, cat_text, desc_text, val_text, area_text, note_text)
 
     return table
 
@@ -619,6 +631,7 @@ def interactive_coverage_viewer(
     """
     console = get_console()
     from rich.live import Live
+    import shutil
 
     state = CoverageViewerState(
         options=rows,
@@ -631,6 +644,9 @@ def interactive_coverage_viewer(
     # Para CN, necesitamos seleccionar grupo de suelo primero
     is_cn = value_label == "CN"
     pending_area: Optional[float] = None
+
+    # Guardar tamaño inicial del terminal para detectar cambios
+    last_terminal_size = shutil.get_terminal_size()
 
     clear_screen()
 
@@ -910,6 +926,15 @@ def interactive_coverage_viewer(
                         if not state.assignments:
                             state.focus_assignments = False
                             state.selected_assignment_idx = -1
+
+            # Detectar si cambió el tamaño del terminal
+            current_size = shutil.get_terminal_size()
+            if current_size != last_terminal_size:
+                # Reiniciar Live para evitar acumulación de contenido
+                live.stop()
+                clear_screen()
+                last_terminal_size = current_size
+                live.start()
 
             # Actualizar display
             display = build_display(state, max_visible_rows)

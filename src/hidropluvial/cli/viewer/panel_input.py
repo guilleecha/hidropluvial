@@ -261,6 +261,7 @@ def panel_select(
     options: List[PanelOption],
     message: str = "",
     info_panel: Any = None,
+    as_popup: bool = False,
 ) -> Optional[Any]:
     """
     Muestra un panel de selección única.
@@ -270,6 +271,7 @@ def panel_select(
         options: Lista de PanelOption
         message: Mensaje informativo
         info_panel: Panel de información adicional (opcional)
+        as_popup: Si True, no limpia la pantalla (aparece como popup)
 
     Returns:
         Valor seleccionado o None si cancela
@@ -290,7 +292,8 @@ def panel_select(
         info_panel=info_panel,
     )
 
-    clear_screen()
+    if not as_popup:
+        clear_screen()
 
     with Live(console=console, auto_refresh=False, screen=False) as live:
         display = build_display(state)
@@ -301,11 +304,13 @@ def panel_select(
             n_opts = len(state.options)
 
             if key == 'esc':
-                clear_screen()
+                if not as_popup:
+                    clear_screen()
                 return None
 
             elif key == 'enter':
-                clear_screen()
+                if not as_popup:
+                    clear_screen()
                 return state.options[state.selected_idx].value
 
             elif key == 'up':
@@ -318,13 +323,15 @@ def panel_select(
                 # Buscar por shortcut
                 for i, opt in enumerate(state.options):
                     if opt.shortcut.lower() == key.lower():
-                        clear_screen()
+                        if not as_popup:
+                            clear_screen()
                         return opt.value
 
             display = build_display(state)
             live.update(display, refresh=True)
 
-    clear_screen()
+    if not as_popup:
+        clear_screen()
     return None
 
 
@@ -334,6 +341,7 @@ def panel_checkbox(
     message: str = "",
     info_panel: Any = None,
     min_selections: int = 0,
+    as_popup: bool = False,
 ) -> Optional[List[Any]]:
     """
     Muestra un panel de selección múltiple.
@@ -344,6 +352,7 @@ def panel_checkbox(
         message: Mensaje informativo
         info_panel: Panel de información adicional (opcional)
         min_selections: Mínimo de selecciones requeridas
+        as_popup: Si True, no limpia la pantalla (aparece como popup)
 
     Returns:
         Lista de valores seleccionados o None si cancela
@@ -364,7 +373,8 @@ def panel_checkbox(
         info_panel=info_panel,
     )
 
-    clear_screen()
+    if not as_popup:
+        clear_screen()
 
     with Live(console=console, auto_refresh=False, screen=False) as live:
         display = build_display(state)
@@ -375,7 +385,8 @@ def panel_checkbox(
             n_opts = len(state.options)
 
             if key == 'esc':
-                clear_screen()
+                if not as_popup:
+                    clear_screen()
                 return None
 
             elif key == 'enter':
@@ -384,7 +395,8 @@ def panel_checkbox(
                 if len(selected) < min_selections:
                     state.error_message = f"Selecciona al menos {min_selections}"
                 else:
-                    clear_screen()
+                    if not as_popup:
+                        clear_screen()
                     return selected
 
             elif key == 'up':
@@ -411,7 +423,8 @@ def panel_checkbox(
             display = build_display(state)
             live.update(display, refresh=True)
 
-    clear_screen()
+    if not as_popup:
+        clear_screen()
     return None
 
 
@@ -422,6 +435,7 @@ def panel_text(
     default: str = "",
     validator: Optional[Callable[[str], Union[bool, str]]] = None,
     info_panel: Any = None,
+    as_popup: bool = False,
 ) -> Optional[str]:
     """
     Muestra un panel de entrada de texto.
@@ -433,6 +447,7 @@ def panel_text(
         default: Valor por defecto
         validator: Función de validación (retorna True o mensaje de error)
         info_panel: Panel de información adicional (opcional)
+        as_popup: Si True, no limpia la pantalla (aparece como popup)
 
     Returns:
         Texto ingresado o None si cancela
@@ -449,7 +464,8 @@ def panel_text(
         info_panel=info_panel,
     )
 
-    clear_screen()
+    if not as_popup:
+        clear_screen()
 
     with Live(console=console, auto_refresh=False, screen=False) as live:
         display = build_display(state)
@@ -459,7 +475,8 @@ def panel_text(
             key = get_key()
 
             if key == 'esc':
-                clear_screen()
+                if not as_popup:
+                    clear_screen()
                 return None
 
             elif key == 'enter':
@@ -476,7 +493,8 @@ def panel_text(
                         live.update(display, refresh=True)
                         continue
 
-                clear_screen()
+                if not as_popup:
+                    clear_screen()
                 return value
 
             elif key == 'backspace':
@@ -490,7 +508,8 @@ def panel_text(
             display = build_display(state)
             live.update(display, refresh=True)
 
-    clear_screen()
+    if not as_popup:
+        clear_screen()
     return None
 
 
@@ -619,6 +638,7 @@ def panel_alert_confirm(
     default: bool = True,
     yes_label: str = "Sí",
     no_label: str = "No",
+    as_popup: bool = False,
 ) -> Optional[bool]:
     """
     Muestra un panel de confirmación estilo alerta (borde doble, magenta/warning).
@@ -631,6 +651,7 @@ def panel_alert_confirm(
         default: Valor por defecto (True = Sí)
         yes_label: Etiqueta del botón Sí
         no_label: Etiqueta del botón No
+        as_popup: Si True, no limpia la pantalla (aparece como popup)
 
     Returns:
         True si confirma, False si rechaza, None si cancela (Esc)
@@ -669,7 +690,8 @@ def panel_alert_confirm(
     nav_text = Text()
     nav_text.append("\n  [s/n] Seleccionar  [Enter] Confirmar  [Esc] Cancelar", style=p.muted)
 
-    clear_screen()
+    if not as_popup:
+        clear_screen()
 
     with Live(console=console, auto_refresh=False, screen=False) as live:
         live.update(Group(Text(""), panel, nav_text), refresh=True)
@@ -678,16 +700,12 @@ def panel_alert_confirm(
             key = get_key()
 
             if key == 'esc':
-                clear_screen()
                 return None
             elif key == 'enter':
-                clear_screen()
                 return default
             elif key == 's' or key == 'y':
-                clear_screen()
                 return True
             elif key == 'n':
-                clear_screen()
                 return False
 
 
@@ -719,3 +737,71 @@ def quick_checkbox(
         for c in choices
     ]
     return panel_checkbox(title, options, message, min_selections=min_selections)
+
+
+def export_popup(n_analyses: int = 1) -> Optional[str]:
+    """
+    Popup compacto para elegir formato de exportación.
+
+    No limpia la pantalla - aparece como popup sobre el contenido actual.
+
+    Args:
+        n_analyses: Número de análisis a exportar (para mostrar info)
+
+    Returns:
+        "excel", "latex", "both", o None si cancela
+    """
+    console = get_console()
+    p = get_palette()
+    from rich.live import Live
+
+    # Construir popup compacto
+    content = Text()
+
+    if n_analyses == 1:
+        content.append("  Exportar ficha actual\n\n", style=p.muted)
+    else:
+        content.append(f"  Exportar {n_analyses} análisis\n\n", style=p.muted)
+
+    content.append("  [", style=p.muted)
+    content.append("e", style=f"bold {p.accent}")
+    content.append("] Excel (.xlsx)\n", style="")
+
+    content.append("  [", style=p.muted)
+    content.append("l", style=f"bold {p.accent}")
+    content.append("] LaTeX (.tex)\n", style="")
+
+    content.append("  [", style=p.muted)
+    content.append("a", style=f"bold {p.accent}")
+    content.append("] Ambos formatos\n", style="")
+
+    popup = Panel(
+        content,
+        title=f"[bold {p.accent}] Exportar [/]",
+        border_style=p.accent,
+        box=box.DOUBLE,
+        padding=(0, 2),
+    )
+
+    nav = Text()
+    nav.append("\n  [", style=p.muted)
+    nav.append("e/l/a", style=f"bold {p.nav_key}")
+    nav.append("] Seleccionar  ", style=p.muted)
+    nav.append("[", style=p.muted)
+    nav.append("Esc", style=f"bold {p.nav_cancel}")
+    nav.append("] Cancelar", style=p.muted)
+
+    with Live(console=console, auto_refresh=False, screen=False) as live:
+        live.update(Group(Text(""), popup, nav), refresh=True)
+
+        while True:
+            key = get_key()
+
+            if key == 'esc':
+                return None
+            elif key == 'e':
+                return "excel"
+            elif key == 'l':
+                return "latex"
+            elif key == 'a':
+                return "both"

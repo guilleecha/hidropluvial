@@ -20,7 +20,7 @@ from rich.text import Text
 from rich.live import Live
 from rich import box
 
-from hidropluvial.cli.theme import get_palette, get_console
+from hidropluvial.cli.theme import get_palette, get_console, print_success, print_info
 from hidropluvial.cli.viewer.terminal import clear_screen, get_key
 from hidropluvial.project import ProjectManager, Project, Basin
 
@@ -309,14 +309,12 @@ def interactive_basin_viewer(
                     basin = basins[current_idx]
                     _edit_basin(project_manager, project, basin)
                     project = project_manager.get_project(project.id)
-                    clear_screen()
                     live.start()
                 elif key == 'a':
                     # Agregar cuenca
                     live.stop()
                     _add_basin_menu(project_manager, project)
                     project = project_manager.get_project(project.id)
-                    clear_screen()
                     live.start()
                 elif key == 'enter' and n_basins > 0:
                     # Ver analisis de la cuenca
@@ -324,7 +322,6 @@ def interactive_basin_viewer(
                     basin = basins[current_idx]
                     _view_basin_analyses(project_manager, project, basin)
                     project = project_manager.get_project(project.id)
-                    clear_screen()
                     live.start()
                 else:
                     continue
@@ -409,7 +406,7 @@ def _create_new_basin(project_manager: ProjectManager, project: Project) -> None
     runner = AnalysisRunner(config, project_id=project.id)
     updated_project, basin = runner.run()
 
-    print(f"\n  Cuenca '{basin.name}' agregada al proyecto.\n")
+    print_success(f"Cuenca '{basin.name}' agregada al proyecto")
 
     # Menu post-ejecucion
     menu = PostExecutionMenu(updated_project, basin, config.c, config.cn, config.length_m)

@@ -19,18 +19,42 @@ from hidropluvial.project import Project
 class ExportMenu(SessionMenu):
     """Menú para exportar una cuenca con opciones de filtrado."""
 
-    def __init__(self, basin: Basin, project: Optional[Project] = None):
+    def __init__(
+        self,
+        basin: Basin,
+        project: Optional[Project] = None,
+        preselected_analyses: Optional[list] = None,
+    ):
+        """
+        Inicializa el menú de exportación.
+
+        Args:
+            basin: Cuenca a exportar
+            project: Proyecto al que pertenece (opcional)
+            preselected_analyses: Lista de análisis pre-seleccionados para exportar.
+                                  Si se proporciona, no se pregunta por filtrado.
+        """
         super().__init__(basin)
         self.project = project
+        self.preselected_analyses = preselected_analyses
 
     def show(self) -> None:
         """Muestra el menú de exportacion."""
-        if not self.basin.analyses:
-            self.echo("\n  La cuenca no tiene analisis para exportar.\n")
+        # Determinar qué análisis exportar
+        if self.preselected_analyses is not None:
+            analyses_to_export = self.preselected_analyses
+            if not analyses_to_export:
+                self.info("No hay análisis seleccionados para exportar.")
+                return
+        else:
+            analyses_to_export = self.basin.analyses
+
+        if not analyses_to_export:
+            self.info("La cuenca no tiene analisis para exportar.")
             return
 
         self.header("EXPORTAR CUENCA")
-        self._show_basin_info()
+        self._show_basin_info(analyses_to_export)
 
         # Preguntar formato
         format_choice = self.select(
@@ -46,23 +70,32 @@ class ExportMenu(SessionMenu):
         if format_choice is None or "Cancelar" in format_choice:
             return
 
-        # Preguntar si filtrar
-        use_filter = False
-        if len(self.basin.analyses) > 1:
-            use_filter = self.confirm(
-                f"¿Filtrar análisis? (hay {len(self.basin.analyses)} disponibles)",
-                default=False,
-            )
-
-        # Obtener indices de analisis a incluir
+        # Si ya hay análisis pre-seleccionados, no preguntar por filtrado adicional
         selected_indices = None
-        if use_filter:
-            selected_indices = self._select_analyses()
-            if selected_indices is None:
-                return
-            if not selected_indices:
-                self.echo("\n  No se seleccionaron análisis.\n")
-                return
+        if self.preselected_analyses is not None:
+            # Convertir análisis pre-seleccionados a índices
+            selected_indices = []
+            for a in self.preselected_analyses:
+                for i, ba in enumerate(self.basin.analyses):
+                    if ba.id == a.id:
+                        selected_indices.append(i)
+                        break
+        else:
+            # Preguntar si filtrar (comportamiento original)
+            use_filter = False
+            if len(self.basin.analyses) > 1:
+                use_filter = self.confirm(
+                    f"¿Filtrar análisis? (hay {len(self.basin.analyses)} disponibles)",
+                    default=False,
+                )
+
+            if use_filter:
+                selected_indices = self._select_analyses()
+                if selected_indices is None:
+                    return
+                if not selected_indices:
+                    self.info("No se seleccionaron análisis.")
+                    return
 
         # Directorio de salida organizado
         project_id = self.project.id if self.project else None
@@ -74,7 +107,7 @@ class ExportMenu(SessionMenu):
             project_id,
             project_name,
         )
-        self.echo(f"\n  Directorio de salida: {output_dir.absolute()}")
+        self.info(f"Directorio de salida: {output_dir.absolute()}")
 
         # Nombre base para archivos
         default_name = self.basin.name.lower().replace(" ", "_")
@@ -86,22 +119,28 @@ class ExportMenu(SessionMenu):
         if "LaTeX" in format_choice or "Ambos" in format_choice:
             self._export_latex(output_dir, default_name, selected_indices)
 
-    def _show_basin_info(self) -> None:
+    def _show_basin_info(self, analyses_to_export: list = None) -> None:
         """Muestra información de la cuenca."""
-        self.echo(f"\n  Cuenca: {self.basin.name}")
-        self.echo(f"  Analisis: {len(self.basin.analyses)}")
+        analyses = analyses_to_export or self.basin.analyses
+        total_analyses = len(self.basin.analyses)
+        export_count = len(analyses)
 
-        # Mostrar resumen de análisis
-        tr_values = sorted(set(a.storm.return_period for a in self.basin.analyses))
-        tc_methods = sorted(set(a.hydrograph.tc_method for a in self.basin.analyses))
+        self.info(f"Cuenca: {self.basin.name}")
+        if export_count < total_analyses:
+            self.info(f"Analisis a exportar: {export_count} de {total_analyses}")
+        else:
+            self.info(f"Analisis: {export_count}")
 
-        self.echo(f"  Períodos de retorno: {tr_values}")
-        self.echo(f"  Métodos Tc: {tc_methods}")
-        self.echo("")
+        # Mostrar resumen de análisis a exportar
+        tr_values = sorted(set(a.storm.return_period for a in analyses))
+        tc_methods = sorted(set(a.hydrograph.tc_method for a in analyses))
+
+        self.info(f"Períodos de retorno: {tr_values}")
+        self.info(f"Métodos Tc: {tc_methods}")
 
     def _select_analyses(self) -> Optional[list[int]]:
         """Permite seleccionar que analisis incluir."""
-        self.echo("\n  Selecciona los analisis a incluir:\n")
+        self.info("Selecciona los analisis a incluir:")
 
         # Crear opciones con checkbox
         choices = []
@@ -139,20 +178,30 @@ class ExportMenu(SessionMenu):
         excel_dir.mkdir(parents=True, exist_ok=True)
         output_path = excel_dir / f"{base_name}.xlsx"
 
-        # Filtrar analisis si es necesario
+        # Filtrar analisis si es necesario (sin deepcopy para mejor rendimiento)
         if selected_indices is not None:
+            from hidropluvial.models import Basin
             analyses_to_export = [self.basin.analyses[i] for i in selected_indices]
-            # Create a filtered basin for export
-            from copy import deepcopy
-            filtered_basin = deepcopy(self.basin)
-            filtered_basin.analyses = analyses_to_export
-            basin_to_export = filtered_basin
+            # Crear cuenca ligera con solo los datos necesarios
+            basin_to_export = Basin(
+                id=self.basin.id,
+                name=self.basin.name,
+                area_ha=self.basin.area_ha,
+                slope_pct=self.basin.slope_pct,
+                p3_10=self.basin.p3_10,
+                c=self.basin.c,
+                cn=self.basin.cn,
+                length_m=self.basin.length_m,
+                notes=self.basin.notes,
+            )
+            basin_to_export.tc_results = self.basin.tc_results
+            basin_to_export.analyses = analyses_to_export
         else:
             basin_to_export = self.basin
 
         try:
             export_to_excel(basin_to_export, output_path)
-            self.echo(f"\n  Excel exportado: {output_path.name}")
+            self.success(f"Excel exportado: {output_path.name}")
 
         except Exception as e:
             self.error(f"Error al exportar Excel: {e}")
@@ -165,18 +214,30 @@ class ExportMenu(SessionMenu):
         latex_dir = output_dir / "latex"
 
         try:
-            # Filtrar analisis si es necesario
+            # Filtrar analisis si es necesario (sin deepcopy para mejor rendimiento)
             if selected_indices is not None:
-                from copy import deepcopy
-                filtered_basin = deepcopy(self.basin)
-                filtered_basin.analyses = [self.basin.analyses[i] for i in selected_indices]
-                basin_to_export = filtered_basin
-                self.echo("  (Nota: El filtrado de analisis se aplica al reporte LaTeX)")
+                from hidropluvial.models import Basin
+                analyses_to_export = [self.basin.analyses[i] for i in selected_indices]
+                # Crear cuenca ligera con solo los datos necesarios
+                basin_to_export = Basin(
+                    id=self.basin.id,
+                    name=self.basin.name,
+                    area_ha=self.basin.area_ha,
+                    slope_pct=self.basin.slope_pct,
+                    p3_10=self.basin.p3_10,
+                    c=self.basin.c,
+                    cn=self.basin.cn,
+                    length_m=self.basin.length_m,
+                    notes=self.basin.notes,
+                )
+                basin_to_export.tc_results = self.basin.tc_results
+                basin_to_export.analyses = analyses_to_export
+                self.note("El filtrado de analisis se aplica al reporte LaTeX")
             else:
                 basin_to_export = self.basin
 
             generate_basin_report(basin_to_export, output_dir=latex_dir)
-            self.echo(f"\n  Reporte LaTeX generado en: {latex_dir}")
+            self.success(f"Reporte LaTeX generado en: {latex_dir}")
         except SystemExit:
             pass  # Capturar typer.Exit
         except Exception as e:
@@ -303,7 +364,7 @@ class ExportBasinSelector(BaseMenu):
         projects = project_manager.list_projects()
 
         if not projects:
-            self.echo("\n  No hay proyectos disponibles.\n")
+            self.info("No hay proyectos disponibles.")
             return
 
         self.header("EXPORTAR CUENCA")
@@ -324,14 +385,14 @@ class ExportBasinSelector(BaseMenu):
         project = project_manager.get_project(project_id)
 
         if not project or not project.basins:
-            self.echo("\n  Este proyecto no tiene cuencas.\n")
+            self.info("Este proyecto no tiene cuencas.")
             return
 
         # Filtrar cuencas con análisis
         basins_with_analyses = [b for b in project.basins if b.analyses]
 
         if not basins_with_analyses:
-            self.echo("\n  No hay cuencas con analisis para exportar.\n")
+            self.info("No hay cuencas con analisis para exportar.")
             return
 
         # Seleccionar cuenca

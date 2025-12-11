@@ -7,7 +7,7 @@ Contiene todas las funciones que manejan acciones del usuario
 
 from typing import Optional
 
-from hidropluvial.cli.theme import print_info
+from hidropluvial.cli.theme import print_info, print_success, print_error
 from hidropluvial.cli.viewer.terminal import clear_screen
 from hidropluvial.project import ProjectManager, Project, Basin
 
@@ -19,7 +19,7 @@ def edit_project(project_manager: ProjectManager, project_id: str) -> None:
     clear_screen()
     project = project_manager.get_project(project_id)
     if not project:
-        print("\n  Proyecto no encontrado.\n")
+        print_error("Proyecto no encontrado")
         return
 
     editor = ProjectEditor(project, project_manager)
@@ -148,7 +148,7 @@ def create_new_basin(project_manager: ProjectManager, project: Project) -> None:
     runner = AnalysisRunner(config, project_id=project.id)
     updated_project, basin = runner.run()
 
-    print(f"\n  Cuenca '{basin.name}' agregada al proyecto.\n")
+    print_success(f"Cuenca '{basin.name}' agregada al proyecto")
 
     menu = PostExecutionMenu(updated_project, basin, config.c, config.cn, config.length_m)
     menu.show()
@@ -196,16 +196,16 @@ def view_basin_analyses(project_manager: ProjectManager, project: Project, basin
         # Callback para editar nota
         def on_edit_note(analysis_id: str, current_note: str) -> Optional[str]:
             from hidropluvial.cli.viewer.panel_input import panel_text
-            clear_screen()
             new_note = panel_text(
                 title=f"Nota para análisis {analysis_id[:8]}:",
                 default=current_note or "",
+                as_popup=True,
             )
             if new_note is not None:
                 db.update_analysis_note(analysis_id, new_note if new_note else None)
             return new_note
 
-        # Callback para eliminar
+        # Callback para eliminar (sin confirmación - cada visor la maneja)
         def on_delete(analysis_id: str) -> bool:
             return db.delete_analysis(analysis_id)
 
@@ -217,6 +217,7 @@ def view_basin_analyses(project_manager: ProjectManager, project: Project, basin
                     basin.name,
                     on_edit_note=on_edit_note,
                     on_delete=on_delete,
+                    on_export=on_export,
                     start_index=index,
                     basin_id=basin.id,
                     db=db,
@@ -227,9 +228,9 @@ def view_basin_analyses(project_manager: ProjectManager, project: Project, basin
         def on_add_analysis() -> None:
             add_analysis_to_basin(basin)
 
-        # Callback para exportar
-        def on_export() -> None:
-            export_basin(basin, project)
+        # Callback para exportar (recibe lista de análisis a exportar)
+        def on_export(analyses_to_export: list) -> None:
+            export_basin(basin, project, analyses_to_export)
 
         # Callback para comparar (recibe lista de análisis marcados o todos)
         def on_compare(analyses_to_compare: list) -> None:
@@ -295,14 +296,88 @@ def add_analysis_to_basin(basin: Basin) -> None:
 
     menu = AddAnalysisMenu(basin, basin.c, basin.cn, basin.length_m)
     menu.show()
+    clear_screen()
 
 
-def export_basin(basin: Basin, project: Project) -> None:
-    """Exporta resultados de una cuenca."""
-    from hidropluvial.cli.wizard.menus.export_menu import ExportMenu
+def export_basin(
+    basin: Basin,
+    project: Project,
+    preselected_analyses: list = None,
+) -> None:
+    """
+    Exporta resultados de una cuenca usando popup compacto.
 
-    export_menu = ExportMenu(basin, project)
-    export_menu.show()
+    Args:
+        basin: Cuenca a exportar
+        project: Proyecto al que pertenece
+        preselected_analyses: Lista de análisis pre-seleccionados para exportar.
+                              Si es None, se exportan todos.
+    """
+    from hidropluvial.cli.viewer.panel_input import export_popup
+    from hidropluvial.cli.output_manager import get_basin_output_dir
+    from hidropluvial.cli.theme import print_success, print_error
+
+    analyses_to_export = preselected_analyses if preselected_analyses else basin.analyses
+
+    if not analyses_to_export:
+        print_info("No hay análisis para exportar.")
+        return
+
+    # Mostrar popup de formato
+    format_choice = export_popup(len(analyses_to_export))
+
+    if format_choice is None:
+        return
+
+    # Directorio de salida
+    project_id = project.id if project else None
+    project_name = project.name if project else None
+
+    output_dir = get_basin_output_dir(
+        basin.id,
+        basin.name,
+        project_id,
+        project_name,
+    )
+
+    # Crear basin filtrada si es necesario (sin deepcopy para mejor rendimiento)
+    if preselected_analyses:
+        # Crear una cuenca ligera con solo los datos necesarios
+        basin_to_export = Basin(
+            id=basin.id,
+            name=basin.name,
+            area_ha=basin.area_ha,
+            slope_pct=basin.slope_pct,
+            p3_10=basin.p3_10,
+            c=basin.c,
+            cn=basin.cn,
+            length_m=basin.length_m,
+            notes=basin.notes,
+        )
+        basin_to_export.tc_results = basin.tc_results
+        basin_to_export.analyses = analyses_to_export
+    else:
+        basin_to_export = basin
+
+    base_name = basin.name.lower().replace(" ", "_")
+
+    try:
+        if format_choice in ("excel", "both"):
+            from hidropluvial.cli.basin.export import export_to_excel
+            excel_dir = output_dir / "excel"
+            excel_dir.mkdir(parents=True, exist_ok=True)
+            output_path = excel_dir / f"{base_name}.xlsx"
+            export_to_excel(basin_to_export, output_path)
+            print_success(f"Excel: {output_path}")
+
+        if format_choice in ("latex", "both"):
+            from hidropluvial.cli.basin.report import generate_basin_report
+            latex_dir = output_dir / "latex"
+            generate_basin_report(basin_to_export, output_dir=latex_dir)
+            print_success(f"LaTeX: {latex_dir}")
+
+    except Exception as e:
+        print_error(f"Error al exportar: {e}")
 
 
 def compare_hydrographs(analyses: list, basin_name: str, all_analyses: list = None) -> None:

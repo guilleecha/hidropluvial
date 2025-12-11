@@ -208,7 +208,7 @@ class BaseMenu(ABC):
             Basin seleccionada o None si cancela
         """
         if not project.basins:
-            self.echo("  No hay cuencas en este proyecto.")
+            self.info("No hay cuencas en este proyecto.")
             return None
 
         choices = []
@@ -260,7 +260,7 @@ class BaseMenu(ABC):
         runner = AnalysisRunner(config, project_id=project.id)
         updated_project, basin = runner.run()
 
-        self.echo(f"\n  Cuenca '{basin.name}' agregada al proyecto.\n")
+        self.success(f"Cuenca '{basin.name}' agregada al proyecto.")
 
         if show_post_menu:
             menu = PostExecutionMenu(
@@ -319,7 +319,7 @@ class BaseMenu(ABC):
 
         pm = project_manager or self.manager
         if pm.delete_basin(project, basin.id):
-            self.echo(f"\n  Cuenca '{basin.name}' eliminada.\n")
+            self.success(f"Cuenca '{basin.name}' eliminada.")
             return True
 
         self.error("No se pudo eliminar la cuenca")
@@ -360,18 +360,16 @@ class SessionMenu(BaseMenu):
             Función callback que recibe (analysis_id, current_note) -> str
         """
         from hidropluvial.database import get_database
-        from hidropluvial.cli.viewer.terminal import clear_screen
         from hidropluvial.cli.viewer.panel_input import panel_text
 
         if db is None:
             db = get_database()
 
         def on_edit_note(analysis_id: str, current_note: str) -> str:
-            clear_screen()
-            print(f"\n  Editando nota del análisis {analysis_id[:8]}...\n")
             new_note = panel_text(
-                title="Nueva nota (vacío para eliminar):",
+                title=f"Nota para análisis {analysis_id[:8]}:",
                 default=current_note or "",
+                as_popup=True,
             )
             if new_note is not None:
                 db.update_analysis_note(analysis_id, new_note if new_note else None)
@@ -392,7 +390,6 @@ class SessionMenu(BaseMenu):
             Función callback que recibe (analysis_id) -> bool
         """
         from hidropluvial.database import get_database
-        from hidropluvial.cli.viewer.terminal import clear_screen
         from hidropluvial.cli.viewer.panel_input import panel_confirm
 
         if db is None:
@@ -400,11 +397,10 @@ class SessionMenu(BaseMenu):
 
         def on_delete(analysis_id: str) -> bool:
             if confirm_prompt:
-                clear_screen()
-                print(f"\n  ¿Eliminar análisis {analysis_id[:8]}?\n")
                 if not panel_confirm(
-                    title="¿Confirmar eliminación?",
+                    title=f"¿Eliminar análisis {analysis_id[:8]}?",
                     default=False,
+                    as_popup=True,
                 ):
                     return False
 
@@ -435,7 +431,7 @@ class SessionMenu(BaseMenu):
             name = self._basin.name
 
         if not analyses:
-            self.echo("  No hay análisis disponibles.")
+            self.info("No hay análisis disponibles.")
             return
 
         from hidropluvial.cli.interactive_viewer import interactive_hydrograph_viewer
@@ -469,7 +465,7 @@ class SessionMenu(BaseMenu):
             name = self._basin.name
 
         if not analyses:
-            self.echo("  No hay análisis disponibles.")
+            self.info("No hay análisis disponibles.")
             return
 
         from hidropluvial.cli.viewer.table_viewer import interactive_table_viewer

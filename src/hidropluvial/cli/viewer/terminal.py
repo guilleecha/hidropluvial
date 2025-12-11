@@ -9,8 +9,17 @@ import sys
 
 
 def clear_screen() -> None:
-    """Limpia la pantalla de la terminal."""
-    os.system('cls' if os.name == 'nt' else 'clear')
+    """Limpia la pantalla de la terminal y resetea el cursor."""
+    if os.name == 'nt':
+        os.system('cls')
+    else:
+        os.system('clear')
+    # Adicionalmente, usar secuencias ANSI para asegurar limpieza completa
+    # \033[2J - limpia toda la pantalla
+    # \033[H - mueve cursor a inicio (home)
+    # \033[3J - limpia el scrollback buffer
+    sys.stdout.write('\033[2J\033[H\033[3J')
+    sys.stdout.flush()
 
 
 def get_key() -> str:

@@ -21,7 +21,7 @@ from rich.panel import Panel
 from rich.live import Live
 from rich import box
 
-from hidropluvial.cli.theme import get_palette, get_console
+from hidropluvial.cli.theme import get_palette, get_console, print_info
 from hidropluvial.cli.viewer.terminal import clear_screen, get_key
 from hidropluvial.cli.preview import sparkline
 from hidropluvial.cli.viewer.filters import filter_analyses
@@ -390,7 +390,13 @@ def build_display(
             if has_export:
                 nav_text2.append("[", style=p.muted)
                 nav_text2.append("x", style=f"bold {p.accent}")
-                nav_text2.append("] Exportar  ", style=p.muted)
+                # Mostrar qué se va a exportar
+                if marked_indices:
+                    nav_text2.append(f"] Exportar ({len(marked_indices)})  ", style=p.muted)
+                elif active_filters:
+                    nav_text2.append(f"] Exportar ({n_analyses} filtrados)  ", style=p.muted)
+                else:
+                    nav_text2.append("] Exportar  ", style=p.muted)
             if has_edit_basin:
                 nav_text2.append("[", style=p.muted)
                 nav_text2.append("b", style=f"bold {p.accent}")
@@ -444,7 +450,7 @@ def interactive_table_viewer(
     on_delete: Optional[Callable[[str], bool]] = None,
     on_view_detail: Optional[Callable[[int, list, dict], None]] = None,
     on_add_analysis: Optional[Callable[[], None]] = None,
-    on_export: Optional[Callable[[], None]] = None,
+    on_export: Optional[Callable[[list], None]] = None,
     on_compare: Optional[Callable[[list], None]] = None,
     on_edit_basin: Optional[Callable[[], None]] = None,
     max_visible_rows: int = 25,
@@ -457,11 +463,12 @@ def interactive_table_viewer(
     - Flechas arriba/abajo: cambiar análisis seleccionado
     - Espacio: marcar/desmarcar para eliminación
     - i: invertir selección
+    - u: deseleccionar todo
     - d: eliminar marcados (o actual si no hay marcados)
     - e: editar nota del análisis actual
     - Enter: ver ficha detallada
     - a: agregar análisis
-    - x: exportar resultados
+    - x: exportar resultados (marcados > filtrados > todos)
     - c: comparar hidrogramas
     - b: editar cuenca
     - f: filtrar análisis
@@ -474,7 +481,7 @@ def interactive_table_viewer(
         on_delete: Callback(analysis_id) -> bool
         on_view_detail: Callback(index, filtered_analyses, active_filters) para ver detalle
         on_add_analysis: Callback() para agregar análisis
-        on_export: Callback() para exportar
+        on_export: Callback(analyses_list) para exportar (recibe lista a exportar)
         on_compare: Callback(analyses_list) para comparar hidrogramas marcados
         on_edit_basin: Callback() para editar cuenca
         max_visible_rows: Máximo de filas visibles en la tabla
@@ -483,7 +490,7 @@ def interactive_table_viewer(
         Lista actualizada de análisis
     """
     if not analyses:
-        print("  No hay análisis disponibles.")
+        print_info("No hay análisis disponibles.")
         return analyses
 
     console = get_console()
@@ -644,6 +651,7 @@ def interactive_table_viewer(
                     marked_indices.clear()
                 elif key == 'enter' and on_view_detail:
                     live.stop()
+                    clear_screen()
                     # Pasar índice en lista filtrada, la lista filtrada y los filtros activos
                     on_view_detail(current_idx, filtered_analyses, active_filters)
                     clear_screen()
@@ -655,7 +663,6 @@ def interactive_table_viewer(
                     new_note = on_edit_note(analysis.id, current_note)
                     if new_note is not None:
                         analysis.note = new_note if new_note else None
-                    clear_screen()
                     live.start()
                 elif key == 'd' and on_delete:
                     # Entrar en modo confirmación
@@ -667,17 +674,24 @@ def interactive_table_viewer(
                     needs_reload = True
                     break
                 elif key == 'x' and on_export:
-                    # Exportar
+                    # Exportar: prioridad marcados > filtrados > todos
                     live.stop()
-                    on_export()
-                    clear_screen()
+                    if marked_indices:
+                        # Exportar solo los marcados
+                        analyses_to_export = [filtered_analyses[i] for i in sorted(marked_indices)]
+                    elif active_filters:
+                        # Exportar los filtrados
+                        analyses_to_export = filtered_analyses
+                    else:
+                        # Exportar todos
+                        analyses_to_export = all_analyses
+                    on_export(analyses_to_export)
                     live.start()
                 elif key == 'c' and on_compare and marked_indices:
                     # Comparar hidrogramas (solo los marcados)
                     live.stop()
                     analyses_to_compare = [filtered_analyses[i] for i in sorted(marked_indices)]
                     on_compare(analyses_to_compare)
-                    clear_screen()
                     live.start()
                 elif key == 'b' and on_edit_basin:
                     # Editar cuenca

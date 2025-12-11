@@ -59,6 +59,9 @@ class ColorPalette:
     marked: str          # Items marcados para eliminación
     selected: str        # Item actualmente seleccionado/cursor
 
+    # Tema de gráficos plotext
+    plot_theme: str = "clear"  # Tema de plotext: clear, default, dark, pro, etc.
+
 
 # Tema por defecto - Estilo "programador" con colores pasteles
 THEME_DEFAULT = ColorPalette(
@@ -86,6 +89,7 @@ THEME_DEFAULT = ColorPalette(
     input_text="#ffffff",   # Blanco para texto de entrada
     marked="#d75f5f",       # Rojo para items marcados
     selected="#5f87af",     # Azul para item seleccionado
+    plot_theme="clear",     # Tema plotext sin fondo
 )
 
 # Tema Monokai - Inspirado en el esquema de colores Monokai
@@ -114,6 +118,7 @@ THEME_MONOKAI = ColorPalette(
     input_text="#f8f8f2",   # Blanco para texto de entrada
     marked="#f92672",       # Rosa/rojo para items marcados
     selected="#66d9ef",     # Cyan para item seleccionado
+    plot_theme="dark",      # Tema plotext oscuro para Monokai
 )
 
 # Tema Nord - Colores fríos y suaves
@@ -142,6 +147,7 @@ THEME_NORD = ColorPalette(
     input_text="#eceff4",   # Blanco Nord para entrada
     marked="#bf616a",       # Rojo Nord para items marcados
     selected="#88c0d0",     # Cyan Nord para item seleccionado
+    plot_theme="pro",       # Tema plotext pro para Nord
 )
 
 # Tema Minimal - Solo grises y un acento
@@ -170,6 +176,7 @@ THEME_MINIMAL = ColorPalette(
     input_text="#ffffff",   # Blanco para entrada
     marked="#ff8787",       # Rojo para items marcados
     selected="#5fafff",     # Azul para item seleccionado
+    plot_theme="clear",     # Tema plotext limpio para Minimal
 )
 
 # Mapeo de nombres a temas

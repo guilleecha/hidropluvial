@@ -92,4 +92,8 @@ def handle_navigate(
             else:
                 state.input_buffer = ""
 
+    else:
+        # Tecla no reconocida, no actualizar display
+        return {"_no_update": True}
+
     return None

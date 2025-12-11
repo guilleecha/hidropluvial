@@ -161,6 +161,7 @@ def menu_panel(
     subtitle: str = "",
     info_panel: Any = None,
     allow_back: bool = True,
+    as_popup: bool = False,
 ) -> Optional[Any]:
     """
     Muestra un menú interactivo con panel.
@@ -171,6 +172,7 @@ def menu_panel(
         subtitle: Subtítulo opcional
         info_panel: Panel de información adicional
         allow_back: Permitir volver con Esc
+        as_popup: Si True, no limpia la pantalla (para overlays)
 
     Returns:
         - El valor del item seleccionado
@@ -191,7 +193,8 @@ def menu_panel(
     if items[0].separator or items[0].disabled:
         state.selected_idx = get_next_valid_idx(items, 0, 1)
 
-    clear_screen()
+    if not as_popup:
+        clear_screen()
 
     with Live(console=console, auto_refresh=False, screen=False) as live:
         display = build_menu_display(state)

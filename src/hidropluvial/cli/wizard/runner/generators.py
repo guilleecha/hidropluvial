@@ -39,7 +39,7 @@ def get_storm_duration_and_dt(
     Determina la duración de tormenta y el intervalo de tiempo.
 
     Args:
-        storm_code: Código de tormenta (gz, bimodal, custom, blocks24, scs_ii, huff_qN)
+        storm_code: Código de tormenta (gz, bimodal, custom, blocks24, scs2, chicago, blocks, huff_qN)
         tc_hr: Tiempo de concentración en horas
         dt_min: Intervalo de tiempo configurado
         bimodal_duration_hr: Duración para tormentas bimodales
@@ -56,10 +56,14 @@ def get_storm_duration_and_dt(
         duration_hr = bimodal_duration_hr
     elif storm_code == "custom":
         duration_hr = custom_duration_hr
-    elif storm_code == "blocks24" or storm_code == "scs_ii":
+    elif storm_code in ("blocks24", "scs2", "scs_ii"):
+        # Tormentas de 24 horas
         duration_hr = 24.0
         if dt < 10.0:
             dt = 10.0
+    elif storm_code in ("chicago", "blocks"):
+        # Tormentas basadas en Tc (duración = 2×Tc)
+        duration_hr = max(tc_hr * 2, 1.0)
     elif storm_code.startswith("huff"):
         duration_hr = max(tc_hr * 2, 2.0)
     else:
@@ -99,6 +103,7 @@ def generate_hyetograph(
         Objeto HyetographResult
     """
     if storm_code == "gz":
+        # GZ: Bloques alternados con pico al inicio (1/6 de duración)
         peak_position = 1.0 / 6.0
         return alternating_blocks_dinagua(
             p3_10, tr, duration_hr, dt, None, peak_position
@@ -112,6 +117,30 @@ def generate_hyetograph(
             volume_split=bimodal_vol_split,
             peak_width_fraction=bimodal_peak_width,
         )
+
+    elif storm_code == "chicago":
+        # Chicago: Bloques alternados con pico central (simplificación)
+        # TODO: Implementar Chicago con coeficientes IDF Sherman
+        return alternating_blocks_dinagua(
+            p3_10, tr, duration_hr, dt, None, peak_position=0.5
+        )
+
+    elif storm_code == "blocks":
+        # Bloques alternados con pico central (estándar)
+        return alternating_blocks_dinagua(
+            p3_10, tr, duration_hr, dt, None, peak_position=0.5
+        )
+
+    elif storm_code == "blocks24":
+        # Bloques alternados 24h con pico central
+        return alternating_blocks_dinagua(
+            p3_10, tr, duration_hr, dt, None, peak_position=0.5
+        )
+
+    elif storm_code in ("scs2", "scs_ii"):
+        # SCS Type II: Distribución estándar NRCS
+        total_depth = dinagua_depth(p3_10, tr, duration_hr, None)
+        return scs_distribution(total_depth, duration_hr, dt, StormMethod.SCS_TYPE_II)
 
     elif storm_code == "custom":
         if custom_hyetograph_time and custom_hyetograph_depth:
@@ -141,11 +170,8 @@ def generate_hyetograph(
         total_depth = dinagua_depth(p3_10, tr, duration_hr, None)
         return huff_distribution(total_depth, duration_hr, dt, quartile=quartile)
 
-    elif storm_code == "scs_ii":
-        total_depth = dinagua_depth(p3_10, tr, duration_hr, None)
-        return scs_distribution(total_depth, duration_hr, dt, StormMethod.SCS_TYPE_II)
-
     else:
+        # Por defecto: bloques alternados DINAGUA
         return alternating_blocks_dinagua(
             p3_10, tr, duration_hr, dt, None
         )

@@ -334,11 +334,11 @@ class AddAnalysisMenu(SessionMenu):
                                 new_analyses.append((tc_method, storm_code, tr, x, runoff))
 
         if duplicates:
-            self.echo(f"\n  Se descartarán {len(duplicates)} análisis duplicados:")
+            self.warning(f"Se descartarán {len(duplicates)} análisis duplicados:")
             for dup in duplicates[:5]:
-                self.echo(f"    - {dup}")
+                self.info(f"  - {dup}")
             if len(duplicates) > 5:
-                self.echo(f"    ... y {len(duplicates) - 5} más")
+                self.info(f"  ... y {len(duplicates) - 5} más")
 
         if not new_analyses:
             self.warning("Todos los análisis seleccionados ya existen")
@@ -350,16 +350,16 @@ class AddAnalysisMenu(SessionMenu):
             esc_labels.append(f"Racional (C={self.c:.2f})")
         if "scs-cn" in runoff_methods:
             esc_labels.append(f"SCS-CN (CN={self.cn})")
-        self.echo(f"\n  Métodos de escorrentía: {', '.join(esc_labels)}")
+        self.info(f"Métodos de escorrentía: {', '.join(esc_labels)}")
 
         # Confirmar
-        self.echo(f"\n  Se agregarán {len(new_analyses)} análisis nuevos:")
+        self.note(f"Se agregarán {len(new_analyses)} análisis nuevos:")
         for tc, storm, tr, x, runoff in new_analyses[:5]:
             x_str = f", X={x:.2f}" if x != 1.0 else ""
             esc_label = "C" if runoff == "racional" else "CN"
-            self.echo(f"    + Tc={tc}, {storm}, Tr={tr}{x_str}, {esc_label}")
+            self.info(f"  + Tc={tc}, {storm}, Tr={tr}{x_str}, {esc_label}")
         if len(new_analyses) > 5:
-            self.echo(f"    ... y {len(new_analyses) - 5} más")
+            self.info(f"  ... y {len(new_analyses) - 5} más")
 
         if not self.confirm(f"\n¿Ejecutar {len(new_analyses)} análisis?", default=True):
             return
@@ -532,16 +532,15 @@ class AddAnalysisMenu(SessionMenu):
         icons = get_icons()
         options = []
 
-        # Sección de tipos de tormenta
-        options.append({"separator": True, "title": "Distribución temporal"})
+        # Sección de tormentas estandarizadas
+        options.append({"separator": True, "title": "Tormentas estandarizadas"})
 
-        storm_options = [
-            ("chicago", "c", "Chicago", "Pico sintético IDF"),
-            ("alternating_blocks", "a", "Bloques Alternados", "Distribución por bloques"),
-            ("bimodal", "b", "Bimodal", "Doble pico"),
+        standard_storms = [
+            ("gz", "g", "GZ (6 horas)", "DINAGUA Uruguay"),
+            ("scs2", "s", "SCS Type II", "NRCS estándar"),
         ]
 
-        for value, key, label, hint in storm_options:
+        for value, key, label, hint in standard_storms:
             options.append({
                 "key": key,
                 "label": label,
@@ -550,27 +549,61 @@ class AddAnalysisMenu(SessionMenu):
                 "checkable": True,
             })
 
-        # Opción para configurar bimodal
+        # Sección de distribución temporal
+        options.append({"separator": True, "title": "Distribución temporal"})
+
+        temporal_storms = [
+            ("chicago", "c", "Chicago", "Pico sintético IDF"),
+            ("blocks", "a", "Bloques Alternados", "Duración 2×Tc"),
+            ("blocks24", "h", "Bloques 24 horas", "Duración 24h"),
+        ]
+
+        for value, key, label, hint in temporal_storms:
+            options.append({
+                "key": key,
+                "label": label,
+                "value": value,
+                "hint": hint,
+                "checkable": True,
+            })
+
+        # Sección bimodal - solo seleccionable si está configurada
         bimodal_state = get_bimodal_state()
         bimodal_summary = build_bimodal_summary()
 
         options.append({"separator": True, "title": "Tormenta Bimodal"})
 
         if bimodal_state.is_configured:
-            # Ya configurado - mostrar resumen y opción de modificar
+            # Ya configurado - checkbox habilitado + opción de modificar
+            options.append({
+                "key": "b",
+                "label": "Bimodal",
+                "value": "bimodal",
+                "hint": bimodal_summary,
+                "checkable": True,
+            })
             options.append({
                 "key": "m",
-                "label": f"{icons.check} Configurado: {bimodal_summary}",
-                "hint": "Modificar",
+                "label": f"  {icons.edit} Modificar configuración",
+                "hint": "Abrir configurador",
                 "action": lambda: self._open_bimodal_inline_config(),
             })
         else:
-            # No configurado - opción para configurar
+            # No configurado - opción para configurar primero
             options.append({
                 "key": "m",
                 "label": f"{icons.add} Configurar tormenta Bi-Modal",
                 "hint": "Abrir configurador",
                 "action": lambda: self._open_bimodal_inline_config(),
+            })
+            # Bimodal como checkbox pero deshabilitado
+            options.append({
+                "key": "b",
+                "label": "Bimodal",
+                "value": "bimodal",
+                "hint": "Configura primero",
+                "checkable": True,
+                "disabled": True,
             })
 
         return options
@@ -656,10 +689,9 @@ class AddAnalysisMenu(SessionMenu):
         if not missing:
             return
 
-        self.echo("\n  Datos opcionales para métodos de Tc:\n")
+        self.note("Datos opcionales para métodos de Tc:")
         for m in missing:
-            self.echo(f"    • {m}")
-        self.echo("")
+            self.info(f"  • {m}")
 
         if not self.confirm("¿Deseas completar estos datos?", default=False):
             return
@@ -668,7 +700,7 @@ class AddAnalysisMenu(SessionMenu):
 
         # Solicitar longitud si falta
         if not self.length:
-            self.echo("\n  La longitud del cauce principal es necesaria para Kirpich y Temez.")
+            self.note("La longitud del cauce principal es necesaria para Kirpich y Temez.")
             length_str = self.text("Longitud del cauce (metros):", default="")
             if length_str:
                 try:
@@ -678,8 +710,6 @@ class AddAnalysisMenu(SessionMenu):
                     self.success(f"Longitud guardada: {self.length} m")
                 except ValueError:
                     self.warning("Valor inválido, se omite longitud")
-
-        self.echo("")
 
     def _offer_calculate_tc(self) -> bool:
         """Ofrece calcular Tc si no existe. Retorna True si se calculó alguno."""

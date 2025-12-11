@@ -11,21 +11,27 @@ Permite navegar entre análisis usando:
 Nota: Los filtros se heredan del listado de análisis (table_viewer).
 """
 
+import shutil
+from typing import TYPE_CHECKING
+
 from rich.console import Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
 from rich import box
 
-from hidropluvial.cli.theme import get_palette, get_console
+from hidropluvial.cli.theme import get_palette, get_console, print_info
 from hidropluvial.cli.viewer.terminal import clear_screen, get_key
 from hidropluvial.cli.viewer.components import build_analysis_list, build_info_panel
 from hidropluvial.cli.viewer.filters import format_active_filters
 from hidropluvial.cli.viewer.plots import build_combined_plot
 from hidropluvial.cli.viewer.detail_view import show_weighted_view
 
+if TYPE_CHECKING:
+    from rich.console import Console
 
-def get_responsive_layout(console: Console) -> dict:
+
+def get_responsive_layout(console: "Console") -> dict:
     """
     Calcula layout responsive basado en tamaño del terminal.
 
@@ -45,28 +51,34 @@ def get_responsive_layout(console: Console) -> dict:
     # - Nav bar: 2 líneas
     # Total mínimo: ~40 líneas
 
-    if term_height >= 50:
+    if term_height >= 55:
         # Terminal grande: todo con espacio
-        height_hyeto = 10
-        height_hydro = 14
-        show_table = True
-        max_table_rows = 6
-    elif term_height >= 42:
-        # Terminal mediana: gráficos estándar
         height_hyeto = 8
         height_hydro = 12
         show_table = True
-        max_table_rows = 5
-    elif term_height >= 35:
-        # Terminal pequeña: gráficos compactos, tabla mínima
-        height_hyeto = 7
+        max_table_rows = 6
+    elif term_height >= 45:
+        # Terminal mediana: gráficos estándar
+        height_hyeto = 6
         height_hydro = 10
         show_table = True
+        max_table_rows = 4
+    elif term_height >= 38:
+        # Terminal pequeña: gráficos compactos, tabla mínima
+        height_hyeto = 5
+        height_hydro = 8
+        show_table = True
         max_table_rows = 3
-    else:
+    elif term_height >= 30:
         # Terminal muy pequeña: sin tabla, gráficos mínimos
-        height_hyeto = 6
-        height_hydro = 9
+        height_hyeto = 4
+        height_hydro = 6
+        show_table = False
+        max_table_rows = 0
+    else:
+        # Terminal extremadamente pequeña: solo info y nav
+        height_hyeto = 3
+        height_hydro = 5
         show_table = False
         max_table_rows = 0
 
@@ -90,6 +102,7 @@ def build_viewer_display(
     p,
     on_edit_note: callable = None,
     on_delete: callable = None,
+    on_export: callable = None,
     has_weighted_data: bool = False,
 ) -> Group:
     """
@@ -149,6 +162,10 @@ def build_viewer_display(
         nav_text.append("[", style=p.muted)
         nav_text.append("p", style=f"bold {p.primary}")
         nav_text.append("] Ponderación  ", style=p.muted)
+    if on_export:
+        nav_text.append("[", style=p.muted)
+        nav_text.append("x", style=f"bold {p.accent}")
+        nav_text.append("] Exportar ficha  ", style=p.muted)
     if on_edit_note:
         nav_text.append("[", style=p.muted)
         nav_text.append("e", style=f"bold {p.primary}")
@@ -172,6 +189,7 @@ def interactive_hydrograph_viewer(
     height: int = None,  # Deprecated, se ignora
     on_edit_note: callable = None,
     on_delete: callable = None,
+    on_export: callable = None,
     start_index: int = 0,
     basin_id: str = None,
     db=None,
@@ -191,6 +209,7 @@ def interactive_hydrograph_viewer(
     - Flechas arriba/abajo: cambiar análisis secuencialmente
     - e: editar nota del análisis actual
     - d: eliminar análisis actual
+    - x: exportar ficha del análisis actual
     - p: ver tabla de ponderación (si existe)
     - q/ESC: volver al listado
 
@@ -201,6 +220,7 @@ def interactive_hydrograph_viewer(
         height: Alto del gráfico (no usado, se usan alturas fijas)
         on_edit_note: Callback(analysis_id, current_note) -> new_note para editar nota
         on_delete: Callback(analysis_id) -> bool para eliminar análisis
+        on_export: Callback(analyses_list) -> None para exportar análisis
         start_index: Índice inicial del análisis a mostrar
         basin_id: ID de la cuenca (para obtener datos de ponderación)
         db: DatabaseConnection (para obtener datos de ponderación)
@@ -210,7 +230,7 @@ def interactive_hydrograph_viewer(
         Lista actualizada de análisis (puede haber cambiado si se eliminaron)
     """
     if not analyses:
-        print("  No hay análisis disponibles.")
+        print_info("No hay análisis disponibles.")
         return analyses
 
     console = get_console()
@@ -220,6 +240,9 @@ def interactive_hydrograph_viewer(
     filtered_analyses = list(analyses)  # Copia para poder modificar
     current_idx = min(start_index, len(filtered_analyses) - 1) if filtered_analyses else 0
     active_filters = inherited_filters or {}
+
+    # Guardar tamaño inicial del terminal para detectar cambios
+    last_terminal_size = shutil.get_terminal_size()
 
     clear_screen()
 
@@ -253,6 +276,15 @@ def interactive_hydrograph_viewer(
                     weighted = db.get_weighted_coefficient(basin_id, "cn")
                     has_weighted_data = bool(weighted and weighted.get("items"))
 
+            # Detectar si cambió el tamaño del terminal
+            current_size = shutil.get_terminal_size()
+            if current_size != last_terminal_size:
+                # Reiniciar Live para evitar acumulación de contenido
+                live.stop()
+                clear_screen()
+                last_terminal_size = current_size
+                live.start()
+
             # Construir y mostrar display completo
             display = build_viewer_display(
                 analysis=analysis,
@@ -265,6 +297,7 @@ def interactive_hydrograph_viewer(
                 p=p,
                 on_edit_note=on_edit_note,
                 on_delete=on_delete,
+                on_export=on_export,
                 has_weighted_data=has_weighted_data,
             )
             live.update(display, refresh=True)
@@ -279,7 +312,7 @@ def interactive_hydrograph_viewer(
             elif key in ('right', 'down'):
                 current_idx = (current_idx + 1) % n_analyses
             elif key == 'e' and on_edit_note:
-                # Editar nota del análisis actual
+                # Editar nota del análisis actual (popup inline, sin clear_screen antes)
                 live.stop()
                 analysis = filtered_analyses[current_idx]
                 current_note = getattr(analysis, 'note', None) or ""
@@ -289,10 +322,11 @@ def interactive_hydrograph_viewer(
                 clear_screen()
                 live.start()
             elif key == 'd' and on_delete:
-                # Eliminar análisis actual
+                # Eliminar análisis actual (popup inline con confirmación)
                 live.stop()
+                from hidropluvial.cli.viewer.panel_input import panel_confirm
                 analysis = filtered_analyses[current_idx]
-                if on_delete(analysis.id):
+                if panel_confirm(title="¿Eliminar este análisis?", default=False, as_popup=True) and on_delete(analysis.id):
                     # Eliminar de la lista filtrada
                     filtered_analyses = [a for a in filtered_analyses if a.id != analysis.id]
                     # Ajustar índice
@@ -302,6 +336,13 @@ def interactive_hydrograph_viewer(
                     if not filtered_analyses:
                         console.print("\n  Todos los análisis visibles han sido eliminados.\n")
                         return filtered_analyses
+                clear_screen()
+                live.start()
+            elif key == 'x' and on_export:
+                # Exportar ficha del análisis actual (popup inline, sin clear_screen antes)
+                live.stop()
+                analysis = filtered_analyses[current_idx]
+                on_export([analysis])
                 clear_screen()
                 live.start()
             elif key == 'p' and has_weighted_data:
@@ -317,5 +358,4 @@ def interactive_hydrograph_viewer(
                 clear_screen()
                 live.start()
 
-    clear_screen()
     return filtered_analyses

@@ -7,9 +7,11 @@ Define las opciones de tormenta, período de retorno, factor X, etc.
 # Opciones de tipo de tormenta
 STORM_OPTIONS = [
     {"name": "GZ (6 horas) - DINAGUA Uruguay", "value": "gz"},
+    {"name": "SCS Type II - NRCS estándar", "value": "scs2"},
+    {"name": "Chicago - Pico sintético IDF", "value": "chicago"},
     {"name": "Bloques alternantes (2×Tc)", "value": "blocks"},
     {"name": "Bloques 24 horas", "value": "blocks24"},
-    {"name": "Bimodal Uruguay", "value": "bimodal"},
+    {"name": "Bimodal - Doble pico", "value": "bimodal"},
 ]
 
 # Opciones de período de retorno (años)

@@ -88,6 +88,10 @@ def handle_nrcs_calculator(key: str, state: FormState) -> Optional[dict]:
         state.submenu_callback = lambda opt: _handle_nrcs_p2_selection(state, opt)
         state.mode = "popup_submenu"
 
+    else:
+        # Tecla no reconocida, no actualizar display
+        return {"_no_update": True}
+
     return None
 
 

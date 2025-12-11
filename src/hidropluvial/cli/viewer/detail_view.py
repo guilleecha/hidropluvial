@@ -7,6 +7,8 @@ Muestra información adicional como:
 - Parámetros del hidrograma unitario
 """
 
+import shutil
+
 from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
@@ -240,9 +242,18 @@ def show_detail_view(
     console = get_console()
     p = get_palette()
 
+    # Guardar tamaño inicial del terminal para detectar cambios
+    last_terminal_size = shutil.get_terminal_size()
+
     clear_screen()
 
     while True:
+        # Detectar si cambió el tamaño del terminal
+        current_size = shutil.get_terminal_size()
+        if current_size != last_terminal_size:
+            clear_screen()
+            last_terminal_size = current_size
+
         components = []
 
         # Título
@@ -340,9 +351,18 @@ def show_weighted_view(
         weighted_data = db.get_weighted_coefficient(basin_id, "cn")
         coef_type = "cn"
 
+    # Guardar tamaño inicial del terminal para detectar cambios
+    last_terminal_size = shutil.get_terminal_size()
+
     clear_screen()
 
     while True:
+        # Detectar si cambió el tamaño del terminal
+        current_size = shutil.get_terminal_size()
+        if current_size != last_terminal_size:
+            clear_screen()
+            last_terminal_size = current_size
+
         components = []
 
         # Título

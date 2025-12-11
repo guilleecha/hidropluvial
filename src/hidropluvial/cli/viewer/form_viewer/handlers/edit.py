@@ -62,6 +62,10 @@ def handle_edit_text(
     elif isinstance(key, str) and len(key) == 1 and (key.isprintable() or key in '.-'):
         state.input_buffer += key
 
+    else:
+        # Tecla no reconocida, no actualizar display
+        return {"_no_update": True}
+
     return None
 
 
@@ -128,5 +132,9 @@ def handle_edit_select(
         state.message = ""
         # Asegurar que la selección sea válida después de posibles cambios
         state.ensure_valid_selection()
+
+    else:
+        # Tecla no reconocida, no actualizar display
+        return {"_no_update": True}
 
     return None

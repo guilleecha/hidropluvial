@@ -374,7 +374,7 @@ class PostExecutionMenu(SessionMenu):
             self.info(f"CN actual: {self.basin.cn}")
             if hasattr(self.basin, 'cn_weighted') and self.basin.cn_weighted:
                 n_items = len(self.basin.cn_weighted.items)
-                self.echo(f"  (calculado por ponderación con {n_items} coberturas)")
+                self.note(f"Calculado por ponderación con {n_items} coberturas")
 
         items = [
             MenuItem(key="a", label="A - Arena, grava", value="A", hint="Alta infiltración"),
@@ -403,7 +403,7 @@ class PostExecutionMenu(SessionMenu):
             return
 
         cn_value = int(round(weighted_result.weighted_value))
-        self.echo(f"\n  Se actualizará el CN de la cuenca a: {cn_value}")
+        self.info(f"Se actualizará el CN de la cuenca a: {cn_value}")
         if not self.confirm("¿Aplicar cambios?"):
             return
 

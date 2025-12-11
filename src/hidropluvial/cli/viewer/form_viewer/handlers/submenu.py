@@ -42,6 +42,10 @@ def handle_popup_submenu(key: str, state: FormState) -> Optional[dict]:
                 return {"_result": FormResult.RELOAD}
             # El callback puede cambiar el modo (ej: a popup_inline_input)
 
+    else:
+        # Tecla no reconocida, no actualizar display
+        return {"_no_update": True}
+
     return None
 
 
@@ -135,5 +139,9 @@ def handle_popup_inline_input(key: str, state: FormState, allow_back: bool, live
 
     elif isinstance(key, str) and len(key) == 1 and (key.isprintable() or key in '.-'):
         state.input_buffer += key
+
+    else:
+        # Tecla no reconocida, no actualizar display
+        return {"_no_update": True}
 
     return None

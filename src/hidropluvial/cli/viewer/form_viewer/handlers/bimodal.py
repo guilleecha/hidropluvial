@@ -181,6 +181,10 @@ def handle_bimodal_calculator(key: str, state: FormState) -> Optional[dict]:
     elif key == 'a':
         _show_width_submenu(state)
 
+    else:
+        # Tecla no reconocida, no actualizar display
+        return {"_no_update": True}
+
     return None
 
 

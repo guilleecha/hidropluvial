@@ -4,6 +4,7 @@ Handlers para el modo popup (on_edit).
 
 from typing import Any, Optional
 
+from hidropluvial.cli.viewer.terminal import clear_screen
 from ..models import FormState, FieldType, FieldStatus, FormResult
 
 
@@ -41,7 +42,7 @@ def handle_popup(key: str, state: FormState, allow_back: bool, live: Any) -> Opt
 
     else:
         # Buscar por shortcut
-        return _handle_popup_shortcut(key, state)
+        return _handle_popup_shortcut(key, state, live)
 
     return None
 
@@ -96,8 +97,12 @@ def _handle_popup_space(state: FormState, allow_back: bool, live: Any) -> Option
             else:
                 state.popup_field.status = FieldStatus.EMPTY
     elif callable(opt.get("action")):
-        # Para opciones con acción, ejecutarla
+        # Para opciones con acción, detener Live antes de ejecutar
+        live.stop()
         result = opt["action"]()
+        # Limpiar pantalla y reiniciar Live después de la acción
+        clear_screen()
+        live.start()
         if result == "__reload__":
             return {"_result": FormResult.RELOAD}
         # Soporte para abrir calculadora NRCS
@@ -179,7 +184,12 @@ def _handle_popup_enter(state: FormState, allow_back: bool, live: Any) -> Option
         value = opt.get("value")
         # Si hay un callback especial (action), ejecutarlo primero
         if callable(opt.get("action")):
+            # Detener Live antes de ejecutar la acción
+            live.stop()
             result = opt["action"]()
+            # Limpiar pantalla y reiniciar Live después de la acción
+            clear_screen()
+            live.start()
             # __reload__ indica que hay que recargar el formulario
             if result == "__reload__":
                 return {"_result": FormResult.RELOAD}
@@ -239,7 +249,7 @@ def _handle_popup_enter(state: FormState, allow_back: bool, live: Any) -> Option
     return None
 
 
-def _handle_popup_shortcut(key: str, state: FormState) -> Optional[dict]:
+def _handle_popup_shortcut(key: str, state: FormState, live: Any) -> Optional[dict]:
     """Maneja shortcuts en el popup."""
     for idx, opt in enumerate(state.popup_options):
         opt_key = opt.get("key", "")
@@ -256,7 +266,12 @@ def _handle_popup_shortcut(key: str, state: FormState) -> Optional[dict]:
                 state.popup_field = None
                 state.popup_options = []
             elif callable(opt.get("action")):
+                # Detener Live antes de ejecutar la acción
+                live.stop()
                 result = opt["action"]()
+                # Limpiar pantalla y reiniciar Live después de la acción
+                clear_screen()
+                live.start()
                 # __reload__ indica que hay que recargar el formulario
                 if result == "__reload__":
                     return {"_result": FormResult.RELOAD}
@@ -292,6 +307,7 @@ def _handle_popup_shortcut(key: str, state: FormState) -> Optional[dict]:
                 state.mode = "navigate"
                 state.popup_field = None
                 state.popup_options = []
-            break
+            return None  # Shortcut encontrado, actualizar display
 
-    return None
+    # Shortcut no encontrado, no actualizar display
+    return {"_no_update": True}

@@ -2,6 +2,7 @@
 Función principal del formulario interactivo.
 """
 
+import shutil
 from typing import List, Optional
 
 from rich.live import Live
@@ -52,6 +53,9 @@ def interactive_form(
     state.update_dependencies()
     state.ensure_valid_selection()
 
+    # Guardar tamaño inicial del terminal para detectar cambios
+    last_terminal_size = shutil.get_terminal_size()
+
     clear_screen()
 
     with Live(console=console, auto_refresh=False, screen=False) as live:
@@ -77,8 +81,20 @@ def interactive_form(
                     display = build_display(state, allow_back)
                     live.update(display, refresh=True)
                     continue
+                if result.get("_no_update"):
+                    # Tecla no reconocida, no actualizar display
+                    continue
 
-            # Actualizar display
+            # Detectar si cambió el tamaño del terminal
+            current_size = shutil.get_terminal_size()
+            if current_size != last_terminal_size:
+                # Reiniciar Live para evitar acumulación de contenido
+                live.stop()
+                clear_screen()
+                last_terminal_size = current_size
+                live.start()
+
+            # Actualizar display (solo si hubo cambio de estado)
             display = build_display(state, allow_back)
             live.update(display, refresh=True)
 

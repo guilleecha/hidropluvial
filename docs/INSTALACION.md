@@ -12,7 +12,8 @@
 4. [Instalación de LaTeX](#instalación-de-latex)
 5. [Instalación de HidroPluvial](#instalación-de-hidropluvial)
 6. [Verificación de la Instalación](#verificación-de-la-instalación)
-7. [Solución de Problemas](#solución-de-problemas)
+7. [Uso Diario](#uso-diario)
+8. [Solución de Problemas](#solución-de-problemas)
 
 ---
 
@@ -25,11 +26,12 @@
 - **Conexión a Internet**: Para descarga e instalación
 
 ### Software Necesario
-| Software | Versión | Uso |
-|----------|---------|-----|
-| Python | 3.11+ | Ejecutar la aplicación |
-| Git | Cualquiera | Clonar el repositorio |
-| MiKTeX/TeX Live | 2023+ | Compilar reportes PDF (opcional) |
+
+| Software | Versión | Uso | Obligatorio |
+|----------|---------|-----|-------------|
+| Python | 3.11+ | Ejecutar la aplicación | Sí |
+| Git | Cualquiera | Clonar el repositorio | Sí |
+| MiKTeX/TeX Live | 2023+ | Compilar reportes PDF | Opcional |
 
 ---
 
@@ -159,7 +161,7 @@ mkdir C:\proyectos
 cd C:\proyectos
 
 # Clonar repositorio
-git clone https://github.com/usuario/hidropluvial.git
+git clone https://github.com/ghaynes/hidropluvial.git
 
 # Entrar a la carpeta
 cd hidropluvial
@@ -203,7 +205,7 @@ Deberías ver la ayuda de HidroPluvial.
 ### Test 1: Comando básico
 
 ```powershell
-hp commands
+hp --help
 ```
 
 Debería listar todos los comandos disponibles.
@@ -230,15 +232,23 @@ Debería mostrar resultados de intensidad y precipitación.
 hp wizard
 ```
 
-Debería abrir el asistente interactivo.
+Debería abrir el asistente interactivo con el menú principal:
+
+```
+╔══════════════════════════════════════════════════╗
+║                                                  ║
+║    ╦ ╦╦╔╦╗╦═╗╔═╗╔═╗╦  ╦ ╦╦  ╦╦╔═╗╦               ║
+║    ╠═╣║ ║║╠╦╝║ ║╠═╝║  ║ ║╚╗╔╝║╠═╣║               ║
+║    ╩ ╩╩═╩╝╩╚═╚═╝╩  ╩═╝╚═╝ ╚╝ ╩╩ ╩╩═╝             ║
+║                                                  ║
+║       ≋≋≋  Cálculos Hidrológicos  ≋≋≋            ║
+║                   Uruguay                        ║
+╚══════════════════════════════════════════════════╝
+```
 
 ### Test 5: Generación de PDF (requiere LaTeX)
 
-```powershell
-# Crear una sesión de prueba
-hp wizard
-# Seguir los pasos y generar un reporte
-```
+Después de crear un análisis en el wizard, exportar a LaTeX para verificar que se genera el PDF correctamente.
 
 ---
 
@@ -274,6 +284,25 @@ pause
 ```
 
 3. Doble clic para ejecutar
+
+### Almacenamiento de Datos
+
+HidroPluvial guarda todos los proyectos y cuencas en una base de datos local:
+
+```
+%USERPROFILE%\.hidropluvial\
+└── hidropluvial.db    # Base de datos SQLite
+```
+
+**Ubicación típica:** `C:\Users\<tu_usuario>\.hidropluvial\`
+
+La base de datos se crea automáticamente la primera vez que se usa la aplicación.
+
+**Backup de datos:**
+```powershell
+# Copiar la base de datos para hacer backup
+copy "%USERPROFILE%\.hidropluvial\hidropluvial.db" backup_hidropluvial.db
+```
 
 ---
 
@@ -341,11 +370,20 @@ $env:PYTHONIOENCODING = "utf-8"
 chcp 65001
 ```
 
+### La interfaz no muestra bien los caracteres
+
+**Causa**: Terminal sin soporte Unicode
+
+**Solución**:
+1. Usar Windows Terminal (disponible en Microsoft Store)
+2. O configurar la fuente en CMD/PowerShell:
+   - Clic derecho en barra de título → Propiedades → Fuente → "Consolas" o "Lucida Console"
+
 ### Reportar otros problemas
 
 Si encuentras otros errores:
 
-1. Abrir issue en GitHub: https://github.com/usuario/hidropluvial/issues
+1. Abrir issue en GitHub: https://github.com/ghaynes/hidropluvial/issues
 2. Incluir:
    - Versión de Windows
    - Versión de Python (`python --version`)
@@ -361,6 +399,9 @@ Si encuentras otros errores:
 ```powershell
 # Eliminar carpeta del proyecto
 Remove-Item -Recurse -Force C:\proyectos\hidropluvial
+
+# Eliminar datos de usuario (opcional)
+Remove-Item -Recurse -Force "$env:USERPROFILE\.hidropluvial"
 ```
 
 ### Desinstalar componentes (opcional)
@@ -371,4 +412,4 @@ Remove-Item -Recurse -Force C:\proyectos\hidropluvial
 
 ---
 
-*Guía de Instalación - HidroPluvial v1.0*
+*Guía de Instalación - HidroPluvial v2.0*

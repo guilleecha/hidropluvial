@@ -1,317 +1,512 @@
 # HidroPluvial - Manual de Usuario
 
-**Guía práctica con ejemplos paso a paso**
+**Herramienta de Cálculos Hidrológicos para Uruguay**
 
 ---
 
 ## Contenido
 
 1. [Introducción](#introducción)
-2. [Instalación](#instalación)
-3. [Conceptos: Proyectos y Cuencas](#conceptos-proyectos-y-cuencas)
-4. [Ejemplo 1: Análisis Básico con Método Racional](#ejemplo-1-análisis-básico-con-método-racional)
-5. [Ejemplo 2: Análisis con SCS-CN](#ejemplo-2-análisis-con-scs-cn)
-6. [Ejemplo 3: Comparación de Metodologías](#ejemplo-3-comparación-de-metodologías)
-7. [Ejemplo 4: Parámetros Avanzados](#ejemplo-4-parámetros-avanzados)
-8. [Exportación y Reportes](#exportación-y-reportes)
-9. [Organización de Salidas](#organización-de-salidas)
+2. [El Wizard Interactivo](#el-wizard-interactivo)
+3. [Ficha de Análisis](#ficha-de-análisis)
+4. [Métodos de Escorrentía](#métodos-de-escorrentía)
+5. [Tiempo de Concentración](#tiempo-de-concentración)
+6. [Tipos de Tormenta](#tipos-de-tormenta)
+7. [Hidrogramas de Crecida](#hidrogramas-de-crecida)
+8. [Visor de Resultados](#visor-de-resultados)
+9. [Exportación y Reportes](#exportación-y-reportes)
 10. [Referencia Rápida](#referencia-rápida)
 
 ---
 
 ## Introducción
 
-HidroPluvial es una herramienta de cálculo hidrológico para Uruguay que permite:
+HidroPluvial es una herramienta de cálculo hidrológico desarrollada para Uruguay que permite:
 
-- Calcular curvas IDF según metodología DINAGUA
-- Generar tormentas de diseño (bloques alternantes, bimodal, SCS)
-- Calcular tiempo de concentración (Kirpich, Temez, Desbordes)
+- Calcular curvas IDF según metodología DINAGUA (Rodríguez Fontal, 1980)
+- Generar tormentas de diseño (GZ, SCS, Chicago, Bloques Alternantes, Bimodal)
+- Calcular tiempo de concentración (Kirpich, Temez, Desbordes, NRCS)
 - Determinar escorrentía (Método Racional y SCS-CN)
-- Generar hidrogramas de crecida
+- Generar hidrogramas de crecida con factor X (Porto, 1995)
 - Producir reportes técnicos en LaTeX/PDF
-
-### Modos de Uso
-
-1. **Wizard Interactivo** (`hp wizard`): Guía paso a paso, ideal para principiantes
-2. **Línea de Comandos** (`hp <comando>`): Más flexible, ideal para usuarios avanzados
-3. **Scripts**: Automatización con archivos YAML
-
----
-
-## Instalación
-
-```bash
-# Clonar repositorio
-git clone https://github.com/usuario/hidropluvial.git
-cd hidropluvial
-
-# Crear entorno virtual e instalar
-python -m venv .venv
-.venv/Scripts/activate  # Windows
-source .venv/bin/activate  # Linux/Mac
-
-pip install -e .
-
-# Verificar instalación
-hp --help
-```
-
----
-
-## Conceptos: Proyectos y Cuencas
-
-HidroPluvial organiza el trabajo en una estructura jerárquica:
-
-### Proyecto
-Un **Proyecto** representa un estudio o trabajo completo, por ejemplo:
-- "Estudio de Drenaje Pluvial Barrio Norte"
-- "Análisis Hidrológico Ruta 5 km 120-125"
-
-Cada proyecto puede contener múltiples cuencas y tiene metadatos como autor, descripción y ubicación.
-
-### Cuenca (Basin)
-Una **Cuenca** es el área de análisis con sus propiedades físicas:
-- Área (ha), Pendiente (%), P₃,₁₀ (mm)
-- Coeficientes de escorrentía (C y/o CN)
-- Resultados de Tc y análisis de crecidas
 
 ### Flujo de Trabajo
 
 ```
-Opción 1: Nueva cuenca (analisis guiado)
-  → Donde deseas crear la cuenca?
-    > Crear nuevo proyecto
-    > [Proyectos existentes...]
-    > Cancelar
-  → Configurar cuenca y ejecutar análisis
-
-Opción 2: Crear nuevo proyecto (vacío)
-  → Ingresar datos del proyecto
-  → Agregar nueva cuenca / Importar cuenca / Volver
-
-Opción 3: Continuar proyecto/cuenca existente
-  → Seleccionar proyecto o cuenca y trabajar
+┌─────────────────────────────────────────────────────────────┐
+│                    WIZARD INTERACTIVO                        │
+├─────────────────────────────────────────────────────────────┤
+│  1. Crear/Seleccionar Proyecto                              │
+│  2. Crear/Seleccionar Cuenca                                │
+│  3. Configurar Análisis:                                    │
+│     • Método escorrentía (C o CN)                           │
+│     • Métodos Tc                                            │
+│     • Tipos de tormenta                                     │
+│     • Períodos de retorno                                   │
+│  4. Ejecutar y visualizar resultados                        │
+│  5. Exportar (Excel/LaTeX)                                  │
+└─────────────────────────────────────────────────────────────┘
 ```
-
-### Parámetros de Resultados
-
-| Símbolo | Descripción | Unidad |
-|---------|-------------|--------|
-| Tc | Tiempo de concentración | min |
-| tp | Tiempo pico del hidrograma unitario | min |
-| tb | Tiempo base del hidrograma unitario (2.67×tp) | min |
-| Tp | Tiempo al pico del hidrograma resultante | min |
-| Qp | Caudal pico | m³/s |
-| Vol | Volumen de escorrentía | hm³ |
 
 ---
 
-## Ejemplo 1: Análisis Básico con Método Racional
+## El Wizard Interactivo
 
-### Descripción del Problema
-
-**Cuenca Las Piedras**:
-- Área: 62 ha
-- Pendiente media: 3.41%
-- Longitud del cauce: 800 m
-- Coeficiente C: 0.62
-- Ubicación: Montevideo (P₃,₁₀ = 78 mm)
-
-### Usando el Wizard
+### Iniciar el Wizard
 
 ```bash
 hp wizard
 ```
 
-1. Seleccionar "Nueva cuenca (analisis guiado)"
-2. Ingresar datos de la cuenca:
-   - Nombre: Cuenca Las Piedras
-   - Área: 62
-   - Pendiente: 3.41
-   - Longitud: 800
-3. Ingresar P₃,₁₀: 78
-4. Seleccionar "Solo C (Método Racional)"
-5. Ingresar C: 0.62
-6. Seleccionar métodos Tc: Kirpich, Desbordes
-7. Configurar análisis:
-   - Tormenta: gz (6h pico adelantado)
-   - Tr: 2, 10, 25
-   - X: 1.0, 1.25
+### Menú Principal
 
-### Usando Línea de Comandos
+```
+╔══════════════════════════════════════════════════╗
+║                                                  ║
+║    ╦ ╦╦╔╦╗╦═╗╔═╗╔═╗╦  ╦ ╦╦  ╦╦╔═╗╦               ║
+║    ╠═╣║ ║║╠╦╝║ ║╠═╝║  ║ ║╚╗╔╝║╠═╣║               ║
+║    ╩ ╩╩═╩╝╩╚═╚═╝╩  ╩═╝╚═╝ ╚╝ ╩╩ ╩╩═╝             ║
+║                                                  ║
+║       ≋≋≋  Cálculos Hidrológicos  ≋≋≋            ║
+║                   Uruguay                        ║
+╚══════════════════════════════════════════════════╝
 
-```bash
-# Crear sesión
-hp session new "Cuenca Las Piedras" \
-    --area 62 --slope 3.41 --length 800 \
-    --p3_10 78 --c 0.62
-
-# Calcular Tc
-hp session tc <session_id> --method kirpich --method desbordes
-
-# Ejecutar análisis
-hp session analyze <session_id> \
-    --storm gz --tr 2 --tr 10 --tr 25 \
-    --x 1.0 --x 1.25
-
-# Ver resultados
-hp session show <session_id>
+┌─ Menú Principal ─────────────────────────────────┐
+│                                                  │
+│  [e] Entrar     Gestionar proyectos y cuencas    │
+│  ─────────────────────────────────────────────── │
+│  [c] Configuración   Ajustes de la herramienta   │
+│  [q] Salir                                       │
+│                                                  │
+└──────────────────────────────────────────────────┘
 ```
 
-### Resultados Esperados
+### Navegación
 
-| Método Tc | Tr | X | Tc | tp | tb | Qp | Vol |
-|-----------|-----|------|-----|-----|-----|------|------|
-| Kirpich | 2 | 1.00 | 12 | 21 | 56 | 7.9 | 0.021 |
-| Kirpich | 10 | 1.00 | 12 | 21 | 56 | 12 | 0.033 |
-| Kirpich | 25 | 1.00 | 12 | 21 | 56 | 15 | 0.041 |
-| Desbordes | 2 | 1.00 | 23 | 29 | 77 | 6.8 | 0.021 |
-| Desbordes | 10 | 1.00 | 23 | 29 | 77 | 10 | 0.033 |
-| Desbordes | 25 | 1.00 | 23 | 29 | 77 | 13 | 0.041 |
+| Tecla | Acción |
+|-------|--------|
+| `↑` `↓` | Navegar opciones |
+| `Enter` | Seleccionar |
+| `b` | Volver atrás |
+| `Esc` / `q` | Salir |
+| Letras | Acceso directo (ej: `e` para Entrar) |
 
-*Tiempos en min, Qp en m³/s, Vol en hm³*
+### Conceptos: Proyectos y Cuencas
+
+**Proyecto**: Agrupa múltiples cuencas de un estudio
+- "Estudio de Drenaje Pluvial Barrio Norte"
+- "Análisis Hidrológico Ruta 5 km 120-125"
+
+**Cuenca (Basin)**: Área de análisis con propiedades físicas
+- Área (ha), Pendiente (%), Longitud cauce (m)
+- Coeficientes C y/o CN
+- Análisis de crecidas asociados
 
 ---
 
-## Ejemplo 2: Análisis con SCS-CN
+## Ficha de Análisis
 
-### Descripción del Problema
-
-**Cuenca Urbana**:
-- Área: 45 ha
-- Pendiente: 2.5%
-- CN ponderado: 81
-- Ubicación: Canelones (P₃,₁₀ = 80 mm)
-
-### Usando el Wizard
-
-```bash
-hp wizard
-```
-
-En el paso de coeficientes:
-1. Seleccionar "Solo CN (Método SCS)"
-2. Opción de ingresar valor o calcular ponderado
-3. Si se calcula ponderado:
-   - Seleccionar grupo hidrológico de suelo (A, B, C, D)
-   - Asignar coberturas al área
-
-### Parámetros Avanzados SCS-CN
-
-El wizard preguntará si desea configurar parámetros avanzados:
-
-**AMC (Condición de Humedad Antecedente)**:
-- I (Seco): Reduce el CN, menos escorrentía
-- II (Promedio): Condición estándar
-- III (Húmedo): Aumenta el CN, más escorrentía
-
-**Lambda (λ)**:
-- 0.20 (estándar): Ia = 0.2 × S
-- 0.05 (urbano): Menor abstracción inicial
+El formulario interactivo permite configurar todos los parámetros del análisis:
 
 ```
-? Configurar parametros avanzados? (S/n): S
-
-? Condicion de humedad antecedente (AMC):
-> I  - Seco (CN menor, poca lluvia previa)
-  II - Promedio (condicion normal)
-  III - Humedo (CN mayor, lluvia previa reciente)
-
-? Coeficiente Lambda para abstraccion inicial:
-> 0.20 (valor tradicional)
-  0.05 (areas urbanas, NRCS actualizado)
-  Otro valor
+┌─ Agregar Análisis - Cuenca Las Piedras ──────────┐
+│                                                  │
+│  Método de Escorrentía        [✓] C  [✓] CN     │
+│  Coeficiente C                0.62              │
+│  Número de Curva CN           81                │
+│  ─────────────────────────────────────────────── │
+│  Métodos de Tc                                   │
+│     [✓] Desbordes (urbano)    C=0.62            │
+│     [✓] Kirpich (rural)       L=800m            │
+│     [ ] Temez                 L=800m            │
+│     [ ] NRCS                  Configurar →      │
+│  ─────────────────────────────────────────────── │
+│  Tipos de tormenta                               │
+│     [✓] GZ (6 horas)          DINAGUA Uruguay   │
+│     [ ] SCS Type II           NRCS estándar     │
+│     [ ] Chicago               Pico sintético    │
+│     [ ] Bimodal               Doble pico        │
+│  ─────────────────────────────────────────────── │
+│  Períodos de retorno                             │
+│     [ ] 2 años  [✓] 10 años  [✓] 25 años        │
+│  Factor X (hidrograma)                           │
+│     [✓] 1.00    [ ] 1.25     [ ] 1.67           │
+│                                                  │
+│  [Enter] Ejecutar   [b] Volver   [q] Cancelar   │
+└──────────────────────────────────────────────────┘
 ```
 
-### Ejemplo de Ajuste por AMC
+### Campos del Formulario
 
-CN base = 81
-
-| AMC | CN Ajustado | Escorrentía (mm) para P=100mm |
-|-----|-------------|-------------------------------|
-| I (Seco) | 63 | 34.2 |
-| II (Promedio) | 81 | 59.3 |
-| III (Húmedo) | 91 | 76.8 |
+| Campo | Descripción | Referencia |
+|-------|-------------|------------|
+| Método Escorrentía | C (Racional) o CN (SCS-CN) | Chow, 1988 |
+| Coeficiente C | 0.10 - 0.95 | FHWA HEC-22, Chow |
+| Curva Número CN | 30 - 98 | SCS TR-55 |
+| Métodos Tc | Kirpich, Temez, Desbordes, NRCS | Ver sección Tc |
+| Tormentas | GZ, SCS, Chicago, Bloques, Bimodal | Ver sección Tormentas |
+| Tr | 2, 5, 10, 25, 50, 100 años | IDF DINAGUA |
+| Factor X | Forma del hidrograma (1.0-12.0) | Porto, 1995 |
 
 ---
 
-## Ejemplo 3: Comparación de Metodologías
+## Métodos de Escorrentía
 
-### Descripción
+### Método Racional (Coeficiente C)
 
-Comparar resultados usando ambas metodologías (Racional y SCS-CN) para la misma cuenca.
+El coeficiente de escorrentía C representa la fracción de la precipitación que se convierte en escorrentía superficial.
 
-### Configuración
+**Fórmula del caudal pico:**
+```
+Qp = C × i × A / 360
+```
+Donde: Qp (m³/s), C (adimensional), i (mm/h), A (ha)
+
+**Tablas de valores típicos:**
+
+| Fuente | Descripción | Código |
+|--------|-------------|--------|
+| FHWA HEC-22 | Federal Highway Administration | `tables_c.py:14-39` |
+| Ven Te Chow | Applied Hydrology, Table 5.5.2 | `tables_c.py:44-69` |
+
+**Tabla FHWA HEC-22 (valores base Tr=2-10 años):**
+
+| Categoría | Descripción | C |
+|-----------|-------------|---|
+| Comercial | Centro comercial/negocios | 0.85 |
+| Comercial | Vecindario comercial | 0.60 |
+| Industrial | Industria liviana | 0.65 |
+| Industrial | Industria pesada | 0.75 |
+| Residencial | Unifamiliar (>1000 m²) | 0.40 |
+| Residencial | Unifamiliar (500-1000 m²) | 0.50 |
+| Residencial | Unifamiliar (<500 m²) | 0.60 |
+| Residencial | Multifamiliar/Apartamentos | 0.70 |
+| Superficies | Asfalto/Concreto | 0.85 |
+| Superficies | Techos | 0.85 |
+| Superficies | Grava/Ripio | 0.32 |
+| Césped arenoso | Pendiente plana <2% | 0.08 |
+| Césped arenoso | Pendiente media 2-7% | 0.12 |
+| Césped arcilloso | Pendiente plana <2% | 0.15 |
+| Césped arcilloso | Pendiente media 2-7% | 0.20 |
+
+**Referencia:** FHWA (2001). Urban Drainage Design Manual. HEC-22.
+
+### Método SCS-CN (Curva Número)
+
+El Número de Curva representa las características de infiltración del suelo según su cobertura y grupo hidrológico.
+
+**Fórmulas fundamentales:**
+```
+S = (25400 / CN) - 254          Retención potencial (mm)
+Ia = λ × S                       Abstracción inicial (λ=0.20 o 0.05)
+Q = (P - Ia)² / (P - Ia + S)    Escorrentía (mm), si P > Ia
+```
+
+**Código fuente:** `core/runoff/scs.py:38-104`
+
+**Grupos Hidrológicos de Suelo:**
+
+| Grupo | Descripción | Infiltración |
+|-------|-------------|--------------|
+| A | Arena, grava | Alta (>7.6 mm/h) |
+| B | Limo arenoso | Moderada (3.8-7.6 mm/h) |
+| C | Limo arcilloso | Baja (1.3-3.8 mm/h) |
+| D | Arcilla | Muy baja (<1.3 mm/h) |
+
+**Tabla CN (SCS TR-55):**
+
+| Cobertura | Condición | A | B | C | D |
+|-----------|-----------|---|---|---|---|
+| Residencial 500 m² (65% imp) | - | 77 | 85 | 90 | 92 |
+| Residencial 1000 m² (38% imp) | - | 61 | 75 | 83 | 87 |
+| Comercial (85% imp) | - | 89 | 92 | 94 | 95 |
+| Industrial (72% imp) | - | 81 | 88 | 91 | 93 |
+| Pavimento impermeable | - | 98 | 98 | 98 | 98 |
+| Césped >75% cubierto | Buena | 39 | 61 | 74 | 80 |
+| Césped 50-75% cubierto | Regular | 49 | 69 | 79 | 84 |
+| Pasturas continua | Buena | 39 | 61 | 74 | 80 |
+| Bosque con mantillo | Buena | 30 | 55 | 70 | 77 |
+
+**Código fuente:** `core/coefficients/tables_cn.py:11-45`
+
+**Ajuste por Condición de Humedad Antecedente (AMC):**
 
 ```
-? Como deseas ingresar los coeficientes?
-> Ambos (C y CN) - comparar metodologias
+CN_I = CN_II / (2.281 - 0.01281 × CN_II)    AMC I (seco)
+CN_III = CN_II / (0.427 + 0.00573 × CN_II)  AMC III (húmedo)
 ```
 
-El wizard solicitará:
-1. Coeficiente C (o cálculo ponderado)
-2. Curva Número CN (o cálculo ponderado)
+| AMC | Descripción | Lluvia 5 días previos |
+|-----|-------------|----------------------|
+| I | Seco | < 35 mm (crecimiento) |
+| II | Promedio | 35-53 mm |
+| III | Húmedo | > 53 mm |
 
-### Análisis Generado
+**Código fuente:** `core/runoff/scs.py:107-120`
 
-Para cada método de Tc, se generan análisis con:
-- Escorrentía por método Racional (usando C)
-- Escorrentía por método SCS-CN (usando CN)
-
-### Tabla Comparativa
-
-```
-============================================================
-  COMPARACION DE METODOLOGIAS - Tr=10, Tormenta GZ
-============================================================
-
-  Método       | Tc  | tp  | tb  | P(mm)| Pe(mm)| Qp    | Vol
-  -------------+-----+-----+-----+------+-------+-------+------
-  Kirpich + C  |  12 |  21 |  56 | 106  |  65.7 | 10    | 0.033
-  Kirpich + CN |  12 |  21 |  56 | 106  |  58.4 |  9.3  | 0.030
-  Desbordes + C|  23 |  29 |  77 | 106  |  65.7 |  8.9  | 0.033
-  Desbordes+CN |  23 |  29 |  77 | 106  |  58.4 |  7.9  | 0.030
-
-  Tiempos en min, Qp en m³/s, Vol en hm³
-============================================================
-```
+**Referencia:** USDA-SCS (1986). Urban Hydrology for Small Watersheds. TR-55.
 
 ---
 
-## Ejemplo 4: Parámetros Avanzados
+## Tiempo de Concentración
 
-### t₀ para Método de Desbordes
+El tiempo de concentración (Tc) es el tiempo que tarda el agua en viajar desde el punto más alejado de la cuenca hasta la salida.
 
-El tiempo de entrada (t₀) en la fórmula de Desbordes:
+### Método Kirpich (1940)
+
+Desarrollado para cuencas agrícolas pequeñas en Tennessee.
+
+**Fórmula:**
+```
+Tc = 0.0195 × L^0.77 × S^(-0.385)
+```
+Donde: Tc (min), L (m), S (m/m)
+
+**Factores de ajuste por superficie:**
+
+| Superficie | Factor |
+|------------|--------|
+| Natural | 1.0 |
+| Canales con pasto | 2.0 |
+| Concreto/asfalto | 0.4 |
+| Canales de concreto | 0.2 |
+
+**Código fuente:** `core/tc/kirpich.py:8-49`
+
+**Referencia:** Kirpich, Z.P. (1940). Time of concentration of small agricultural watersheds. Civil Engineering, 10(6), 362.
+
+### Método Témez
+
+Utilizado ampliamente en España y Latinoamérica.
+
+**Fórmula:**
+```
+Tc = 0.3 × (L / S^0.25)^0.76
+```
+Donde: Tc (hr), L (km), S (m/m)
+
+**Válido para:** Cuencas de 1-3000 km²
+
+**Código fuente:** `core/tc/empirical.py:12-33`
+
+**Referencia:** Témez, J.R. (1978). Cálculo hidrometeorológico de caudales máximos en pequeñas cuencas naturales. MOPU, España.
+
+### Método Desbordes (DINAGUA Uruguay)
+
+Recomendado para cuencas urbanas en Uruguay.
+
+**Fórmula:**
+```
+Tc = T0 + 6.625 × A^0.3 × P^(-0.39) × C^(-0.45)
+```
+Donde: Tc (min), T0 (min), A (ha), P (%), C (adimensional)
+
+**Valores típicos de T0:**
+
+| Tipo de cuenca | T0 (min) |
+|----------------|----------|
+| Urbano denso | 3 |
+| Por defecto | 5 |
+| Rural/suburbano | 10 |
+
+**Código fuente:** `core/tc/empirical.py:89-123`
+
+**Referencia:** DINAGUA (2011). Manual de Diseño para Sistemas de Drenaje de Aguas Pluviales Urbanas. Uruguay.
+
+### Método NRCS (TR-55)
+
+Método de velocidades que divide el recorrido en segmentos con diferentes tipos de flujo.
+
+**Tipos de flujo:**
+
+| Tipo | Descripción | Fórmula |
+|------|-------------|---------|
+| Sheet flow | Flujo laminar (<100m) | Tt = 0.007 × (nL)^0.8 / (P2^0.5 × S^0.4) |
+| Shallow concentrated | Flujo superficial | V = k × S^0.5 |
+| Channel flow | Flujo en canal | V = (1/n) × R^(2/3) × S^(1/2) |
+
+**Código fuente:** `core/tc/nrcs.py`
+
+**Referencia:** USDA-NRCS (1986). Urban Hydrology for Small Watersheds. TR-55.
+
+---
+
+## Tipos de Tormenta
+
+### GZ - Tormenta DINAGUA Uruguay
+
+Distribución temporal de 6 horas con pico adelantado, basada en la metodología DINAGUA.
+
+**Características:**
+- Duración: 6 horas
+- Pico: aproximadamente al 25% de la duración
+- Método: Bloques alternantes con IDF DINAGUA
+
+**Código fuente:** `core/temporal/blocks.py` (función `alternating_blocks_dinagua`)
+
+**Referencia:** Rodríguez Fontal (1980). Estudio de Isoyetas Uruguay. DINAGUA.
+
+### SCS Type II
+
+Distribución temporal de 24 horas del NRCS, aplicable a la mayor parte de Estados Unidos.
+
+**Características:**
+- Duración: 24 horas
+- Pico: al 50% de la duración (hora 12)
+- Acumulación: basada en datos empíricos NRCS
+
+**Código fuente:** `core/temporal/scs.py:15-80`
+
+**Referencia:** USDA-SCS (1986). Urban Hydrology for Small Watersheds. TR-55.
+
+### Chicago
+
+Método de tormenta sintética basado en la curva IDF.
+
+**Características:**
+- Duración: variable
+- Pico: configurable (coeficiente de avance r)
+- Intensidad: derivada directamente de IDF
+
+**Fórmula de intensidad:**
+```
+i(t) = a × [(1-b) × t^(-b) + c]     para t ≤ tb (rama ascendente)
+i(t) = a × [(1-b) × t^(-b) + c]     para t > tb (rama descendente)
+```
+
+**Código fuente:** `core/temporal/chicago.py`
+
+**Referencia:** Keifer, C.J. & Chu, H.H. (1957). Synthetic Storm Pattern for Drainage Design. ASCE Journal of the Hydraulics Division.
+
+### Bloques Alternantes
+
+Método clásico que ordena los bloques de lluvia de mayor a menor, alternando a cada lado del pico.
+
+**Características:**
+- Duración: 2×Tc o 24 horas
+- Pico: central
+- Método: redistribución de IDF acumulada
+
+**Código fuente:** `core/temporal/blocks.py`
+
+**Referencia:** Chow, V.T. et al. (1988). Applied Hydrology. McGraw-Hill.
+
+### Bimodal (Doble Pico)
+
+Tormenta con dos picos de intensidad, útil para eventos frontales o convectivos complejos.
+
+**Parámetros configurables:**
+
+| Parámetro | Descripción | Default |
+|-----------|-------------|---------|
+| Duración | Duración total | 6 horas |
+| Pico 1 | Posición primer pico | 0.25 (25%) |
+| Pico 2 | Posición segundo pico | 0.75 (75%) |
+| Vol. Split | Fracción volumen pico 1 | 0.50 |
+| Ancho pico | Fracción de duración | 0.15 |
+
+**Código fuente:** `core/temporal/bimodal.py:18-99`
+
+**Aplicaciones:**
+- Cuencas urbanas con impermeabilidad mixta
+- Regiones costeras tropicales
+- Tormentas frontales de larga duración
+
+---
+
+## Hidrogramas de Crecida
+
+### Hidrograma Unitario Triangular con Factor X
+
+El factor X (Porto, 1995) permite ajustar la forma del hidrograma unitario según las características de la cuenca.
+
+**Parámetros del hidrograma:**
+```
+tp = 0.6 × Tc                    Tiempo al pico (hr)
+tb = tp × (1 + X)                Tiempo base (hr)
+Qp = 0.208 × A × Pe / tp         Caudal pico (m³/s)
+```
+Donde: A (km²), Pe (mm), tp (hr)
+
+**Valores típicos de X:**
+
+| X | Descripción | Tipo de cuenca |
+|---|-------------|----------------|
+| 1.00 | Racional/urbano | Cuenca urbana densa |
+| 1.25 | Urbano con pendiente | Urbana con pendiente |
+| 1.67 | NRCS estándar | Mixta |
+| 2.25 | Mixto rural/urbano | Periurbana |
+| 3.33 | Rural sinuoso | Rural con cauces sinuosos |
+| 5.50 | Rural pendiente baja | Rural con baja pendiente |
+| 12.0 | Rural muy baja pendiente | Llanuras |
+
+**Código fuente:** `core/hydrograph/triangular_x.py`
+
+**Referencia:** Porto, R. et al. (1995). Drenagem Urbana. En: Tucci, C.E.M. Hidrologia: Ciência e Aplicação. ABRH.
+
+### Otros Hidrogramas Disponibles
+
+| Método | Descripción | Código |
+|--------|-------------|--------|
+| SCS Triangular | Estándar NRCS | `hydrograph/scs.py` |
+| SCS Curvilinear | Adimensional NRCS | `hydrograph/scs.py` |
+| Snyder | Sintético (1938) | `hydrograph/snyder.py` |
+| Clark | Tiempo-área (1945) | `hydrograph/clark.py` |
+
+---
+
+## Visor de Resultados
+
+### Tabla Resumen
 
 ```
-Tc = t₀ + 0.76 × A^0.25 × C^(-0.2) × S^(-0.38)
+┌─ Resultados - Cuenca Las Piedras ────────────────────────────────────────┐
+│                                                                          │
+│  # │ Tc      │ Tormenta │ Tr  │ X    │ Tc  │ tp  │ Qp    │ Vol    │ Esc │
+│ ───┼─────────┼──────────┼─────┼──────┼─────┼─────┼───────┼────────┼─────│
+│  1 │ Kirpich │ GZ       │  10 │ 1.00 │  12 │  21 │ 12.3  │ 0.033  │ C   │
+│  2 │ Kirpich │ GZ       │  25 │ 1.00 │  12 │  21 │ 15.1  │ 0.041  │ C   │
+│  3 │ Desbord │ GZ       │  10 │ 1.00 │  23 │  29 │ 10.2  │ 0.033  │ C   │
+│  4 │ Desbord │ GZ       │  25 │ 1.00 │  23 │  29 │ 12.8  │ 0.041  │ C   │
+│ ───┴─────────┴──────────┴─────┴──────┴─────┴─────┴───────┴────────┴─────│
+│  Tiempos en min | Qp en m³/s | Vol en hm³                               │
+│                                                                          │
+│  [↑↓] Navegar  [Enter] Ver gráfico  [f] Filtrar  [e] Exportar           │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-Valores típicos:
-- **3 min**: Cuencas pequeñas, muy urbanizadas
-- **5 min**: Valor por defecto (DINAGUA)
-- **10 min**: Cuencas rurales con mayor tiempo de entrada
+### Visor de Gráficos
+
+El visor interactivo muestra hietograma e hidrograma combinados:
 
 ```
-? Tiempo de entrada t0 para Desbordes:
-> 3 min (urbano denso)
-  5 min (valor por defecto)
-  10 min (rural/suburbano)
-  Otro valor
+┌─────────────────────────────────────────────────────────────────────────┐
+│           Hietograma - P=106.2mm, imax=54.3mm/h                         │
+│  60 ┤                                                                   │
+│  40 ┤   ████                                                            │
+│  20 ┤███████████████                                                    │
+│   0 └────────────────────────────────────────────────────────(min)      │
+├─────────────────────────────────────────────────────────────────────────┤
+│           Hidrograma - Qp=12 m³/s, Tp=35min                             │
+│  12 ┤              ×                                                    │
+│   8 ┤            ╱   ╲                                                  │
+│   4 ┤          ╱       ╲                                                │
+│   0 └────────────────────────────────────────────────────(min)          │
+└─────────────────────────────────────────────────────────────────────────┘
+  [1/12] Kirpich + GZ Tr10
+
+  Cuenca: Las Piedras
+  Tc=23min  tp=29min  X=1.00  tb=77min
+  P=106.2mm  Pe=65.7mm  Vol=0.041hm³
+
+  [←] Anterior  [→] Siguiente  [q] Salir
 ```
 
-### Configuración Completa de Parámetros
-
-```
-============================================================
-  PARAMETROS AVANZADOS CONFIGURADOS
-============================================================
-  AMC:              II (Promedio)
-  Lambda (λ):       0.20
-  t₀ Desbordes:     5.0 min
-============================================================
-```
+**Navegación:**
+- `←` `→`: Cambiar entre análisis
+- `↑` `↓`: Ir al primero / último
+- `c`: Comparar hidrogramas
+- `q` / `Esc`: Salir
 
 ---
 
@@ -319,283 +514,121 @@ Valores típicos:
 
 ### Exportar a Excel
 
-Desde el wizard:
 ```
-? Que deseas hacer?
-> Exportar (Excel/LaTeX)
-
-? Formato de exportacion:
+? Formato de exportación:
 > Excel (.xlsx) - Tabla con todos los datos
-  Reporte LaTeX (.tex) - Documento tecnico
-  Ambos formatos
 ```
 
-### Contenido del Excel
+**Contenido del Excel:**
 
-1. **Hoja "Cuenca"**: Datos de la cuenca
-2. **Hoja "Tiempo Concentración"**: Resultados Tc con parámetros
-3. **Hoja "Resumen Análisis"**: Tabla completa con:
-   - ID, Método Tc, Tc (min)
-   - Tormenta, Tr, Duración
-   - P total, i pico
-   - Escorrentía, Q pico, t pico, Volumen
-   - C (si aplica), CN ajustado, AMC, λ (si aplica)
-   - Factor X, Nota
-4. **Hoja "Por Periodo Retorno"**: Tabla pivote
-5. **Hoja "Notas"**: Notas de sesión y análisis
+| Hoja | Contenido |
+|------|-----------|
+| Cuenca | Datos geométricos y coeficientes |
+| Tiempo Concentración | Tc por método con parámetros |
+| Resumen Análisis | Tabla completa de resultados |
+| Por Período Retorno | Tabla pivote |
+| Notas | Observaciones del proyecto |
 
 ### Generar Reporte LaTeX
 
 ```bash
-hp session report <session_id> --output memoria_tecnica --author "Ing. García"
+hp session report <id> --output memoria --author "Ing. García"
 ```
 
-Genera:
-- `memoria_tecnica.tex`: Documento principal
-- `graficos/`: Gráficos TikZ
-- `memoria_tecnica.pdf`: PDF compilado (si LaTeX está instalado)
-
----
-
-## Organización de Salidas
-
-### Estructura de Directorios
-
-Las salidas se organizan automáticamente en la carpeta `outputs/`:
-
+**Estructura generada:**
 ```
 outputs/
-├── cuenca_las_piedras_20251205/
-│   ├── cuenca_las_piedras.xlsx
-│   ├── memoria.tex
-│   ├── memoria.pdf
-│   └── graficos/
-│       ├── hidrogramas/
-│       │   ├── hidrograma_tr2.pgf
-│       │   ├── hidrograma_tr10.pgf
-│       │   └── hidrograma_tr25.pgf
-│       └── hietogramas/
-│           ├── hietograma_tr2.pgf
-│           ├── hietograma_tr10.pgf
-│           └── hietograma_tr25.pgf
-├── proyecto_sur_20251204/
-│   └── ...
-└── ...
-```
-
-### Configurar Directorio de Salida
-
-En el wizard se puede especificar el directorio de salida:
-
-```
-? Directorio de salida (Enter para 'outputs/'): ./resultados
-```
-
-### Almacenamiento de Datos
-
-HidroPluvial guarda todos los proyectos y cuencas en una base de datos local:
-
-```
-~/.hidropluvial/
-└── hidropluvial.db    # Base de datos SQLite
-```
-
-**Ubicación en Windows:** `C:\Users\<tu_usuario>\.hidropluvial\`
-
-La base de datos se crea automáticamente la primera vez que se usa la aplicación.
-
-**Backup de datos:**
-```bash
-# Copiar la base de datos para hacer backup
-copy "%USERPROFILE%\.hidropluvial\hidropluvial.db" backup_hidropluvial.db
+└── cuenca_las_piedras_20251211/
+    ├── memoria.tex
+    ├── memoria.pdf
+    └── graficos/
+        ├── hidrogramas/
+        │   ├── hidrograma_tr10.pgf
+        │   └── hidrograma_tr25.pgf
+        └── hietogramas/
+            ├── hietograma_tr10.pgf
+            └── hietograma_tr25.pgf
 ```
 
 ---
 
 ## Referencia Rápida
 
-### Valores P₃,₁₀ por Departamento
+### Valores P₃,₁₀ por Departamento (DINAGUA)
 
-| Departamento | P₃,₁₀ (mm) |
-|--------------|------------|
-| Montevideo | 78 |
-| Canelones | 80 |
-| Maldonado | 85 |
-| Colonia | 78 |
-| San José | 80 |
-| Flores | 85 |
-| Florida | 85 |
-| Lavalleja | 90 |
-| Rocha | 90 |
-| Treinta y Tres | 95 |
-| Cerro Largo | 95 |
-| Rivera | 95 |
-| Artigas | 95 |
-| Salto | 90 |
-| Paysandú | 85 |
-| Río Negro | 85 |
-| Soriano | 80 |
-| Durazno | 85 |
-| Tacuarembó | 90 |
+| Departamento | P₃,₁₀ (mm) | Departamento | P₃,₁₀ (mm) |
+|--------------|------------|--------------|------------|
+| Montevideo | 78 | Lavalleja | 90 |
+| Canelones | 80 | Rocha | 90 |
+| Maldonado | 85 | Treinta y Tres | 95 |
+| Colonia | 78 | Cerro Largo | 95 |
+| San José | 80 | Rivera | 95 |
+| Flores | 85 | Artigas | 95 |
+| Florida | 85 | Salto | 90 |
+| Soriano | 80 | Paysandú | 85 |
+| Durazno | 85 | Río Negro | 85 |
+| Tacuarembó | 90 | | |
 
-### Fórmulas de Tc
+**Código fuente:** `core/idf/dinagua.py`
 
-**Kirpich** (cuencas rurales):
-```
-Tc = 0.0195 × L^0.77 × S^(-0.385)
-```
-- L: longitud del cauce (m)
-- S: pendiente del cauce (m/m)
-
-**Temez**:
-```
-Tc = 0.3 × (L / S^0.25)^0.76
-```
-- L: longitud del cauce (km)
-- S: pendiente del cauce (m/m)
-
-**Desbordes** (cuencas urbanas):
-```
-Tc = t₀ + 0.76 × A^0.25 × C^(-0.2) × S^(-0.38)
-```
-- t₀: tiempo de entrada (min)
-- A: área (ha)
-- C: coeficiente de escorrentía
-- S: pendiente (%)
-
-### Comandos Útiles
+### Comandos CLI
 
 ```bash
 # Iniciar wizard
 hp wizard
 
-# Ver sesiones guardadas
-hp session list
+# Gestión de proyectos
+hp project list
+hp project show <id>
+hp project delete <id>
 
-# Ver detalles de sesión
-hp session show <id>
+# Cálculos directos
+hp idf departamentos                    # Ver P3,10 por departamento
+hp idf uruguay <p3_10> <dur> --tr <tr>  # Calcular intensidad IDF
+hp tc kirpich --length 800 --slope 0.03 # Calcular Tc Kirpich
 
-# Exportar sesión
-hp session export <id> --format xlsx
-
-# Generar reporte
-hp session report <id> --output memoria
-
-# Ver valores P3,10 por departamento
-hp idf departamentos
-
-# Calcular intensidad IDF
-hp idf uruguay <p3_10> <duracion> --tr <tr>
-
-# Ayuda de cualquier comando
+# Ayuda
+hp --help
 hp <comando> --help
 ```
 
----
+### Símbolos y Unidades
+
+| Símbolo | Descripción | Unidad |
+|---------|-------------|--------|
+| P₃,₁₀ | Precipitación 3h, Tr=10 años | mm |
+| Tc | Tiempo de concentración | min |
+| tp | Tiempo al pico | min |
+| tb | Tiempo base | min |
+| Qp | Caudal pico | m³/s |
+| Vol | Volumen de escorrentía | hm³ |
+| C | Coeficiente de escorrentía | - |
+| CN | Número de Curva | - |
+| Tr | Período de retorno | años |
+| X | Factor de forma del hidrograma | - |
 
 ---
 
-## Gestión de Proyectos
+## Referencias Bibliográficas
 
-### Continuar Proyecto Existente
+1. **Chow, V.T., Maidment, D.R., Mays, L.W.** (1988). Applied Hydrology. McGraw-Hill.
 
-Desde el wizard, selecciona "Continuar proyecto/cuenca existente":
+2. **DINAGUA** (2011). Manual de Diseño para Sistemas de Drenaje de Aguas Pluviales Urbanas. Uruguay.
 
-```
-? Selecciona un proyecto o cuenca:
-> [Proyecto] abc123 - Estudio Drenaje Norte (3 cuencas, 45 analisis)
-  [Proyecto] def456 - Ruta 5 km 120 (1 cuenca, 12 analisis)
-  [Cuenca] ghi789 - Cuenca Antigua (8 analisis)  <-- Session legacy
-  ← Volver al menu principal
-```
+3. **FHWA** (2001). Urban Drainage Design Manual. Hydraulic Engineering Circular No. 22 (HEC-22). Federal Highway Administration.
 
-### Opciones de Proyecto
+4. **Keifer, C.J. & Chu, H.H.** (1957). Synthetic Storm Pattern for Drainage Design. ASCE Journal of the Hydraulics Division, 83(HY4).
 
-Una vez seleccionado un proyecto:
+5. **Kirpich, Z.P.** (1940). Time of concentration of small agricultural watersheds. Civil Engineering, 10(6), 362.
 
-```
-? Que deseas hacer?
-> Ver cuencas del proyecto
-  Seleccionar cuenca para trabajar
-  Agregar nueva cuenca al proyecto
-  Editar metadatos del proyecto
-  Eliminar proyecto
-  ← Volver (elegir otro proyecto)
-  ← Salir al menu principal
-```
+6. **Porto, R., Zahed Filho, K., Tucci, C., Bidone, F.** (1995). Drenagem Urbana. En: Tucci, C.E.M. (Ed.), Hidrologia: Ciência e Aplicação. ABRH/EDUSP.
 
-### Opciones de Cuenca
+7. **Rodríguez Fontal** (1980). Estudio de Precipitaciones Máximas en Uruguay. DINAGUA.
 
-Una vez seleccionada una cuenca:
+8. **Témez, J.R.** (1978). Cálculo hidrometeorológico de caudales máximos en pequeñas cuencas naturales. MOPU, España.
 
-```
-? Que deseas hacer?
-> Ver tabla resumen
-  Ver graficos (hietograma + hidrograma)
-  Comparar hidrogramas
-  Agregar mas analisis
-  Filtrar resultados
-  Exportar (Excel/LaTeX)
-  Editar cuenca...
-```
-
-### Visor Interactivo de Gráficos
-
-El visor interactivo muestra **hietograma e hidrograma combinados** en la misma pantalla, permitiendo ver la relación causa-efecto entre la lluvia y el caudal.
-
-```
-? Que deseas hacer?
-> Ver graficos (hietograma + hidrograma)
-```
-
-**Navegación:**
-- `←` / `→`: Cambiar entre análisis
-- `↑` / `↓`: Ir al primero / último
-- `q` / `ESC`: Salir del visor
-
-**Características:**
-- Hietograma en la parte superior con barras de intensidad
-- Hidrograma en la parte inferior con curva de caudal
-- Marca del caudal pico con ×
-- Unidad de tiempo adaptativa:
-  - Minutos si la tormenta dura < 2 horas
-  - Horas si la tormenta dura ≥ 2 horas
-
-```
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │           Hietograma - P=106.2mm, imax=54.3mm/h                     │
-  │  60 ┤                                                                │
-  │  40 ┤   ████                                                         │
-  │  20 ┤███████████████                                                 │
-  │   0 └────────────────────────────────────────────────────────(min)   │
-  ├─────────────────────────────────────────────────────────────────────┤
-  │           Hidrograma - Qp=12 m3/s, Tp=35min                         │
-  │  12 ┤              ×                                                 │
-  │   8 ┤            ╱   ╲                                               │
-  │   4 ┤          ╱       ╲                                             │
-  │   0 └────────────────────────────────────────────────Tiempo (h)     │
-  └─────────────────────────────────────────────────────────────────────┘
-  [1/12] Kirpich + GZ Tr10
-
-  Cuenca: Las Piedras
-  Tc=23min  tp=29min  X=1.00  tb=77min
-  P=106.2mm  Pe=65.7mm  Vol=0.041hm3
-
-  [<-] Anterior  [->] Siguiente  [q] Salir
-```
-
-### Submenú Editar Cuenca
-
-Las opciones de edición están agrupadas:
-
-```
-? Editar cuenca 'Las Piedras':
-> Editar datos (area, pendiente, C, CN)
-  Editar notas
-  Eliminar cuenca
-  ← Volver
-```
+9. **USDA-SCS** (1986). Urban Hydrology for Small Watersheds. Technical Release 55 (TR-55). Soil Conservation Service.
 
 ---
 
-*Manual de Usuario - HidroPluvial v1.1*
+*Manual de Usuario - HidroPluvial v2.0*
